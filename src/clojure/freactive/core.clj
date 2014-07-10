@@ -59,13 +59,18 @@ current value. Returns newval."
 (defrecord ReactiveState [dirty value f deps sully-fn])
 
 (defprotocol IReactive
-  (recompute! [this])
-  (rebind! [this f]))
+  (force-recompute! [this])
+  (rebind! [this f])
+  (deactivate! [this]))
 
 (defrecord Reactive [data]
   IReactive
-  (recompute! [this] (swap! data assoc :dirty true))
-  (rebind! [this f] (swap! data merge {:dirty true :f f :deps nil}))
+  (force-recompute! [this] (clojure.core/swap! data merge {:dirty true :deps nil}))
+  (rebind! [this f] (clojure.core/swap! data merge {:dirty true :f f :deps nil}))
+  (deactivate! [this]
+    (clojure.core/swap! data (fn [{:keys [deps sully-fn] :as state}]
+                  (doseq [d deps] (remove-watch d sully-fn))
+		  (merge state {:deps nil :dirty false}))))
   clojure.lang.IDeref
   (deref [this]
     (*register-dep* this)
