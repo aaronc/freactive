@@ -58,64 +58,110 @@ current value. Returns newval."
 
 (defrecord ReactiveState [dirty value f deps sully-fn])
 
-(defprotocol IReactive
-  (force-recompute! [this])
-  (rebind! [this f])
-  (deactivate! [this]))
+;; (defprotocol IReactive
+;;   (force-recompute! [this])
+;;   (rebind! [this f])
+;;   (deactivate! [this]))
 
-(defrecord Reactive [data]
-  IReactive
-  (force-recompute! [this] (clojure.core/swap! data merge {:dirty true :deps nil}))
-  (rebind! [this f] (clojure.core/swap! data merge {:dirty true :f f :deps nil}))
-  (deactivate! [this]
-    (clojure.core/swap! data (fn [{:keys [deps sully-fn] :as state}]
-                  (doseq [d deps] (remove-watch d sully-fn))
-		  (merge state {:deps nil :dirty false}))))
-  clojure.lang.IDeref
-  (deref [this]
-    (*register-dep* this)
-    (let [^ReactiveState {:keys [dirty value]} @data]
-      (if-not dirty
-        value
-        (:value
-         (clojure.core/swap!
-          data
-          (fn recompute-fn [^ReactiveState {:keys [dirty value f deps sully-fn] :as state}]
-            (if-not dirty
-              state
-              (let [simple (:simple (meta f))]
-                (if (and simple deps)
-                  (binding [*register-dep* (constantly nil)]
-                    (merge state {:value (f) :dirty false}))
-                  (binding [*deps* #{}
-                            *register-dep* (fn [x] (set! *deps* (conj *deps* x)))]
-                    (let [new-value (f)]
-                      (let [removed (clojure.set/difference deps *deps*)
-                            added (clojure.set/difference *deps* deps)]
-                        (doseq [r removed]
-                          (remove-watch r sully-fn))
-                        (doseq [a added]
-                          (add-watch a sully-fn sully-fn))
-                        (merge state {:value new-value :dirty false :deps *deps*}))))))))))))))
+;; (defn reactive-proxy [data]
+;;   )
 
-(defmethod print-method Reactive [o ^java.io.Writer w]
-  (#'clojure.core/print-sequential (format "#<%s@%x%s: "
-                            (.getSimpleName (class o))
-                            (System/identityHashCode o)
-                            "")
-                    #'clojure.core/pr-on, "", ">", (list @o), w))
+;; (defrecord Reactive [data]
+;;   IReactive
+;;   (force-recompute! [this] (clojure.core/swap! data merge {:dirty true :deps nil}))
+;;   (rebind! [this f] (clojure.core/swap! data merge {:dirty true :f f :deps nil}))
+;;   (deactivate! [this]
+;;     (clojure.core/swap! data (fn [{:keys [deps sully-fn] :as state}]
+;;                   (doseq [d deps] (remove-watch d sully-fn))
+;; 		  (merge state {:deps nil :dirty false}))))
+;;   clojure.lang.IDeref
+;;   (deref [this]
+;;     (*register-dep* this)
+;;     (let [^ReactiveState {:keys [dirty value]} @data]
+;;       (if-not dirty
+;;         value
+;;         (:value
+;;          (clojure.core/swap!
+;;           data
+;;           (fn recompute-fn [^ReactiveState {:keys [dirty value f deps sully-fn] :as state}]
+;;             (if-not dirty
+;;               state
+;;               (let [simple (:simple (meta f))]
+;;                 (if (and simple deps)
+;;                   (binding [*register-dep* (constantly nil)]
+;;                     (merge state {:value (f) :dirty false}))
+;;                   (binding [*deps* #{}
+;;                             *register-dep* (fn [x] (set! *deps* (conj *deps* x)))]
+;;                     (let [new-value (f)]
+;;                       (let [removed (clojure.set/difference deps *deps*)
+;;                             added (clojure.set/difference *deps* deps)]
+;;                         (doseq [r removed]
+;;                           (remove-watch r sully-fn))
+;;                         (doseq [a added]
+;;                           (add-watch a sully-fn sully-fn))
+;;                         (merge state {:value new-value :dirty false :deps *deps*}))))))))))))))
 
+;; (defmethod print-method Reactive [o ^java.io.Writer w]
+;;   (#'clojure.core/print-sequential (format "#<%s@%x%s: "
+;;                             (.getSimpleName (class o))
+;;                             (System/identityHashCode o)
+;;                             "")
+;;                     #'clojure.core/pr-on, "", ">", (list @o), w))
+
+;; (definterface IReactive
+;;   (forceRecompute [])
+;;   (deactivate [])
+;;   (rebind [f]))
 
 (defn reactive [f]
-  (let [data (clojure.core/atom nil)]
-    (clojure.core/reset!
-     data
-     (ReactiveState. true nil f nil
-                     (fn sully-fn [& _]
-                       (clojure.core/swap!
-                        data
-                        (fn do-sully [^ReactiveState state] (assoc state :dirty true))))))
-    (Reactive. data))) 
+  (let [data (clojure.core/atom nil)
+
+        sully-fn (fn sully-fn [& _]
+                   (clojure.core/swap!
+                    data
+                    (fn do-sully [^ReactiveState state] (assoc state :dirty true))))
+
+        reactive-proxy
+        (proxy [clojure.lang.ARef] []
+          (setValidator [vf]
+            (.deref this)
+            (.setValidator data (fn validator-wrapper [state]
+                                  (vf (:value state)))))
+          (deref []
+            (*register-dep* this)
+            (let [^ReactiveState {:keys [dirty value]} @data]
+              (if-not dirty
+                value
+                (:value
+                 (clojure.core/swap!
+                  data
+                  (fn recompute-fn [^ReactiveState {:keys [dirty value f deps sully-fn] :as state}]
+                    (if-not dirty
+                      state
+                      (let [simple (:simple (meta f))]
+                        (if (and simple deps)
+                          (binding [*register-dep* (constantly nil)]
+                            (merge state {:value (f) :dirty false}))
+                          (binding [*deps* #{}
+                                    *register-dep*
+                                    (fn register-dep [x]
+                                      (when (not= x this) (set! *deps* (conj *deps* x))))]
+                            (let [new-value (f)]
+                              (let [removed (clojure.set/difference deps *deps*)
+                                    added (clojure.set/difference *deps* deps)]
+                                (doseq [r removed]
+                                  (remove-watch r sully-fn))
+                                (doseq [a added]
+                                  (add-watch a sully-fn sully-fn))
+                                (merge state {:value new-value :dirty false :deps *deps*}))))))))))))))]
+   (clojure.core/reset! data (ReactiveState. true nil f nil sully-fn))
+    (.addWatch data :proxy-forward
+               (fn notify-forwarder [k r old-value new-value]
+                 (let [old-value (:value old-value)
+                       new-value (:value new-value)]
+                   (when (not= old-value new-value)
+                     (.notifyWatches reactive-proxy old-value new-value)))))
+    reactive-proxy)) 
 
 (defn simple [f] (with-meta f (merge (meta f) {:simple true})))
 
@@ -127,6 +173,7 @@ current value. Returns newval."
 ;;      (dotimes [i 100000]
 ;;        (swap! a inc)
 ;;        (swap! b inc)
-;;        @c))))
+;;        @c))
+;;     (println @a @b (+ @a @b) @c)))
 
 ;; (test1)
