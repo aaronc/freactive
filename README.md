@@ -5,7 +5,7 @@ Work in progress!
 Simple functional reactive programming for Clojure.
 
 Defines a function `reactive` which takes a function as an argument
-and returns a `clojure.lang.IDeref` whose is flagged to be recomputed
+and returns a `clojure.lang.IDeref` whose value is flagged to be recomputed
 every time a reactive dependency is updated. (Dirty reactive values
 are only recomputed when they are dereferenced).
 
@@ -44,6 +44,7 @@ computed based on it.
 
 ```
 
+Coming soon: reactive `agent` and `ref`
 
 ## License
 
