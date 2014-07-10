@@ -1,7 +1,25 @@
 (ns freactive.core-test
-  (:require [clojure.test :refer :all]
-            [freactive.core :refer :all]))
+  (:refer-clojure :exclude [atom swap!])
+  (:require [freactive.core :refer
+             [reactive atom swap!]]))
 
-(deftest a-test
-  (testing "FIXME, I fail."
-    (is (= 0 1))))
+(def a (atom 0))
+
+(def b (atom 0))
+
+(def r (reactive (fn [] (+ @a @b))))
+
+@r
+;; 0
+
+(swap! a inc)
+;; 1
+
+@r
+;; 1
+
+(swap! b inc)
+;; 1
+
+@r
+;; 2

@@ -56,31 +56,6 @@ current value. Returns newval."
 (def ^:dynamic *deps* nil)
 (def ^:dynamic *register-dep* (constantly nil))
 
-;; (defrecord Reactive [dirty value f deps sully-fn]
-;;   clojure.lang.IDeref
-;;   (deref [this]
-;;     (*register-dep* this)
-;;     (if-not @dirty
-;;       @value
-;;       (let [simple (:simple (meta f))]
-;;         (if (and simple @deps)
-;;           (binding [*register-dep* (constantly nil)]
-;;             (clojure.core/reset! value (f))
-;;             (clojure.core/reset! dirty false)
-;;             @value)
-;;           (binding [*deps* #{}
-;;                     *register-dep* (fn [x] (set! *deps* (conj *deps* x)))]
-;;             (clojure.core/reset! value (f))
-;;             (clojure.core/reset! dirty false)
-;;             (let [removed (clojure.set/difference @deps *deps*)
-;;                   added (clojure.set/difference *deps* @deps)]
-;;               (doseq [r removed]
-;;                 (remove-watch r sully-fn))
-;;               (doseq [a added]
-;;                 (add-watch a sully-fn sully-fn))
-;;               (clojure.core/reset! deps *deps*))
-;;             @value))))))
-
 (defrecord ReactiveState [dirty value f deps sully-fn])
 
 (defprotocol IReactive
@@ -125,9 +100,6 @@ current value. Returns newval."
                             "")
                     #'clojure.core/pr-on, "", ">", (list @o), w))
 
-;; (defn reactive [f]
-;;   (let [dirty (clojure.core/atom true)]
-;;     (Reactive. dirty (clojure.core/atom nil) f (clojure.core/atom nil) (fn [& _] (clojure.core/reset! dirty true)))))
 
 (defn reactive [f]
   (let [data (clojure.core/atom nil)]
@@ -142,26 +114,14 @@ current value. Returns newval."
 
 (defn simple [f] (with-meta f (merge (meta f) {:simple true})))
 
-(defn test1 []
-  (let [prev (apply hash-set (repeatedly 3 #(rand-int 7)))
-        cur (apply hash-set (repeatedly 3 #(rand-int 7)))]
-    (clojure.data/diff prev cur)))
+;; (defn test1 []
+;;   (let [a (atom 0)
+;;         b (atom 0)
+;;         c (reactive (fn [] (+ @a @b)))]
+;;     (time
+;;      (dotimes [i 100000]
+;;        (swap! a inc)
+;;        (swap! b inc)
+;;        @c))))
 
-(defn test2 []
-  (let [prev (apply hash-set (repeatedly 3 #(rand-int 7)))
-        cur (apply hash-set (repeatedly 3 #(rand-int 7)))]
-    (clojure.set/difference prev cur)
-    (clojure.set/difference cur prev)))
-
-
-(defn test3 []
-  (let [a (atom 0)
-        b (atom 0)
-        c (reactive (fn [] (+ @a @b)))]
-    (time
-     (dotimes [i 100000]
-       (swap! a inc)
-       (swap! b inc)
-       @c))))
-
-(test3)
+;; (test1)
