@@ -56,70 +56,49 @@ current value. Returns newval."
 (def ^:dynamic *deps* nil)
 (def ^:dynamic *register-dep* (constantly nil))
 
-(defrecord ReactiveState [dirty value f deps sully-fn])
-
-;; (defprotocol IReactive
-;;   (force-recompute! [this])
-;;   (rebind! [this f])
-;;   (deactivate! [this]))
-
-;; (defn reactive-proxy [data]
-;;   )
-
-;; (defrecord Reactive [data]
-;;   IReactive
-;;   (force-recompute! [this] (clojure.core/swap! data merge {:dirty true :deps nil}))
-;;   (rebind! [this f] (clojure.core/swap! data merge {:dirty true :f f :deps nil}))
-;;   (deactivate! [this]
-;;     (clojure.core/swap! data (fn [{:keys [deps sully-fn] :as state}]
-;;                   (doseq [d deps] (remove-watch d sully-fn))
-;; 		  (merge state {:deps nil :dirty false}))))
-;;   clojure.lang.IDeref
-;;   (deref [this]
-;;     (*register-dep* this)
-;;     (let [^ReactiveState {:keys [dirty value]} @data]
-;;       (if-not dirty
-;;         value
-;;         (:value
-;;          (clojure.core/swap!
-;;           data
-;;           (fn recompute-fn [^ReactiveState {:keys [dirty value f deps sully-fn] :as state}]
-;;             (if-not dirty
-;;               state
-;;               (let [simple (:simple (meta f))]
-;;                 (if (and simple deps)
-;;                   (binding [*register-dep* (constantly nil)]
-;;                     (merge state {:value (f) :dirty false}))
-;;                   (binding [*deps* #{}
-;;                             *register-dep* (fn [x] (set! *deps* (conj *deps* x)))]
-;;                     (let [new-value (f)]
-;;                       (let [removed (clojure.set/difference deps *deps*)
-;;                             added (clojure.set/difference *deps* deps)]
-;;                         (doseq [r removed]
-;;                           (remove-watch r sully-fn))
-;;                         (doseq [a added]
-;;                           (add-watch a sully-fn sully-fn))
-;;                         (merge state {:value new-value :dirty false :deps *deps*}))))))))))))))
-
-;; (defmethod print-method Reactive [o ^java.io.Writer w]
-;;   (#'clojure.core/print-sequential (format "#<%s@%x%s: "
-;;                             (.getSimpleName (class o))
-;;                             (System/identityHashCode o)
-;;                             "")
-;;                     #'clojure.core/pr-on, "", ">", (list @o), w))
+(defrecord ReactiveState [proxy-ref dirty value f deps sully-fn])
 
 ;; (definterface IReactive
 ;;   (forceRecompute [])
 ;;   (deactivate [])
 ;;   (rebind [f]))
 
-(defn reactive [f]
+(defn- compute [^ReactiveState {:keys [dirty value f deps sully-fn proxy-ref] :as state}]
+  (if-not dirty
+    state
+    (let [simple (:simple (meta f))]
+      (if (and simple deps)
+        (binding [*register-dep* (constantly nil)]
+          (merge state {:value (f) :dirty false}))
+        (binding [*deps* #{}
+                  *register-dep*
+                  (fn register-dep [x]
+                    (when (not= x proxy-ref) (set! *deps* (conj *deps* x))))]
+          (let [new-value (f)]
+            (let [removed (clojure.set/difference deps *deps*)
+                  added (clojure.set/difference *deps* deps)]
+              (doseq [r removed]
+                (remove-watch r sully-fn))
+              (doseq [a added]
+                (add-watch a sully-fn sully-fn))
+              (merge state {:value new-value :dirty false :deps *deps*}))))))))
+
+(defn reactive [f & options]
   (let [data (clojure.core/atom nil)
 
-        sully-fn (fn sully-fn [& _]
-                   (clojure.core/swap!
-                    data
-                    (fn do-sully [^ReactiveState state] (assoc state :dirty true))))
+        {:keys [lazy] :or {lazy true}} (apply hash-map options)
+
+        sully-fn (if lazy
+                   (fn lazy-sully-fn [& _]
+                     (clojure.core/swap!
+                      data
+                      (fn do-sully [^ReactiveState state] (assoc state :dirty true))))
+
+                   (fn proactive-sully-fn [& _]
+                     (clojure.core/swap!
+                      data
+                      (fn [^ReactiveState state]
+                        (compute (assoc state :dirty true))))))
 
         reactive-proxy
         (proxy [clojure.lang.ARef] []
@@ -135,45 +114,34 @@ current value. Returns newval."
                 (:value
                  (clojure.core/swap!
                   data
-                  (fn recompute-fn [^ReactiveState {:keys [dirty value f deps sully-fn] :as state}]
-                    (if-not dirty
-                      state
-                      (let [simple (:simple (meta f))]
-                        (if (and simple deps)
-                          (binding [*register-dep* (constantly nil)]
-                            (merge state {:value (f) :dirty false}))
-                          (binding [*deps* #{}
-                                    *register-dep*
-                                    (fn register-dep [x]
-                                      (when (not= x this) (set! *deps* (conj *deps* x))))]
-                            (let [new-value (f)]
-                              (let [removed (clojure.set/difference deps *deps*)
-                                    added (clojure.set/difference *deps* deps)]
-                                (doseq [r removed]
-                                  (remove-watch r sully-fn))
-                                (doseq [a added]
-                                  (add-watch a sully-fn sully-fn))
-                                (merge state {:value new-value :dirty false :deps *deps*}))))))))))))))]
-   (clojure.core/reset! data (ReactiveState. true nil f nil sully-fn))
+                  compute))))))]
+   (clojure.core/reset! data (ReactiveState. reactive-proxy true nil f nil sully-fn))
     (.addWatch data :proxy-forward
                (fn notify-forwarder [k r old-value new-value]
                  (let [old-value (:value old-value)
                        new-value (:value new-value)]
                    (when (not= old-value new-value)
                      (.notifyWatches reactive-proxy old-value new-value)))))
-    reactive-proxy)) 
+    (#'clojure.core/setup-reference reactive-proxy options))) 
 
 (defn simple [f] (with-meta f (merge (meta f) {:simple true})))
+
+;; (import '(java.util TimerTask Timer))
 
 ;; (defn test1 []
 ;;   (let [a (atom 0)
 ;;         b (atom 0)
-;;         c (reactive (fn [] (+ @a @b)))]
+;;         c (reactive (fn [] (+ @a @b)))
+;;         d (atom 0)
+;;         e (reactive (fn [] (+ @c @d)))
+;;         task (proxy [TimerTask] []
+;;                (run [] @e @c))]
+;;     (. (new Timer) (schedule task (long 16)))
 ;;     (time
-;;      (dotimes [i 100000]
+;;      (dotimes [i 1000000]
 ;;        (swap! a inc)
 ;;        (swap! b inc)
-;;        @c))
+;;        (swap! d inc)))
 ;;     (println @a @b (+ @a @b) @c)))
 
 ;; (test1)
