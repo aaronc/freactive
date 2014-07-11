@@ -19,7 +19,7 @@ package clojure.lang;
 
 import java.util.concurrent.atomic.AtomicReference;
 
-final public class ReactiveAtom extends ARef{
+public class ReactiveAtom extends ARef{
 
 final AtomicReference state;
     
@@ -110,4 +110,10 @@ public Object reset(Object newval){
 	notifyWatches(oldval, newval);
 	return newval;
 }
+    
+public void notifyWatches(Object oldVal, Object newVal){
+        if(oldVal != newVal)
+                super.notifyWatches(oldVal, newVal);
+}
+   
 }
