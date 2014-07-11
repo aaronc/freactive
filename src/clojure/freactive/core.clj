@@ -117,31 +117,32 @@ current value. Returns newval."
                   compute))))))]
    (clojure.core/reset! data (ReactiveState. reactive-proxy true nil f nil sully-fn))
     (.addWatch data :proxy-forward
-               (fn notify-forwarder [k r old-value new-value]
-                 (let [old-value (:value old-value)
-                       new-value (:value new-value)]
-                   (when (not= old-value new-value)
+               (fn notify-forwarder [k r old-state new-state]
+                 (let [old-value (:value old-state)
+                       new-value (:value new-state)
+                       sullied (and (:dirty new-state) (not (:dirty old-state)))]
+                   (when (or (not= old-value new-value) sullied)
                      (.notifyWatches reactive-proxy old-value new-value)))))
     (#'clojure.core/setup-reference reactive-proxy options))) 
 
 (defn simple [f] (with-meta f (merge (meta f) {:simple true})))
 
-;; (import '(java.util TimerTask Timer))
+(import '(java.util TimerTask Timer))
 
-;; (defn test1 []
-;;   (let [a (atom 0)
-;;         b (atom 0)
-;;         c (reactive (fn [] (+ @a @b)))
-;;         d (atom 0)
-;;         e (reactive (fn [] (+ @c @d)))
-;;         task (proxy [TimerTask] []
-;;                (run [] @e @c))]
-;;     (. (new Timer) (schedule task (long 16)))
-;;     (time
-;;      (dotimes [i 1000000]
-;;        (swap! a inc)
-;;        (swap! b inc)
-;;        (swap! d inc)))
-;;     (println @a @b (+ @a @b) @c)))
+(defn test1 []
+  (let [a (atom 0)
+        b (atom 0)
+        c (reactive (fn [] (+ @a @b)))
+        d (atom 0)
+        e (reactive (fn [] (+ @c @d)))
+        task (proxy [TimerTask] []
+               (run [] @e @c))]
+    (. (new Timer) (schedule task (long 16)))
+    (time
+     (dotimes [i 1000000]
+       (swap! a inc)
+       (swap! b inc)
+       (swap! d inc)))
+    (println @a @b (+ @a @b) @c)))
 
-;; (test1)
+(test1)
