@@ -1,7 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [clojure.lang ReactiveAtom Reactive Reactive2 StatefulReactive]))
+  (:import [clojure.lang ReactiveAtom Reactive StatefulReactive]))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -50,86 +50,50 @@ current value. Returns newval."
    :static true}
   [^clojure.lang.ReactiveAtom atom newval] (.reset atom newval))
 
-(defn- configure-reactive [r f options]
-  (let [{:keys [simple deps]} (apply hash-map options)
-        simple (or simple (:simple (meta f)))]
-    (when simple
-      (.setSimple r true))
-    (when deps
-      (.setDeps r deps)
-      (.setSimple r true))
-    (#'clojure.core/setup-reference r options)))
-
 (defn reactive [f & options]
-  (configure-reactive (Reactive. f) f options))
+  (#'clojure.core/setup-reference (Reactive. f) options))
 
-(defn reactive2 [f & options]
-  (#'clojure.core/setup-reference (Reactive2. f) options))
-                      
 ;; (defn stateful-reactive [f & options]
 ;;   (configure-reactive (StatefulReactive. f) options))
 
-(defn simple [f] (with-meta f (merge (meta f) {:simple true})))
-
 (import '(java.util TimerTask Timer))
 
-;; (defn test1 []
-;;   (let [a (atom 0)
-;;         b (atom 0)
-;;         c (reactive (simple (fn [] (+ @a @b))))
-;;         d (atom 0)
-;;         e (reactive (simple (fn [] (+ @c @d))))
-;;         f (reactive (fn [] (if (even? @a) @b @c)))
-;;         task (proxy [TimerTask] []
-;;                (run [] @f @e @c ))]
-;;     (. (new Timer) (schedule task (long 1)))
-;;     (println "Reactive")
-;;     (time
-;;      (dotimes [i 2000000]
-;;        (swap! a inc)
-;;        (swap! b inc)
-;;        (swap! d inc)))
-;;     (assert (= (+ @a @b) @c)
-;;             (= (+ @c @d) @e))))
+(defn test1 []
+  (let [a (atom 0)
+        b (atom 0)
+        c (reactive (fn [] (+ @a @b)))
+        d (atom 0)
+        e (reactive (fn [] (+ @c @d)))
+        f (reactive (fn [] (if (even? @a) @b @c)))
+        task (proxy [TimerTask] []
+               (run [] @f @e @c ))]
+    (. (new Timer) (schedule task (long 1)))
+    (println "Reactive")
+    (time
+     (dotimes [i 2000000]
+       (swap! a inc)
+       (swap! b inc)
+       (swap! d inc)))
+    (assert (= (+ @a @b) @c)
+            (= (+ @c @d) @e))))
 
-;; (test1)
+(test1)
 
-;; (defn test2 []
-;;   (let [a (atom 0)
-;;         b (atom 0)
-;;         c (fn [] (+ @a @b))
-;;         d (atom 0)
-;;         e (fn [] (+ (c) @d))
-;;         f (fn [] (if (even? @a) @b (c)))
-;;         task (proxy [TimerTask] []
-;;                (run [] (f) (e) (c)))]
-;;     (. (new Timer) (schedule task (long 1)))
-;;     (println "Non-reactive")
-;;     (time
-;;      (dotimes [i 2000000]
-;;        (swap! a inc)
-;;        (swap! b inc)
-;;        (swap! d inc)))))
+(defn test2 []
+  (let [a (atom 0)
+        b (atom 0)
+        c (fn [] (+ @a @b))
+        d (atom 0)
+        e (fn [] (+ (c) @d))
+        f (fn [] (if (even? @a) @b (c)))
+        task (proxy [TimerTask] []
+               (run [] (f) (e) (c)))]
+    (. (new Timer) (schedule task (long 1)))
+    (println "Non-reactive")
+    (time
+     (dotimes [i 2000000]
+       (swap! a inc)
+       (swap! b inc)
+       (swap! d inc)))))
 
-;; (test2)
-
-;; (defn test3 []
-;;   (let [a (atom 0)
-;;         b (atom 0)
-;;         c (reactive2 (fn [] (+ @a @b)))
-;;         d (atom 0)
-;;         e (reactive2 (fn [] (+ @c @d)))
-;;         f (reactive2 (fn [] (if (even? @a) @b @c)))
-;;         task (proxy [TimerTask] []
-;;                (run [] @f @e @c ))]
-;;     (. (new Timer) (schedule task (long 1)))
-;;     (println "Reactive")
-;;     (time
-;;      (dotimes [i 2000000]
-;;        (swap! a inc)
-;;        (swap! b inc)
-;;        (swap! d inc)))
-;;     (assert (= (+ @a @b) @c)
-;;             (= (+ @c @d) @e))))
-
-;; (test3)
+(test2)
