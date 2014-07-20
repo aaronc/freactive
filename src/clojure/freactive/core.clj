@@ -53,8 +53,8 @@ current value. Returns newval."
 (defn reactive [f & options]
   (#'clojure.core/setup-reference (Reactive. f) options))
 
-;; (defn stateful-reactive [f & options]
-;;   (configure-reactive (StatefulReactive. f) options))
+(defn stateful-reactive [init-state f & options]
+  (#'clojure.core/setup-reference (StatefulReactive. init-state f) options))
 
 (import '(java.util TimerTask Timer))
 

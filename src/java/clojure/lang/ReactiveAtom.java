@@ -23,8 +23,6 @@ public class ReactiveAtom extends ARef implements IReactive {
 
 final AtomicReference state;
     
-final static Var registerDep = Var.intern(Namespace.findOrCreate(Symbol.intern("freactive.core")), Symbol.intern("*register-dep*"), null, false).setDynamic();
-
 public ReactiveAtom(Object state){
 	this.state = new AtomicReference(state);
 }
