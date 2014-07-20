@@ -19,7 +19,7 @@ package clojure.lang;
 
 import java.util.concurrent.atomic.AtomicReference;
 
-public class ReactiveAtom extends ARef{
+public class ReactiveAtom extends ARef implements IReactive {
 
 final AtomicReference state;
     
@@ -35,7 +35,7 @@ public ReactiveAtom(Object state, IPersistentMap meta){
 }
 
 public Object deref(){
-        registerDep.invoke(this);
+        Reactive.registerDep(this);
 	return state.get();
 }
 

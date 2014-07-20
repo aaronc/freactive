@@ -1,10 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [clojure.lang ReactiveAtom Reactive])
-  (:require
-   [clojure.set]
-   [clojure.data]))
+  (:import [clojure.lang ReactiveAtom Reactive Reactive2 StatefulReactive]))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -53,130 +50,86 @@ current value. Returns newval."
    :static true}
   [^clojure.lang.ReactiveAtom atom newval] (.reset atom newval))
 
-(def ^:dynamic *deps* nil)
-(def ^:dynamic *register-dep* (constantly nil))
-
-(defrecord ReactiveState [proxy-ref dirty value f deps sully-fn])
-
-;; (definterface IReactive
-;;   (forceRecompute [])
-;;   (deactivate [])
-;;   (rebind [f]))
-
-;; (defn- compute [^ReactiveState {:keys [dirty value f deps sully-fn proxy-ref] :as state}]
-;;   (if-not dirty
-;;     state
-;;     (let [simple (:simple (meta f))]
-;;       (if (and simple deps)
-;;         (binding [*register-dep* (constantly nil)]
-;;           (merge state {:value (f) :dirty false}))
-;;         (binding [*deps* #{}
-;;                   *register-dep*
-;;                   (fn register-dep [x]
-;;                     (when (not= x proxy-ref) (set! *deps* (conj *deps* x))))]
-;;           (let [new-value (f)]
-;;             (let [removed (clojure.set/difference deps *deps*)
-;;                   added (clojure.set/difference *deps* deps)]
-;;               (doseq [r removed]
-;;                 (remove-watch r sully-fn))
-;;               (doseq [a added]
-;;                 (add-watch a sully-fn sully-fn))
-;;               (merge state {:value new-value :dirty false :deps *deps*}))))))))
-
-;; (defn reactive [f & options]
-;;   (let [data (clojure.core/atom nil)
-
-;;         {:keys [lazy] :or {lazy true}} (apply hash-map options)
-
-;;         sully-fn (if lazy
-;;                    (fn lazy-sully-fn [& _]
-;;                      (clojure.core/swap!
-;;                       data
-;;                       (fn do-sully [^ReactiveState state] (assoc state :dirty true))))
-
-;;                    (fn proactive-sully-fn [& _]
-;;                      (clojure.core/swap!
-;;                       data
-;;                       (fn [^ReactiveState state]
-;;                         (compute (assoc state :dirty true))))))
-
-;;         reactive-proxy
-;;         (proxy [clojure.lang.ARef] []
-;;           (setValidator [vf]
-;;             (.deref this)
-;;             (.setValidator data (fn validator-wrapper [state]
-;;                                   (vf (:value state)))))
-;;           (deref []
-;;             (*register-dep* this)
-;;             (let [^ReactiveState {:keys [dirty value]} @data]
-;;               (if-not dirty
-;;                 value
-;;                 (:value
-;;                  (clojure.core/swap!
-;;                   data
-;;                   compute))))))]
-;;    (clojure.core/reset! data (ReactiveState. reactive-proxy true nil f nil sully-fn))
-;;     (.addWatch data :proxy-forward
-;;                (fn notify-forwarder [k r old-state new-state]
-;;                  (let [old-value (:value old-state)
-;;                        new-value (:value new-state)
-;;                        sullied (and (:dirty new-state) (not (:dirty old-state)))]
-;;                    (when (or (not= old-value new-value) sullied)
-;;                      (.notifyWatches reactive-proxy old-value new-value)))))
-;;     (#'clojure.core/setup-reference reactive-proxy options))) 
-
-(defn reactive [f & options]
+(defn- configure-reactive [r f options]
   (let [{:keys [simple deps]} (apply hash-map options)
-        simple (or simple (:simple (meta f)))
-        r (Reactive. f)]
+        simple (or simple (:simple (meta f)))]
     (when simple
       (.setSimple r true))
     (when deps
       (.setDeps r deps)
       (.setSimple r true))
     (#'clojure.core/setup-reference r options)))
+
+(defn reactive [f & options]
+  (configure-reactive (Reactive. f) f options))
+
+(defn reactive2 [f & options]
+  (#'clojure.core/setup-reference (Reactive2. f) options))
                       
+;; (defn stateful-reactive [f & options]
+;;   (configure-reactive (StatefulReactive. f) options))
 
 (defn simple [f] (with-meta f (merge (meta f) {:simple true})))
 
 (import '(java.util TimerTask Timer))
 
-(defn test1 []
-  (let [a (atom 0)
-        b (atom 0)
-        c (reactive (fn [] (+ @a @b)))
-        d (atom 0)
-        e (reactive (fn [] (+ @c @d)))
-        f (reactive (fn [] (if (even? @a) @b @c)))
-        task (proxy [TimerTask] []
-               (run [] @f @e @c ))]
-    (. (new Timer) (schedule task (long 1)))
-    (println "Reactive")
-    (time
-     (dotimes [i 2000000]
-       (swap! a inc)
-       (swap! b inc)
-       (swap! d inc)))
-    (assert (= (+ @a @b) @c)
-            (= (+ @c @d) @e))))
+;; (defn test1 []
+;;   (let [a (atom 0)
+;;         b (atom 0)
+;;         c (reactive (simple (fn [] (+ @a @b))))
+;;         d (atom 0)
+;;         e (reactive (simple (fn [] (+ @c @d))))
+;;         f (reactive (fn [] (if (even? @a) @b @c)))
+;;         task (proxy [TimerTask] []
+;;                (run [] @f @e @c ))]
+;;     (. (new Timer) (schedule task (long 1)))
+;;     (println "Reactive")
+;;     (time
+;;      (dotimes [i 2000000]
+;;        (swap! a inc)
+;;        (swap! b inc)
+;;        (swap! d inc)))
+;;     (assert (= (+ @a @b) @c)
+;;             (= (+ @c @d) @e))))
 
-(test1)
+;; (test1)
 
-(defn test2 []
-  (let [a (atom 0)
-        b (atom 0)
-        c (fn [] (+ @a @b))
-        d (atom 0)
-        e (fn [] (+ (c) @d))
-        f (fn [] (if (even? @a) @b (c)))
-        task (proxy [TimerTask] []
-               (run [] (f) (e) (c)))]
-    (. (new Timer) (schedule task (long 1)))
-    (println "Non-reactive")
-    (time
-     (dotimes [i 2000000]
-       (swap! a inc)
-       (swap! b inc)
-       (swap! d inc)))))
+;; (defn test2 []
+;;   (let [a (atom 0)
+;;         b (atom 0)
+;;         c (fn [] (+ @a @b))
+;;         d (atom 0)
+;;         e (fn [] (+ (c) @d))
+;;         f (fn [] (if (even? @a) @b (c)))
+;;         task (proxy [TimerTask] []
+;;                (run [] (f) (e) (c)))]
+;;     (. (new Timer) (schedule task (long 1)))
+;;     (println "Non-reactive")
+;;     (time
+;;      (dotimes [i 2000000]
+;;        (swap! a inc)
+;;        (swap! b inc)
+;;        (swap! d inc)))))
 
-(test2)
+;; (test2)
+
+;; (defn test3 []
+;;   (let [a (atom 0)
+;;         b (atom 0)
+;;         c (reactive2 (fn [] (+ @a @b)))
+;;         d (atom 0)
+;;         e (reactive2 (fn [] (+ @c @d)))
+;;         f (reactive2 (fn [] (if (even? @a) @b @c)))
+;;         task (proxy [TimerTask] []
+;;                (run [] @f @e @c ))]
+;;     (. (new Timer) (schedule task (long 1)))
+;;     (println "Reactive")
+;;     (time
+;;      (dotimes [i 2000000]
+;;        (swap! a inc)
+;;        (swap! b inc)
+;;        (swap! d inc)))
+;;     (assert (= (+ @a @b) @c)
+;;             (= (+ @c @d) @e))))
+
+;; (test3)

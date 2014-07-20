@@ -6,33 +6,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Iterator;
 
-public class Reactive extends ARef {
+public class Reactive extends ARef implements IReactive {
     private final AtomicBoolean dirty = new AtomicBoolean(true);
     protected final AtomicReference currentValue = new AtomicReference(null);
     protected IFn func;
     private final HashMap<ARef, Boolean> deps = new HashMap<ARef, Boolean>();
     private boolean simple = false;
     private boolean depsRegistered = false;
-
-    static class DontRegisterDep extends AFn {
-        public Object invoke(Object obj) { return null; }
-    }
-    
-    static Reactive.DontRegisterDep dontRegisterDep = new Reactive.DontRegisterDep();
-
-    public final static Var REGISTER_DEP = Var.intern(Namespace.findOrCreate(Symbol.intern("freactive.core")), Symbol.intern("*register-dep*"), dontRegisterDep, false).setDynamic();
-    
-    class Sully extends AFn {
-        public Object invoke(Object key, Object ref, Object oldVal, Object newVal) {
-            if(dirty.compareAndSet(false, true)) {
-                Object cur = currentValue.get();
-                notifyWatches(cur, cur);
-            }
-            return null;
-        }
-    }
-    
-    private final Sully sully = this.new Sully();
 
     class RegisterDep extends AFn {
         public Object invoke(Object obj) {
@@ -47,6 +27,30 @@ public class Reactive extends ARef {
     }
     
     private final RegisterDep registerDep = this.new RegisterDep();
+
+    public final static Var REGISTER_DEP =
+        Var.intern(Namespace.findOrCreate(Symbol.intern("freactive.core")),
+                   Symbol.intern("*register-dep*"), null, false).setDynamic();
+    
+    public static void registerDep(IRef ref) {
+        Object v = REGISTER_DEP.deref();
+        if(v != null) {
+            ((IFn)v).invoke(ref);
+        }
+    }
+    
+    class Sully extends AFn {
+        public Object invoke(Object key, Object ref, Object oldVal, Object newVal) {
+            if(dirty.compareAndSet(false, true)) {
+                Object cur = currentValue.get();
+                notifyWatches(cur, cur);
+            }
+            return null;
+        }
+    }
+    
+    private final Sully sully = this.new Sully();
+
     
     
     public Reactive(IFn func) {
@@ -58,6 +62,8 @@ public class Reactive extends ARef {
     }
     
     public Object deref() {
+        registerDep(this);
+
         if(!dirty.get())
             return currentValue.get();
 
@@ -69,7 +75,7 @@ public class Reactive extends ARef {
 
             if(simple && depsRegistered) {
                 try {
-                    Var.pushThreadBindings(RT.map(REGISTER_DEP, dontRegisterDep));
+                    Var.pushThreadBindings(RT.map(REGISTER_DEP, null));
                     dirty.set(false);
                     newVal = compute();
                 }
