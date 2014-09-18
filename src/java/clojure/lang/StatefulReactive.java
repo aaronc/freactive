@@ -4,10 +4,10 @@ public class StatefulReactive extends Reactive implements IReactive {
     
     public StatefulReactive(Object initialState, IFn func) {
         super(func);
-        currentValue.set(initialState);
+        state.set(initialState);
     }
 
     protected Object compute() {
-        return func.invoke(currentValue.get());
+        return func.invoke(state.get());
     }
 }

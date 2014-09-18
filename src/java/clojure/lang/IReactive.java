@@ -1,5 +1,5 @@
 package clojure.lang;
 
-public interface IReactive {
+public interface IReactive extends IDeref {
 
 }
