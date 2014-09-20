@@ -1,7 +1,6 @@
 package clojure.lang;
 
-public interface IInvalidates extends IDeref {
+public interface IInvalidates {
     IInvalidates addInvalidationWatch(Object key, IFn callback);
     IInvalidates removeInvalidationWatch(Object key);
-    IPersistentMap getInvalidationWatches();
 }
