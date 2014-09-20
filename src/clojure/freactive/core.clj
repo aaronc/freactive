@@ -30,10 +30,10 @@ multiple times, and thus should be free of side effects. Returns
 the value that was swapped in."
   {:added "1.0"
    :static true}
-  ([^clojure.lang.ReactiveAtom atom f] (.swap atom f))
-  ([^clojure.lang.ReactiveAtom atom f x] (.swap atom f x))
-  ([^clojure.lang.ReactiveAtom atom f x y] (.swap atom f x y))
-  ([^clojure.lang.ReactiveAtom atom f x y & args] (.swap atom f x y args)))
+  ([^clojure.lang.IAtom atom f] (.swap atom f))
+  ([^clojure.lang.IAtom atom f x] (.swap atom f x))
+  ([^clojure.lang.IAtom atom f x y] (.swap atom f x y))
+  ([^clojure.lang.IAtom atom f x y & args] (.swap atom f x y args)))
 
 (defn compare-and-set!
   "Atomically sets the value of atom to newval if and only if the
@@ -41,17 +41,30 @@ current value of the atom is identical to oldval. Returns true if
 set happened, else false"
   {:added "1.0"
    :static true}
-  [^clojure.lang.ReactiveAtom atom oldval newval] (.compareAndSet atom oldval newval))
+  [^clojure.lang.IAtom atom oldval newval] (.compareAndSet atom oldval newval))
 
 (defn reset!
   "Sets the value of atom to newval without regard for the
 current value. Returns newval."
   {:added "1.0"
    :static true}
-  [^clojure.lang.ReactiveAtom atom newval] (.reset atom newval))
+  [^clojure.lang.IAtom atom newval] (.reset atom newval))
 
-(defn reactive [f & options]
+(defn reactive* [f & options]
   (#'clojure.core/setup-reference (Reactive. f) options))
+
+(defn eager-reactive* [f & options]
+  (#'clojure.core/setup-reference (Reactive. f false) options))
+
+(defmacro reactive [& body]
+  `(freactive.core/reactive*
+     (fn reactive-computation-fn []
+       ~@body)))
+
+(defmacro eager-reactive [& body]
+  `(freactive.core/eager-reactive*
+     (fn reactive-computation-fn []
+       ~@body)))
 
 (defn stateful-reactive [init-state f & options]
   (#'clojure.core/setup-reference (StatefulReactive. init-state f) options))

@@ -6,49 +6,103 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Iterator;
 
-public class Reactive extends ARef implements IReactive {
+public class Reactive extends ARef implements IReactiveRef {
     private final AtomicBoolean dirty = new AtomicBoolean(true);
+
+    private final boolean lazy;
 
     protected final AtomicReference state = new AtomicReference(null);
 
     protected IFn func;
 
+    private volatile IPersistentMap invalidationWatches = PersistentHashMap.EMPTY;
+
     public Reactive(IFn func) {
+        this(func, true);
+    }
+
+    public Reactive(IFn func, boolean lazy) {
         this.func = func;
+        this.lazy = lazy;
     }
 
     public final static Var REGISTER_DEP =
         Var.intern(Namespace.findOrCreate(Symbol.intern("freactive.core")),
                    Symbol.intern("*register-dep*"), null, false).setDynamic();
     
-    public static void registerDep(IRef ref) {
+    public static void registerDep(Object ref) {
         Object v = REGISTER_DEP.deref();
         if(v != null) {
-            ((RegisterDep)v).register(ref);
+            ((RegisterDep)v).invoke(ref);
         }
     }
-    
+
+    @Override
+    public IInvalidates addInvalidationWatch(Object key, IFn callback) {
+        invalidationWatches = invalidationWatches.assoc(key, callback);
+        return this;
+    }
+
+    @Override
+    public IInvalidates removeInvalidationWatch(Object key) {
+        invalidationWatches = invalidationWatches.without(key);
+        return this;
+    }
+
+    @Override
+    public IPersistentMap getInvalidationWatches() {
+        return invalidationWatches;
+    }
+
     class RegisterDep extends AFn {
-        public void register(IRef ref) {
-            ref.addWatch(sully, sully);
-        }
-        
         public Object invoke(Object obj) {
-            IRef ref = (obj instanceof IRef ? (IRef)obj : null);
-            if(ref == null) return null;
-            register(ref);
+            IInvalidates invalidates = (obj instanceof IInvalidates ? (IInvalidates)obj : null);
+            if(invalidates != null) {
+                invalidates.addInvalidationWatch(sully, sully);
+            }
+            else {
+                IRef ref = (obj instanceof IRef ? (IRef) obj : null);
+                if (ref != null)
+                   ref.addWatch(sully, sully);
+            }
             return null;
+        }
+    }
+
+    void invalidateWatches()
+    {
+        Object cur = lazy ? state.get() : deref();
+        notifyWatches(cur, cur);
+
+        IPersistentMap ws = invalidationWatches;
+        if(ws.count() > 0)
+        {
+            for(ISeq s = ws.seq(); s != null; s = s.next())
+            {
+                Map.Entry e = (Map.Entry) s.first();
+                IFn fn = (IFn) e.getValue();
+                if(fn != null)
+                    fn.invoke(e.getKey(), this);
+            }
         }
     }
     
     private final RegisterDep registerDep = this.new RegisterDep();
 
     class Sully extends AFn {
-        public Object invoke(Object key, Object ref, Object oldVal, Object newVal) {
-            ((ARef)ref).removeWatch(key);
+        public Object invoke(Object key, Object ref) {
+            ((IInvalidates)ref).removeInvalidationWatch(key);
             if(dirty.compareAndSet(false, true)) {
-                Object cur = state.get();
-                notifyWatches(cur, cur);
+                invalidateWatches();
+            }
+            return null;
+        }
+
+
+        public Object invoke(Object key, Object ref, Object oldVal, Object newVal) {
+            ((IRef)ref).removeWatch(key);
+            if(dirty.compareAndSet(false, true)) {
+                invalidateWatches();
             }
             return null;
         }
@@ -72,9 +126,8 @@ public class Reactive extends ARef implements IReactive {
                 dirty.set(false);
                 Object v = state.get();
                 Object newv = compute();
-                validate(newv);
-		if(state.compareAndSet(v, newv)) {
-                    notifyWatches(v, newv); 
+                if(state.compareAndSet(v, newv)) {
+                    notifyWatches(v, newv);
                     return newv;
                 }
             }
@@ -82,5 +135,15 @@ public class Reactive extends ARef implements IReactive {
         finally {
             Var.popThreadBindings();
         }
+    }
+
+    @Override
+    public IFn getValidator() {
+        return null;
+    }
+
+    @Override
+    public void setValidator(IFn vf) {
+        throw new UnsupportedOperationException();
     }
 }

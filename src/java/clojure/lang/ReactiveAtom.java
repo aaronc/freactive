@@ -19,7 +19,7 @@ package clojure.lang;
 
 import java.util.concurrent.atomic.AtomicReference;
 
-public class ReactiveAtom extends ARef implements IReactive {
+public class ReactiveAtom extends ARef implements IReactiveAtom {
 
 final AtomicReference state;
     
@@ -33,7 +33,7 @@ public ReactiveAtom(Object state, IPersistentMap meta){
 }
 
 public Object deref(){
-        Reactive.registerDep(this);
+    Reactive.registerDep(this);
 	return state.get();
 }
 
@@ -113,5 +113,26 @@ public void notifyWatches(Object oldVal, Object newVal){
         if(oldVal != newVal)
                 super.notifyWatches(oldVal, newVal);
 }
-   
+
+@Override
+public IInvalidates addInvalidationWatch(Object key, IFn callback) {
+    addWatch(key, new AFn() {
+        @Override
+        public Object invoke(Object key, Object ref, Object oldV, Object newV) {
+            return callback.invoke(key, ref);
+        }
+    });
+    return this;
+}
+
+@Override
+public IInvalidates removeInvalidationWatch(Object key) {
+    removeWatch(key);
+    return this;
+}
+
+@Override
+public IPersistentMap getInvalidationWatches() {
+    return getWatches();
+}
 }

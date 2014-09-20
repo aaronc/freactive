@@ -1,6 +1,6 @@
 package clojure.lang;
 
-public class StatefulReactive extends Reactive implements IReactive {
+public class StatefulReactive extends Reactive implements IInvalidates {
     
     public StatefulReactive(Object initialState, IFn func) {
         super(func);

@@ -1,5 +1,7 @@
 package clojure.lang;
 
-public interface IReactive extends IDeref {
-
+/**
+ * Tag interface.
+ */
+public interface IReactive {
 }
