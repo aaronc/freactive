@@ -1,6 +1,6 @@
 package clojure.lang;
 
-public interface IAtom {
+public interface IAtom extends IRef {
     Object swap(IFn f);
 
     Object swap(IFn f, Object arg);
