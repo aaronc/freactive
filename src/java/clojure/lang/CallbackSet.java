@@ -79,4 +79,9 @@ public class CallbackSet {
             }
         }
     }
+
+    public void removeAll()
+    {
+        callbacks.reset(PersistentHashMap.EMPTY);
+    }
 }
