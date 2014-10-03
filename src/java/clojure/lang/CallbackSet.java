@@ -9,7 +9,15 @@ public class CallbackSet {
         this.thisRef = thisRef;
     }
 
-    private final Object thisRef;
+    public Object getThisRef() {
+        return thisRef;
+    }
+
+    public void setThisRef(Object thisRef) {
+        this.thisRef = thisRef;
+    }
+
+    private Object thisRef;
 
     private final IFn assocFn = new AFn() {
             @Override
