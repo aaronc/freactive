@@ -46,6 +46,10 @@ public class CallbackSet {
     public void invokeAll()
     {
         IPersistentMap cbs = (IPersistentMap)callbacks.deref();
+        invokeAll(cbs);
+    }
+
+    private void invokeAll(IPersistentMap cbs) {
         if(cbs.count() > 0)
         {
             for(ISeq s = cbs.seq(); s != null; s = s.next())
@@ -53,7 +57,7 @@ public class CallbackSet {
                 Map.Entry e = (Map.Entry) s.first();
                 IFn fn = (IFn) e.getValue();
                 if(fn != null)
-                    fn.invoke(e.getKey(), this);
+                    fn.invoke(e.getKey(), thisRef);
             }
         }
     }
@@ -61,6 +65,10 @@ public class CallbackSet {
     public void invokeAll(Object arg1)
     {
         IPersistentMap cbs = (IPersistentMap)callbacks.deref();
+        invokeAll(cbs, arg1);
+    }
+
+    private void invokeAll(IPersistentMap cbs, Object arg1) {
         if(cbs.count() > 0)
         {
             for(ISeq s = cbs.seq(); s != null; s = s.next())
@@ -76,6 +84,10 @@ public class CallbackSet {
     public void invokeAll(Object arg1, Object arg2)
     {
         IPersistentMap cbs = (IPersistentMap)callbacks.deref();
+        invokeAll(cbs, arg1, arg2);
+    }
+
+    private void invokeAll(IPersistentMap cbs, Object arg1, Object arg2) {
         if(cbs.count() > 0)
         {
             for(ISeq s = cbs.seq(); s != null; s = s.next())
@@ -88,8 +100,24 @@ public class CallbackSet {
         }
     }
 
-    public void removeAll()
+    private IPersistentMap takeAll()
     {
-        callbacks.reset(PersistentHashMap.EMPTY);
+        for(;;) {
+            Object cur = callbacks.deref();
+            if(callbacks.compareAndSet(cur, PersistentHashMap.EMPTY))
+                return (IPersistentMap)cur;
+        }
+    }
+
+    public void invokeAndRemoveAll() {
+        invokeAll(takeAll());
+    }
+
+    public void invokeAndRemoveAll(Object arg1) {
+        invokeAll(takeAll(), arg1);
+    }
+
+    public void invokeAndRemoveAll(Object arg1, Object arg2) {
+        invokeAll(takeAll(), arg1, arg2);
     }
 }
