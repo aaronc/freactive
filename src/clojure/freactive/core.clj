@@ -1,7 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [clojure.lang ReactiveAtom Reactive StatefulReactive]))
+  (:import [clojure.lang ReactiveAtom Reactive StatefulReactive ReactiveAtomView]))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -68,6 +68,12 @@ current value. Returns newval."
 
 (defn reactive-state [init-state f & options]
   (#'clojure.core/setup-reference (StatefulReactive. init-state f) options))
+
+(defn reactive-atom-view
+  ([ratom view-transform]
+   (reactive-atom-view view-transform (fn [x _] x)))
+  ([ratom view-transform update-transform]
+   (ReactiveAtomView. ratom view-transform update-transform)))
 
 ;; (import '(java.util TimerTask Timer))
 

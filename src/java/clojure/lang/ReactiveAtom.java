@@ -110,12 +110,12 @@ public Object reset(Object newval){
 }
     
 public void notifyWatches(Object oldVal, Object newVal){
-        if(oldVal != newVal)
+        if(!oldVal.equals(newVal))
                 super.notifyWatches(oldVal, newVal);
 }
 
 @Override
-public IInvalidates addInvalidationWatch(Object key, IFn callback) {
+public synchronized IInvalidates addInvalidationWatch(Object key, IFn callback) {
     addWatch(key, new AFn() {
         @Override
         public Object invoke(Object key, Object ref, Object oldV, Object newV) {
@@ -126,7 +126,7 @@ public IInvalidates addInvalidationWatch(Object key, IFn callback) {
 }
 
 @Override
-public IInvalidates removeInvalidationWatch(Object key) {
+public synchronized IInvalidates removeInvalidationWatch(Object key) {
     removeWatch(key);
     return this;
 }

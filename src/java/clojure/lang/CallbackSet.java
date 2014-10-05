@@ -120,4 +120,8 @@ public class CallbackSet {
     public void invokeAndRemoveAll(Object arg1, Object arg2) {
         invokeAll(takeAll(), arg1, arg2);
     }
+
+    public IPersistentMap getCallbacks() {
+        return (IPersistentMap)callbacks.deref();
+    }
 }
