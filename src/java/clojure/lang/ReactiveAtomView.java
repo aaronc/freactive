@@ -90,6 +90,7 @@ public class ReactiveAtomView implements IReactiveAtom {
             @Override
             public Object invoke(Object cur) {
                 return updateTransform.invoke(
+                        cur,
                         f.applyTo(
                                 RT.listStar(viewTransform.invoke(cur), x, y, args)));
             }
@@ -103,7 +104,16 @@ public class ReactiveAtomView implements IReactiveAtom {
 
     @Override
     public Object reset(Object newval) {
-        return source.reset(updateTransform.invoke(newval));
+        return viewTransform.invoke(
+                source.swap(new AFn() {
+                    @Override
+                    public Object invoke(Object cur) {
+                        return updateTransform.invoke(cur, newval);
+                    }
+                })
+        );
+
+ //       return source.reset(updateTransform.invoke(newval));
     }
 
     @Override

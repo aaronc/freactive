@@ -110,7 +110,7 @@ public Object reset(Object newval){
 }
     
 public void notifyWatches(Object oldVal, Object newVal){
-        if(!oldVal.equals(newVal))
+        if(oldVal != newVal)
                 super.notifyWatches(oldVal, newVal);
 }
 
