@@ -13,8 +13,8 @@ public class ReactiveAtomView implements IReactiveAtom {
     private final IFn viewTransform;
     private final IFn updateTransform;
 
-    public ReactiveAtomView(IReactiveAtom source, IFn viewTransform,
-                            IFn updateTransform) {
+    public ReactiveAtomView(final IReactiveAtom source, final IFn viewTransform,
+                            final IFn updateTransform) {
         this.source = source;
         this.viewTransform = viewTransform;
         this.updateTransform = updateTransform;
@@ -52,7 +52,7 @@ public class ReactiveAtomView implements IReactiveAtom {
     }
 
     @Override
-    public Object swap(IFn f) {
+    public Object swap(final IFn f) {
         return source.swap(new AFn() {
             @Override
             public Object invoke(Object cur) {
@@ -63,7 +63,7 @@ public class ReactiveAtomView implements IReactiveAtom {
     }
 
     @Override
-    public Object swap(IFn f, Object arg) {
+    public Object swap(final IFn f, final Object arg) {
         return source.swap(new AFn() {
             @Override
             public Object invoke(Object cur) {
@@ -74,7 +74,7 @@ public class ReactiveAtomView implements IReactiveAtom {
     }
 
     @Override
-    public Object swap(IFn f, Object arg1, Object arg2) {
+    public Object swap(final IFn f, final Object arg1, final Object arg2) {
         return source.swap(new AFn() {
             @Override
             public Object invoke(Object cur) {
@@ -85,7 +85,7 @@ public class ReactiveAtomView implements IReactiveAtom {
     }
 
     @Override
-    public Object swap(IFn f, Object x, Object y, ISeq args) {
+    public Object swap(final IFn f, final Object x, final Object y, final ISeq args) {
         return source.swap(new AFn() {
             @Override
             public Object invoke(Object cur) {
@@ -103,7 +103,7 @@ public class ReactiveAtomView implements IReactiveAtom {
     }
 
     @Override
-    public Object reset(Object newval) {
+    public Object reset(final Object newval) {
         return viewTransform.invoke(
                 source.swap(new AFn() {
                     @Override
