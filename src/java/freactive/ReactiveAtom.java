@@ -15,7 +15,9 @@
    subclass ARef because validate has package protection
 */
 
-package clojure.lang;
+package freactive;
+
+import clojure.lang.*;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -24,12 +26,12 @@ public class ReactiveAtom extends ARef implements IReactiveAtom {
 final AtomicReference state;
     
 public ReactiveAtom(Object state){
-	this.state = new AtomicReference(state);
+	this.state = new AtomicReference<Object>(state);
 }
 
 public ReactiveAtom(Object state, IPersistentMap meta){
 	super(meta);
-	this.state = new AtomicReference(state);
+	this.state = new AtomicReference<Object>(state);
 }
 
 public Object deref(){
@@ -91,6 +93,26 @@ public Object swap(IFn f, Object x, Object y, ISeq args) {
 			return newv;
 			}
 		}
+}
+
+void validate(IFn vf, Object val){
+    try
+    {
+        if(vf != null && !RT.booleanCast(vf.invoke(val)))
+            throw new IllegalStateException("Invalid reference state");
+    }
+    catch(RuntimeException re)
+    {
+        throw re;
+    }
+    catch(Exception e)
+    {
+        throw new IllegalStateException("Invalid reference state", e);
+    }
+}
+
+void validate(Object val){
+    validate(validator, val);
 }
 
 public boolean compareAndSet(Object oldv, Object newv){

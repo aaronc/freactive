@@ -1,4 +1,6 @@
-package clojure.lang;
+package freactive;
+
+import clojure.lang.*;
 
 import java.util.Map;
 

@@ -1,10 +1,10 @@
-package clojure.lang;
+package freactive;
+
+import clojure.lang.*;
 
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Iterator;
 
 public class Reactive extends ARef implements IReactiveRef {
     private final AtomicBoolean dirty = new AtomicBoolean(true);

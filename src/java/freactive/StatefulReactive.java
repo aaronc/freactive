@@ -1,9 +1,11 @@
-package clojure.lang;
+package freactive;
+
+import clojure.lang.IFn;
 
 public class StatefulReactive extends Reactive implements IInvalidates {
     
     public StatefulReactive(Object initialState, IFn func) {
-        super(func);
+        super(func, false);
         state.set(initialState);
     }
 

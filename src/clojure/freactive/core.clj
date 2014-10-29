@@ -20,35 +20,8 @@ change. If the new state is unacceptable, the validate-fn should
 return false or throw an exception."
   {:added "1.0"
    :static true}
-  ([x] (new clojure.lang.ReactiveAtom x))
+  ([x] (new freactive.ReactiveAtom x))
   ([x & options] (#'clojure.core/setup-reference (atom x) options)))
-
-(defn swap!
-  "Atomically swaps the value of atom to be:
-(apply f current-value-of-atom args). Note that f may be called
-multiple times, and thus should be free of side effects. Returns
-the value that was swapped in."
-  {:added "1.0"
-   :static true}
-  ([^clojure.lang.IAtom atom f] (.swap atom f))
-  ([^clojure.lang.IAtom atom f x] (.swap atom f x))
-  ([^clojure.lang.IAtom atom f x y] (.swap atom f x y))
-  ([^clojure.lang.IAtom atom f x y & args] (.swap atom f x y args)))
-
-(defn compare-and-set!
-  "Atomically sets the value of atom to newval if and only if the
-current value of the atom is identical to oldval. Returns true if
-set happened, else false"
-  {:added "1.0"
-   :static true}
-  [^clojure.lang.IAtom atom oldval newval] (.compareAndSet atom oldval newval))
-
-(defn reset!
-  "Sets the value of atom to newval without regard for the
-current value. Returns newval."
-  {:added "1.0"
-   :static true}
-  [^clojure.lang.IAtom atom newval] (.reset atom newval))
 
 (defn reactive* [f & options]
   (#'clojure.core/setup-reference (Reactive. f) options))
@@ -116,3 +89,9 @@ current value. Returns newval."
 ;;        (swap! d inc)))))
 
 ;; (test2)
+
+(defn atom-view
+  ([ratom view-fn]
+   (atom-view ratom view-fn identity))
+  ([ratom view-fn update-fn]
+   (ReactiveAtomView. ratom view-fn update-fn)))

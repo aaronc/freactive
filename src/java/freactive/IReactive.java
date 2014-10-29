@@ -1,4 +1,4 @@
-package clojure.lang;
+package freactive;
 
 /**
  * Tag interface.
