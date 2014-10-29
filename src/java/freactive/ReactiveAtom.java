@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class ReactiveAtom extends ARef implements IReactiveAtom {
 
-final AtomicReference state;
+final AtomicReference<Object> state;
     
 public ReactiveAtom(Object state){
 	this.state = new AtomicReference<Object>(state);

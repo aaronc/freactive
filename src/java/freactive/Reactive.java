@@ -11,7 +11,7 @@ public class Reactive extends ARef implements IReactiveRef {
 
     private final boolean lazy;
 
-    protected final AtomicReference state = new AtomicReference(null);
+    protected final AtomicReference<Object> state = new AtomicReference<Object>(null);
 
     protected IFn func;
 
