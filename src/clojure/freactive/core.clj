@@ -1,7 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [clojure.lang ReactiveAtom Reactive StatefulReactive ReactiveAtomView]))
+  (:import [freactive ReactiveAtom Reactive StatefulReactive ReactiveAtomView]))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -20,7 +20,7 @@ change. If the new state is unacceptable, the validate-fn should
 return false or throw an exception."
   {:added "1.0"
    :static true}
-  ([x] (new freactive.ReactiveAtom x))
+  ([x] (new ReactiveAtom x))
   ([x & options] (#'clojure.core/setup-reference (atom x) options)))
 
 (defn reactive* [f & options]
