@@ -137,7 +137,7 @@ public void notifyWatches(Object oldVal, Object newVal){
 }
 
 @Override
-public synchronized IInvalidates addInvalidationWatch(Object key, IFn callback) {
+public synchronized IInvalidates addInvalidationWatch(final Object key, final IFn callback) {
     addWatch(key, new AFn() {
         @Override
         public Object invoke(Object key, Object ref, Object oldV, Object newV) {

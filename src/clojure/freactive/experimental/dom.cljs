@@ -1,32 +1,34 @@
-(ns freactive.experimental.dom)
+(ns freactive.experimental.dom
+  (:require
+    [freactive.core :as r]))
 
 (defn request-animation-frame [f]
   (.requestAnimationFrame js/window f))
 
 (defn- set-style-prop! [elem prop-name prop-value]
   (let [prop-name (name prop-name)]
-    (aset (.-style prop) prop-name (str prop-value))))
+    (aset (.-style elem) prop-name (str prop-value))))
 
 (defn- set-attr! [elem attr-name attr-value]
   (let [attr-name (name attr-name)]
     (.setAttribute elem attr-name attr-value)))
 
 (defn- on-value-ref-invalidated* [set-fn]
-  (fn on-value-ref-invalidated [ref [element attr-name :as key]]
-    (r/remove-invalidation-watch attr-value-ref key)
+  (fn on-value-ref-invalidated [[element attr-name :as key] ref]
+    (r/remove-invalidation-watch ref key)
     (request-animation-frame
       (fn [_]
         (when (.-parentNode element)
-          (r/add-invalidation-watch attr-value-ref key on-value-ref-invalidated)
-          (set-fn elem attr-name attr-value))))))
+          (r/add-invalidation-watch ref key on-value-ref-invalidated)
+          (set-fn element attr-name @ref))))))
 
-(defn- bind-syle-prop! [element attr-name attr-value]
+(defn- bind-style-prop! [element attr-name attr-value]
   (if (satisfies? cljs.core/IDeref attr-value)
-    ((on-attr-value-ref-invalidated set-style-prop!) attr-value [element attr-name])
+    ((on-value-ref-invalidated* set-style-prop!) attr-value [element attr-name])
     (set-style-prop! element attr-name attr-value)))
 
 (defn- listen! [element evt-name handler]
-  )
+  (.addEventListener element evt-name handler))
 
 (defn- bind-attr! [element attr-name attr-value]
   (let [attr-name (name attr-name)]
@@ -42,14 +44,11 @@
 
       :default
       (if (satisfies? cljs.core/IDeref attr-value)
-        ((on-attr-value-ref-invalidated set-attr!) attr-value [element attr-name])
+        ((on-value-ref-invalidated* set-attr!) attr-value [element attr-name])
         (set-attr! element attr-name attr-value)))))
 
-(defn- parse-elem-kw [kw]
-  [kw])
-
-(defn- create-elem [tag]
-  (.createElement js/document (name tag)))
+(defn- create-elem [kw]
+  (.createElement js/document (name kw)))
 
 (declare build)
 
@@ -64,7 +63,7 @@
 (defn- append-child!* [parent child]
   (let [child (convert-child child)]
     (.appendChild parent child)
-    chuld))
+    child))
 
 (defn- replace-child!* [parent new-child old-child]
   (let [new-child (convert-child new-child)]
@@ -73,12 +72,12 @@
 
 (defn on-child-ref-invalidated* [parent]
   (fn on-child-ref-invalidated
-    [attr-value-ref cur-elem]
-    (r/remove-invalidation-watch attr-value-ref wrapper)
+    [cur-elem child-ref]
+    (r/remove-invalidation-watch child-ref cur-elem)
     (request-animation-frame
       (fn [_]
-        (r/add-invalidation-watch attr-value-ref cur-elem on-child-ref-invalidated)
-        (let [new-elem @child
+        (r/add-invalidation-watch child-ref cur-elem on-child-ref-invalidated)
+        (let [new-elem @child-ref
               cur @cur-elem]
           (reset! cur-elem
             (if cur
@@ -88,7 +87,7 @@
 (defn- append-child! [parent child]
   (if
     (satisfies? cljs.core/IDeref child)
-    ((on-child-ref-invalidated* parent) child (atom nil))
+    ((on-child-ref-invalidated* parent) (atom nil) child)
 
     (append-child!* parent child)))
 
@@ -101,13 +100,10 @@
       (append-child! elem ch))))
 
 (defn build [elem-def]
-  (let [[tag id class-name] (parse-elem-kw (first elem-def))
-        elem (create-elem tag)
+  (let [elem (create-elem (first elem-def))
         attrs? (second elem-def)
         attrs (when (map? attrs?) attrs?)
         children (if attrs (nnext elem-def) (next elem-def))]
-    (when id (set-attr! tag "id" id))
-    (when id (set-attr! tag "class" class-name))
     (doseq [[k v] attrs]
       (bind-attr! elem k v))
     (when children
