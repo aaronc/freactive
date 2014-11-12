@@ -1,7 +1,7 @@
 (ns freactive.experimental.items-view
   (:refer-clojure :exclude [atom])
   (:require
-    [freactive.core :refer [atom]]
+    [freactive.core :refer [atom rx*]]
     [freactive.experimental.dom :as dom]
     [freactive.experimental :refer [observable-collection
                                     observe-changes transact!]]))
@@ -17,6 +17,8 @@
   (-set-transitions [this transitions]
     (set! (.-transitions this) transitions)))
 
+(deftype ItemContainer [elem state])
+
 (defn items-view
   [container template-fn items]
   (let [coll
@@ -25,7 +27,7 @@
           items
 
           :default
-          (observable-collection items :auto-inc true))
+          (observable-collection items))
 
         container
         (cond
@@ -35,12 +37,24 @@
           :default
           container)
 
+        elem-mappings (atom {})
+
          view (ItemsView. container nil nil template-fn coll)
 
          update-fn
          (fn [view coll changes]
            (doseq [[k v] changes]
-             (dom/append-child! view (template-fn (atom v)))))]
+             (let [elem-container (get @elem-mappings k)]
+               (if elem-container
+                 (if v
+                   (reset! (.-state elem-container) v)
+                   (do
+                     (dom/remove-child! view (.-elem elem-container))
+                     (swap! elem-mappings dissoc k)))
+                 (when v
+                   (let [state (atom v)
+                         elem (dom/append-child! view (template-fn state))]
+                     (swap! elem-mappings assoc k (ItemContainer. elem state))))))))]
 
     (dom/with-transitions
       view
@@ -53,4 +67,6 @@
 
 (def c0 (observable-collection {:a "abc"}))
 
-(dom/mount! dom/root (items-view [:ul] (fn [x] [:li @x]) c0))
+(defonce v0
+  (dom/mount! dom/root
+    (items-view [:ul] (fn [x] (rx* (fn [] [:li @x]))) c0)))

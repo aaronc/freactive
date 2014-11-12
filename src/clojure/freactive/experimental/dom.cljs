@@ -95,6 +95,11 @@
 
 (declare build)
 
+(defn- as-dom-node [elem]
+  (if (satisfies? IElement elem)
+    (-get-dom-node elem)
+    elem))
+
 (defn- replace-child [parent new-elem cur-elem]
   (if (and
         cur-elem
@@ -105,9 +110,7 @@
           new-node (build-node (-get-element-spec new-elem))
           cur-node (when cur-elem (-get-dom-node cur-elem))]
       (-set-dom-node new-elem new-node)
-      (let [parent (if (satisfies? IElement parent)
-                     (-get-dom-node parent)
-                     parent)]
+      (let [parent (as-dom-node parent)]
         (if cur-node
           (.replaceChild parent new-node cur-node)
           (.appendChild parent new-node)))
@@ -133,7 +136,8 @@
      (do-show-element parent new-elem cur-elem show))))
 
 (defn on-child-ref-invalidated* [parent [add-watch* remove-watch*]
-                                 {:keys [hide show] :as transitions}]
+                                 {:keys [hide show] :as transitions}
+                                 cancellation-token]
   (fn on-child-ref-invalidated
     ([key child-ref _ _]
      (on-child-ref-invalidated key child-ref))
@@ -141,12 +145,15 @@
      (remove-watch* child-ref cur-elem)
      (request-animation-frame
        (fn [_]
-         (add-watch* child-ref cur-elem on-child-ref-invalidated)
-         (let [new-elem @child-ref
-               cur @cur-elem]
-           (when (or (not cur) (not= (-get-element-spec cur) new-elem))
-             (reset! cur-elem
-               (transition-element parent new-elem cur hide show)))))))))
+         (when-not @cancellation-token
+           (add-watch* child-ref cur-elem on-child-ref-invalidated)
+           (let [new-elem @child-ref
+                 cur @cur-elem]
+             (when (or (not cur) (not= (-get-element-spec cur) new-elem))
+               (reset! cur-elem
+                 (transition-element parent new-elem cur hide show))))))))))
+
+(deftype DerefElement [child-ref cur-elem])
 
 (defn- append-deref-child
   [parent child transitions]
@@ -157,7 +164,11 @@
 
              (satisfies? cljs.core/IWatchable child)
              [add-watch remove-watch])]
-    ((on-child-ref-invalidated* parent watch-fns transitions) (atom nil) child)
+    (let [cur-elem (atom nil)
+          cancellation-token (atom false)
+          f ((on-child-ref-invalidated* parent watch-fns transitions
+               cancellation-token) cur-elem child)]
+      (DerefElement. child cur-elem cancellation-token))
     (transition-element parent @child transitions)))
 
 (defn append-child! [parent child]
@@ -197,6 +208,17 @@
 
 (defn mount! [dom-element child]
   (append-child! dom-element child))
+
+(defn- cancel-and-remove-deref-element [parent elem]
+  (reset! (.-cancellation-token elem) true)
+  (.removeChild (as-dom-node parent) (as-dom-node @(.-cur-elem elem))))
+
+(defn remove-child! [parent child]
+  (if (instance? DerefElement child)
+    (cancel-and-remove-deref-element parent child)
+    (let [parent (as-dom-node parent)
+          child (as-dom-node child)]
+      (.removeChild parent child))))
 
 ;(defn create-raw [elem-def]
 ;  (let [elem-def
