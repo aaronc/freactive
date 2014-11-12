@@ -116,42 +116,60 @@
           (.appendChild parent new-node)))
       new-elem)))
 
-(defn- do-show-element [parent new-elem cur-elem show]
+(defn- do-show-element [parent new-elem cur-elem {:keys [show shown]
+                                                  :as transitions}]
   (let [new-elem (replace-child parent new-elem cur-elem)]
-    (when-let [show (or show (-get-transition new-elem :show))]
-      (show new-elem))
+    (if-let [show (or show (-get-transition new-elem :show))]
+      (show new-elem
+        (fn [elem] (when shown (shown elem))))
+      (when shown (shown new-elem)))
     new-elem))
 
 (defn- transition-element
   ([parent new-elem]
    (transition-element parent new-elem nil nil nil))
-  ([parent new-elem {:keys [hide show] :as transitions}]
-   (transition-element parent new-elem nil hide show))
-  ([parent new-elem cur-elem hide show]
+  ([parent new-elem cur-elem {:keys [hide show] :as transitions}]
    (if cur-elem
      (if-let [hide (or hide (-get-transition cur-elem :hide))]
        (hide cur-elem
-         (do-show-element parent new-elem cur-elem show))
-       (do-show-element parent new-elem cur-elem show))
-     (do-show-element parent new-elem cur-elem show))))
+         (do-show-element parent new-elem cur-elem transitions))
+       (do-show-element parent new-elem cur-elem transitions))
+     (do-show-element parent new-elem cur-elem transitions))))
+
+
+(defn- cancel-and-remove-deref-element [parent elem]
+  (reset! (.-cancellation-token elem) true)
+  (.removeChild (as-dom-node parent) (as-dom-node @(.-cur-elem elem))))
+
+(defn remove-child! [parent child]
+  (if (instance? DerefElement child)
+    (cancel-and-remove-deref-element parent child)
+    (let [parent (as-dom-node parent)
+          child (as-dom-node child)]
+      (.removeChild parent child))))
 
 (defn on-child-ref-invalidated* [parent [add-watch* remove-watch*]
-                                 {:keys [hide show] :as transitions}
+                                 transitions
                                  cancellation-token]
-  (fn on-child-ref-invalidated
-    ([key child-ref _ _]
-     (on-child-ref-invalidated key child-ref))
-    ([cur-elem child-ref]
-     (remove-watch* child-ref cur-elem)
-     (request-animation-frame
-       (fn [_]
-         (when-not @cancellation-token
-           (add-watch* child-ref cur-elem on-child-ref-invalidated)
-           (let [new-elem @child-ref
-                 cur @cur-elem]
-             (when (or (not cur) (not= (-get-element-spec cur) new-elem))
-               (reset! cur-elem
-                 (transition-element parent new-elem cur hide show))))))))))
+  (let [transitions
+        (assoc transitions
+          :shown (fn [new-elem]
+                   (when @cancellation-token
+                     (remove-element! parent new-elem))))]
+    (fn on-child-ref-invalidated
+      ([key child-ref _ _]
+       (on-child-ref-invalidated key child-ref))
+      ([cur-elem child-ref]
+       (remove-watch* child-ref cur-elem)
+       (request-animation-frame
+         (fn [_]
+           (when-not @cancellation-token
+             (add-watch* child-ref cur-elem on-child-ref-invalidated)
+             (let [new-elem @child-ref
+                   cur @cur-elem]
+               (when (or (not cur) (not= (-get-element-spec cur) new-elem))
+                 (reset! cur-elem
+                   (transition-element parent new-elem cur transitions)))))))))))
 
 (deftype DerefElement [child-ref cur-elem])
 
@@ -169,7 +187,7 @@
           f ((on-child-ref-invalidated* parent watch-fns transitions
                cancellation-token) cur-elem child)]
       (DerefElement. child cur-elem cancellation-token))
-    (transition-element parent @child transitions)))
+    (transition-element parent @child nil transitions)))
 
 (defn append-child! [parent child]
   (cond
@@ -208,17 +226,6 @@
 
 (defn mount! [dom-element child]
   (append-child! dom-element child))
-
-(defn- cancel-and-remove-deref-element [parent elem]
-  (reset! (.-cancellation-token elem) true)
-  (.removeChild (as-dom-node parent) (as-dom-node @(.-cur-elem elem))))
-
-(defn remove-child! [parent child]
-  (if (instance? DerefElement child)
-    (cancel-and-remove-deref-element parent child)
-    (let [parent (as-dom-node parent)
-          child (as-dom-node child)]
-      (.removeChild parent child))))
 
 ;(defn create-raw [elem-def]
 ;  (let [elem-def
