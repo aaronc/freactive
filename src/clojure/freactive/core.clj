@@ -95,3 +95,10 @@ return false or throw an exception."
    (atom-view ratom view-fn identity))
   ([ratom view-fn update-fn]
    (ReactiveAtomView. ratom view-fn update-fn)))
+
+(def rx* reactive*)
+
+(defmacro rx [& body]
+  `(freactive.core/rx*
+     (fn []
+       ~@body)))

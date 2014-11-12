@@ -1,40 +1,38 @@
 (ns freactive.experimental)
 
-(defrecord ObservableCollection [state id-key])
+(deftype ObservableCollection [state auto-key observers])
 
 (declare do-txs)
 
-(defn- do-tx [state tx id-key]
+(defn- do-tx [state tx auto-key]
   (cond
     (map? tx)
-    (let [id (id-key tx)]
+    (let [id (auto-key)]
       [(assoc state id tx) [id tx]])
 
     (sequential? tx)
     (let [[id op & args] tx]
       (cond
         (sequential? id)
-        (do-txs state tx id-key)
+        (do-txs state tx auto-key)
 
         (map? op)
-        (let [op (assoc op id-key id)]
-          [(assoc state id op) [id op]])
+        [(assoc state id op) [id op]]
 
         (nil? op)
         [(dissoc state id) [id nil]]
 
         (ifn? op)
         (let [cur (get state id)
-              res (apply op cur args)
-              res (assoc res id-key id)]
+              res (apply op cur args)]
           [(assoc state id res) [id res]])))))
 
-(defn- do-txs [state txs id-key]
+(defn- do-txs [state txs auto-key]
   (loop [state state
          txs-res []
          [tx & txs] txs]
     (if tx
-      (let [[state tx-res] (do-tx state tx id-key)
+      (let [[state tx-res] (do-tx state tx auto-key)
             txs-res (if (sequential? (first tx-res))
                       (concat txs-res tx-res)
                       (conj txs-res tx-res))]
@@ -45,14 +43,15 @@
   (compare-and-set! atomic old-state new-state))
 
 (defn- notify-coll [coll txs-res]
-  txs-res)
+  (doseq [[k f] (.-observers coll)]
+    (f k coll txs-res)))
 
 (defn transact!* [coll tx-data]
-  (let [id-key (.-id-key coll)
+  (let [auto-key (.-auto-key coll)
         state (.-state coll)]
     (loop []
       (let [cur-state @state
-            [new-state txs-res] (do-txs cur-state tx-data id-key)]
+            [new-state txs-res] (do-txs cur-state tx-data auto-key)]
         (if (do-cas! state cur-state new-state)
           (notify-coll coll txs-res)
           (recur))))))
@@ -61,7 +60,7 @@
   (let [fst (first tx-data)]
     (cond
       (or (keyword? fst) (integer? fst) (string? fst))
-      (transact coll [tx-data])
+      (transact!* coll [tx-data])
 
       :default
       (apply transact!* coll tx-data))))
@@ -77,13 +76,26 @@
 ;; (transact! coll [0 assoc :a 1] [1 assoc :b 2])
 ;; (transact! coll [[0 assoc :a 1] [1 assoc :b 2]])
 
-(defn observable-coll
-  ([atomic & {:keys [id-key]
-              :or {id-key :id}}]
-   (ObservableCollection. atomic id-key)))
+(defn observable-collection
+  ([init & {:keys [auto-inc]}]
+   (let [init
+         (cond
+           (satisfies? cljs.core/IDeref init)
+           init
 
-(defn observe-coll [coll key f])
+           (map? init)
+           (atom init)
 
-(defn cursor
-  ([atomic])
-  ([atomic korks]))
+           (sequential? init)
+           (atom (zipmap (range) init))
+
+           :default
+           (atom {}))]
+     (ObservableCollection. init
+       (when auto-inc
+         (fn [] (count @init)))
+       nil))))
+
+(defn observe-changes [coll key f]
+  (set! (.-observers coll) (assoc (.-observers coll) key f)))
+

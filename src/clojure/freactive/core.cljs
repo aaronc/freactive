@@ -18,17 +18,25 @@
 (defn remove-invalidation-watch [this key]
   (-remove-invalidation-watch this key))
 
+(defn- force-update-state [a old-value new-value]
+  (set! (.-state a) new-value)
+  (when-not (nil? (.-watches a))
+    (-notify-watches a old-value new-value))
+  (when-not (nil? (.-invalidation-watches a))
+    (-notify-invalidation-watches a))
+  new-value)
+
 (deftype ReactiveAtom [state meta validator watches invalidation-watches]
   Object
   (equiv [this other]
     (-equiv this other))
 
-  IAtom
+  cljs.core/IAtom
   
-  IEquiv
+  cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
 
-  IDeref
+  cljs.core/IDeref
   (-deref [this]
     (register-dep this)
     state)
@@ -71,12 +79,8 @@
       (when-not (nil? validate)
         (assert (validate new-value) "Validator rejected reference state"))
       (let [old-value (.-state a)]
-        (set! (.-state a) new-value)
-        (when-not (nil? (.-watches a))
-          (-notify-watches a old-value new-value))
-        (when-not (nil? (.-invalidation-watches a))
-          (-notify-invalidation-watches a))
-        new-value)))
+        (when (not= old-value new-value)
+          (force-update-state a old-value new-value)))))
 
     ISwap
     (-swap! [a f]
@@ -179,3 +183,81 @@
   (let [reactive (ReactiveComputation. nil true f nil nil nil nil nil)]
     (set! (.-sully reactive) (make-sully-fn reactive))
     reactive))
+
+(defn- do-update-state [cursor new-value]
+  (let [old-value (.-state cursor)]
+    (when (not= old-value new-value)
+      (force-update-state cursor old-value new-value))))
+
+(deftype Cursor [ref path state meta watches invalidation-watches]
+  Object
+  (equiv [this other]
+    (-equiv this other))
+
+  cljs.core/IAtom
+
+  cljs.core/IEquiv
+  (-equiv [o other] (identical? o other))
+
+  cljs.core/IDeref
+  (-deref [this]
+    (register-dep this)
+    state)
+
+  IMeta
+  (-meta [_] meta)
+
+  IPrintWithWriter
+  (-pr-writer [a writer opts]
+    (-write writer "#<Cursor: ")
+    (pr-writer state writer opts)
+    (-write writer ">"))
+
+  IWatchable
+  (-notify-watches [this oldval newval]
+    (doseq [[key f] watches]
+      (f key this oldval newval)))
+  (-add-watch [this key f]
+    (set! (.-watches this) (assoc watches key f))
+    this)
+  (-remove-watch [this key]
+    (set! (.-watches this) (dissoc watches key)))
+
+  IHash
+  (-hash [this] (goog/getUid this))
+
+  IInvalidates
+  (-notify-invalidation-watches [this]
+    (doseq [[key f] invalidation-watches]
+      (f key this)))
+  (-add-invalidation-watch [this key f]
+    (set! (.-invalidation-watches this) (assoc invalidation-watches key f))
+    this)
+  (-remove-invalidation-watch [this key]
+    (set! (.-invalidation-watches this) (dissoc invalidation-watches key)))
+
+  IReset
+  (-reset! [a new-value]
+    (let [old-value (.-state a)]
+      (when (not= old-value new-value)
+        (swap! ref assoc-in path new-value)
+        (force-update-state cursor old-value new-value))))
+
+  ISwap
+  (-swap! [a f]
+    (do-update-state a (get-in (swap! ref update-in path f) path)))
+  (-swap! [a f x]
+    (do-update-state a (get-in (swap! ref update-in path f x) path)))
+  (-swap! [a f x y]
+    (do-update-state a (get-in (swap! ref update-in path f x y) path)))
+  (-swap! [a f x y more]
+    (do-update-state a (get-in (apply swap! ref update-in path f x y more) path))))
+
+(defn cursor [ref korks]
+  (let [path (if (keyword? korks) [korks] korks)
+        cursor (Cursor. ref path nil nil nil nil)]
+    (add-watch ref cursor
+      (fn [_ _ old-value new-value]
+        (do-update-state cursor (get-in new-value path))))
+    (set! (.-state cursor) (get-in @ref path))
+    cursor))
