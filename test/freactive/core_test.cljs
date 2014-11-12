@@ -30,4 +30,6 @@
                            (cljs.reader/read-string new-value)))]
     (is (= @l "{:a 0}"))
     (reset! l "{:b 1}")
-    (is (= @a {:b 1}))))
+    (is (= @a {:b 1}))
+    (reset! a {:c 2})
+    (is (= @l "{:c 2}"))))
