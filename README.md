@@ -2,49 +2,61 @@
 
 Work in progress!
 
-Simple functional reactive programming for Clojure.
+## Overview
 
-Defines a function `reactive` which takes a function as an argument
-and returns a `clojure.lang.IDeref` whose value is flagged to be recomputed
-every time a reactive dependency is updated. (Dirty reactive values
-are only recomputed when they are dereferenced).
+The goal of this library is to provide some idioms for functional reactive
+programming based on Clojure's already existing `deref`, `swap!` and `reset!`
+patterns.
 
-How can a reactive dependency be updated?
+Example:
+```clj
+(ns test-freactive
+  (:refer-clojure :exclude [atom])
+  (:require [freactive.core :refer [atom rx lens cursor]))
+  
+  
+(def a1 (atom 0))
+(def a2 (atom 0))
 
-freactive has a reactive `atom` implementation which will be
-registered as a reactive dependency when reactive computations are
-computed based on it.
+(def my-rx (rx (+ @a1 @a2))
 
-```clojure
-(ns freactive.core-test
-  (:refer-clojure :exclude [atom swap!])
-  (:require [freactive.core :refer
-             [reactive atom swap!]]))
-
-(def a (atom 0))
-
-(def b (atom 0))
-
-(def r (reactive (fn [] (+ @a @b))))
-
-@r
+(println @my-rx)
 ;; 0
 
-(swap! a inc)
-;; 1
+(swap! a1 inc)
 
-@r
+(println @my-rx)
 ;; 1
-
-(swap! b inc)
-;; 1
-
-@r
-;; 2
 
 ```
 
-Coming soon: reactive `agent` and `ref`
+All of the data types in this library implement the `IDeref` interface and
+when they are `deref`'ed from another "reactive expression" will be registered
+as dependents.
+
+## Reactive Atoms
+
+Reactive atoms are the same as standard Clojure atoms, except for two differences:
+
+* When `deref` is called on a reactive atom, it calls a `register-dep` function
+with itself as an argument so that it can be registered as a dependency to
+a computation that has bound the `*register-dep*` var in the current scope.
+* Reactive atoms will not notify their watches unless they have actually changed
+(i.e. they will do an equality test between the old value and new value before
+notifying of changes).
+
+## Reactive Expressions
+
+A reactive expression is an `IDeref` instance whose value is the result of
+a computation that can be updated reactively when it's dependencies are
+invalidatted.
+
+
+## Reactive Lenses
+
+
+## Reactive Cursors
+
 
 ## License
 
