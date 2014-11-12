@@ -1,10 +1,16 @@
 (ns freactive.core
   (:refer-clojure :exclude [atom]))
 
-(def ^:dynamic *register-dep* nil)
+;;(def ^:dynamic *register-dep* nil)
 
-(defn register-dep [ref]
-  (when *register-dep* (*register-dep* ref)))
+(def ^:dynamic *invalidate-rx* nil)
+
+(def ^:dynamic *lazy* nil)
+
+;(defn register-dep [ref]
+;  (when *register-dep* (*register-dep* ref)))
+
+(defprotocol IReactive)
 
 (defprotocol IInvalidates
   (-notify-invalidation-watches [this])
@@ -24,13 +30,16 @@
     (-equiv this other))
 
   cljs.core/IAtom
-  
+
+  IReactive
+
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
 
   cljs.core/IDeref
   (-deref [this]
-    (register-dep this)
+    (when-let [invalidate *invalidate-rx*]
+      (-add-watch this invalidate invalidate))
     state)
 
   IMeta
@@ -96,10 +105,11 @@
     ([]
      (when-not (.-dirty reactive)
        (set! (.-dirty reactive) true)
-       (-notify-invalidation-watches reactive)
-       (when-not (empty? (.-watches reactive))
+       (if-not (empty? (.-watches reactive))
          ;; updates state and notifies watches
-         @reactive)))
+         (binding [*invalidate-rx* nil] @reactive)
+         ;; updates only invalidation watches
+         (-notify-invalidation-watches reactive))))
     ([key ref]
      (-remove-invalidation-watch ref key)
      (sully))
@@ -128,28 +138,45 @@
     (satisfies? IWatchable ref)
     [add-watch remove-watch]))
 
-(deftype ReactiveComputation [^:mutable state ^:mutable dirty f ^:mutable deps meta
-                              ^:mutable watches ^:mutable invalidation-watches sully]
+(defprotocol IReactiveExpression
+  (-invalidate [this]))
+
+(defn- lazy? [default-laziness]
+  (if-not (nil? *lazy*) *lazy* default-laziness))
+
+(defn- register-rx-dep [rx default-laziness]
+  (when-let [invalidate *invalidate-rx*]
+    (if (lazy? default-laziness)
+      (-add-invalidation-watch rx invalidate invalidate)
+      (-add-watch rx invalidate invalidate))))
+
+(deftype ReactiveExpression [^:mutable state ^:mutable dirty f ^:mutable deps meta
+                              ^:mutable watches ^:mutable invalidation-watches sully lazy]
   Object
   (equiv [this other]
     (-equiv this other))
+
+  IReactive
+
+  IReactiveExpression
+  (-invalidate [_] (sully))
 
   IEquiv
   (-equiv [o other] (identical? o other))
 
   IDeref
   (-deref [this]
-    (register-dep this)
+    (register-rx-dep this lazy)
     (if-not dirty
       state
-      (binding [*register-dep*
-                (fn [ref]
-                  ((get-add-watch* ref) ref this sully))]
+      (do
         (set! dirty false)
         (let [old-val state
-              new-val (f)]
-          (set! state new-val)
-          (-notify-watches this old-val new-val)
+              new-val (binding [*invalidate-rx* sully] (f))]
+          (when (not= old-val new-val)
+            (set! state new-val)
+            (-notify-watches this old-val new-val)
+            (-notify-invalidation-watches this))
           new-val))))
 
   IMeta
@@ -184,36 +211,43 @@
   IHash
   (-hash [this] (goog/getUid this)))
 
-(defn rx* [f]
-  (let [reactive (ReactiveComputation. nil true f nil nil nil nil nil)]
-    (set! (.-sully reactive) (make-sully-fn reactive))
-    reactive))
+(defn rx*
+  ([f] (rx* f true))
+  ([f lazy]
+   (let [reactive (ReactiveExpression. nil true f nil nil nil nil nil lazy)]
+     (set! (.-sully reactive) (make-sully-fn reactive))
+     reactive)))
 
 (declare update-lens-state)
 
-(defn- add-lens-watch [lens ref]
-  ((get-add-watch* ref)
-   ref lens
-   (fn sully-lens
-     ([]
-      (set! (.-dirty lens) true)
-      (when-not (empty? (.-watches lens))
-        (update-lens-state lens ref)))
-     ([_ _]
-      (remove-invalidation-watch ref lens))
-     ([_ _ old-value new-value]
-      (remove-watch ref lens)
-      (sully-lens)))))
+;(defn- add-lens-watch [lens ref]
+;  ((get-add-watch* ref)
+;   ref lens
+;   (fn sully-lens
+;     ([]
+;      (set! (.-dirty lens) true)
+;      (if-not (empty? (.-watches lens))
+;        (binding [*invalidate* nil]
+;          @lens
+;          (-notify-invalidation-watches lens))))
+;     ([_ _]
+;      (remove-invalidation-watch ref lens)
+;      (sully-lens))
+;     ([_ _ old-value new-value]
+;      (remove-watch ref lens)
+;      (sully-lens)))))
 
 (defn- update-lens-state [lens ref]
   (set! (.-dirty lens) false)
-  (add-lens-watch lens ref)
+  ((.-add-watch-fn lens))
   (let [new-value ((.-getter lens) @ref)
         old-value (.-state lens)]
     (when (not= old-value new-value)
       (set! (.-state lens) new-value)
       (when-not (empty? (.-watches lens))
-        (-notify-watches lens old-value new-value)))
+        (-notify-watches lens old-value new-value))
+      (when-not (empty? (.-invalidation-watches lens))
+        (-notify-invalidation-watches lens)))
     new-value))
 
 (defn- lens-swap! [ref getter setter f]
@@ -221,19 +255,24 @@
          (fn [cur]
            (setter cur (f (getter cur))))))
 
-(deftype ReactiveLens [ref getter setter dirty state meta watches]
+(deftype ReactiveLens [ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
 
   cljs.core/IAtom
 
+  IReactive
+
+  IReactiveExpression
+  (-invalidate [_] (sully))
+
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
 
   cljs.core/IDeref
   (-deref [this]
-    (register-dep this)
+    (register-rx-dep this lazy)
     (if dirty
       (update-lens-state this ref)
       state))
@@ -257,6 +296,16 @@
   (-remove-watch [this key]
     (set! (.-watches this) (dissoc watches key)))
 
+  IInvalidates
+  (-notify-invalidation-watches [this]
+    (doseq [[key f] invalidation-watches]
+      (f key this)))
+  (-add-invalidation-watch [this key f]
+    (set! (.-invalidation-watches this) (assoc invalidation-watches key f))
+    this)
+  (-remove-invalidation-watch [this key]
+    (set! (.-invalidation-watches this) (dissoc invalidation-watches key)))
+
   IHash
   (-hash [this] (goog/getUid this))
 
@@ -270,13 +319,25 @@
   (-swap! [_ f x y] (lens-swap! ref getter setter #(f % x y)))
   (-swap! [_ f x y more] (lens-swap! ref getter setter #(apply f % x y more))))
 
+(defn- lens* [ref getter setter lazy]
+  (let [setter (or setter (fn [_ _] (assert false "Lens does not support updates")))
+        lens (ReactiveLens. ref getter setter true nil nil nil nil lazy nil nil)
+        sully  (make-sully-fn lens)
+        add-watch-fn (if-let [add-watch* (get-add-watch* ref)]
+                        (fn [] (add-watch* ref lens sully))
+                        (fn []))]
+     (set! (.-sully lens) sully)
+     (set! (.-add-watch-fn lens) add-watch-fn)
+     (add-watch-fn)
+     lens))
+
 (defn lens
-  ([ref getter]
-   (lens ref getter (fn [_ _] (assert false "Lens does not support updates"))))
-  ([ref getter setter]
-   (let [lens (ReactiveLens. ref getter setter true nil nil nil)]
-     (add-lens-watch lens ref)
-     lens)))
+  ([ref getter] (lens* ref getter nil false))
+  ([ref getter setter] (lens* ref getter setter false)))
+
+(defn lazy-lens
+  ([ref getter] (lens* ref getter nil true))
+  ([ref getter setter] (lens* ref getter setter true)))
 
 (defn cursor [ref korks]
   (let [path (if (keyword? korks) [korks] korks)]

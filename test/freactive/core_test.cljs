@@ -3,7 +3,7 @@
   (:require
     [freactive.core :refer [atom cursor lens rx*]]
     [cljs.reader]
-    [cemerick.cljs.test :refer-macros [deftest is]]))
+    [cemerick.cljs.test :refer-macros [deftest is run-tests]]))
 
 (deftest rx-test1
   (let [r0 (atom 0)

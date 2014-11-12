@@ -93,7 +93,7 @@
 (defn- create-elem [kw]
   (.createElement js/document (name kw)))
 
-(declare build)
+(declare build-node)
 
 (defn- as-dom-node [elem]
   (if (satisfies? IElement elem)
