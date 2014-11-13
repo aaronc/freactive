@@ -15,14 +15,16 @@ I created this [spec](https://github.com/aaronc/freactive/wiki/User-Interface-Sp
 
 Example:
 ```clojure
+;; ClojureScript:
+
 (ns test-freactive
   (:refer-clojure :exclude [atom])
-  (:require [freactive.core :refer [atom cursor])
-  (:require-macros [freactive.macros :refer [rx]])
-  
+  (:require [freactive.core :refer [atom cursor]]
+            [cljs.reader :refer [read-string]])
+  (:require-macros [freactive.macros :refer [rx]]))
   
 (def my-atom (atom {:a 1}))
-(def my-rx (rx @(str my-atom)))
+(def my-rx (rx (str @my-atom)))
 (def cursor-a (cursor my-atom :a))
 (def cursor-a-str (cursor cursor-a pr-str (fn [_ new-value] (read-string new-value))))
 
@@ -33,7 +35,6 @@ Example:
 
 (println @my-rx)
 ;; "{:a 4}"
-
 ```
 
 All of the data types in this library implement the `IDeref` interface and
