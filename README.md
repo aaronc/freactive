@@ -11,9 +11,10 @@ I was aware of [Om](https://github.com/swannodette/om) and [Reagent](https://git
 and figured something along those lines could be created with a Reagent-like reactive atom library that
 interacted with JavaFX. While doing this, I realized that a library with the same API could be created 
 in ClojureScript and that also, a DOM library with a similar API to the JavaFX library could be created.
+I created this [spec](https://github.com/aaronc/freactive/wiki/User-Interface-API) for user interface libraries that could be based upon freactive using a similar API.
 
 Example:
-```clj
+```clojure
 (ns test-freactive
   (:refer-clojure :exclude [atom])
   (:require [freactive.core :refer [atom rx lens cursor]))
