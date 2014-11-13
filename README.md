@@ -14,7 +14,7 @@ in ClojureScript and that also, a DOM library with a similar API to the JavaFX l
 I created this [spec](https://github.com/aaronc/freactive/wiki/User-Interface-Spec) for user interface libraries that could be based upon freactive using a similar API.
 
 Example:
-```clojurescript
+```clojure
 (ns test-freactive
   (:refer-clojure :exclude [atom])
   (:require [freactive.core :refer [atom cursor])
