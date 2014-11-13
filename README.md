@@ -14,24 +14,25 @@ in ClojureScript and that also, a DOM library with a similar API to the JavaFX l
 I created this [spec](https://github.com/aaronc/freactive/wiki/User-Interface-Spec) for user interface libraries that could be based upon freactive using a similar API.
 
 Example:
-```clojure
+```clojurescript
 (ns test-freactive
   (:refer-clojure :exclude [atom])
-  (:require [freactive.core :refer [atom rx lens cursor]))
+  (:require [freactive.core :refer [atom cursor])
+  (:require-macros [freactive.macros :refer [rx]])
   
   
-(def a1 (atom 0))
-(def a2 (atom 0))
+(def my-atom (atom {:a 1}))
+(def my-rx (rx @(str my-atom)))
+(def cursor-a (cursor my-atom :a))
+(def cursor-a-str (cursor cursor-a pr-str (fn [_ new-value] (read-string new-value))))
 
-(def my-rx (rx (inc @a1))
+(println @cursor-a-str)
+;; "1"
+
+(reset! cursor-a-str "4")
 
 (println @my-rx)
-;; 1
-
-(swap! a1 inc)
-
-(println @my-rx)
-;; 2
+;; "{:a 4}"
 
 ```
 
