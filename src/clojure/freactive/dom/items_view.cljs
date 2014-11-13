@@ -1,15 +1,22 @@
-(ns freactive.experimental.items-view
+(ns freactive.dom.items-view
   (:refer-clojure :exclude [atom])
   (:require
     [freactive.core :refer [atom]]
-    [freactive.experimental.dom2 :as dom]
-    [freactive.experimental :refer [observable-collection
+    [freactive.dom :as dom]
+    [freactive.observable-collection :refer [observable-collection
                                     observe-changes transact!]])
   (:require-macros [freactive.macros :refer [rx]]))
 
-(defrecord ItemsView [elem-spec element transitions template-fn coll]
-  dom/IElementSpec
-  (-get-virtual-dom [_] elem-spec)
+(defprotocol IItemsView
+  (-sort! [view compare-fn])
+  (-apply-filter! [view f])
+  (-remove-filter! [view f])
+  (-reset-view [view])
+  (-set-view-range [view start end]))
+
+(defrecord ItemsView [element coll]
+  dom/IHasElement
+  (-get-element [_] element)
 
   dom/IRemove
   (-remove [_] (dom/-remove element)))
@@ -20,7 +27,7 @@
   [container template-fn items]
   (let [coll
         (cond
-          (instance? freactive.experimental/ObservableCollection items)
+          (instance? freactive.observable-collection/ObservableCollection items)
           items
 
           :default
@@ -34,9 +41,11 @@
           :default
           container)
 
+        element (dom/build-element container)
+
         elem-mappings (atom {})
 
-         view (ItemsView. container nil nil template-fn coll)
+         view (ItemsView. element coll)
 
          update-fn
          (fn [view coll changes]
@@ -53,19 +62,16 @@
                          elem (dom/append-child! (.-element view) (template-fn state))]
                      (swap! elem-mappings assoc k (ItemContainer. elem state))))))))]
 
-    (dom/with-transitions
+    (update-fn view coll @(.-state coll))
+    (observe-changes coll view update-fn)
+
+    #_(dom/with-transitions
       view
       {:show
        (fn on-mount [element _]
          (println "mounted")
          (set! (.-element view) element)
          (println "coll" coll)
-         (update-fn view coll @(.-state coll))
-         (observe-changes coll view update-fn))})))
+         )})
 
-
-(def c0 (observable-collection {:a "abc"}))
-
-(def i0 (items-view [:ul] (fn [x] (rx [:li @x])) c0))
-
-(dom/mount! (dom/get-body) i0)
+    view))

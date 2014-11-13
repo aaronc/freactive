@@ -1,4 +1,4 @@
-(ns freactive.experimental)
+(ns freactive.observable-collection)
 
 (deftype ObservableCollection [state observers]
 
@@ -71,26 +71,6 @@
 
       :default
       (transact!* coll tx-data))))
-
-;(defn assoc! [coll id value]
-;  (transact!* coll [[:insert id value]]))
-;
-;(defn update! [coll id value]
-;  (transact!* coll [[:insert id value]]))
-;
-;(defn insert! [coll id value]
-;  (transact!* coll [[:insert id value]]))
-
-;(defn transact! [coll & tx-data]
-;  (apply transact!* coll tx-data))
-
-;; (transact! coll [0 nil])
-;; (transact! coll 0 nil)
-;; (transact! coll {:id 0 :a 1})
-;; (transact! coll 0 assoc :a 1)
-;; (transact! coll [0 assoc :a 1])
-;; (transact! coll [0 assoc :a 1] [1 assoc :b 2])
-;; (transact! coll [[0 assoc :a 1] [1 assoc :b 2]])
 
 (defn observable-collection
   ([]

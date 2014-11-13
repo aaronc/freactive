@@ -1,4 +1,4 @@
-(ns freactive.experimental.dom2
+(ns freactive.dom
   (:require [freactive.core :as r])
   (:require-macros [freactive.macros :refer [rx]]))
 
@@ -8,6 +8,9 @@
 (defprotocol IElement
   (-get-dom-node [this])
   (-get-element-spec [this]))
+
+(defprotocol IHasElement
+  (-get-element [this]))
 
 (defprotocol IRemove
   (-remove [this]))
@@ -198,7 +201,7 @@
 ;          child (as-dom-node child)]
 ;      (.removeChild parent child))))
 ;
-(defn on-child-ref-invalidated* [parent [add-watch* remove-watch*] cancellation-token]
+(defn- on-child-ref-invalidated* [parent [add-watch* remove-watch*] cancellation-token]
   (fn on-child-ref-invalidated
     ([key child-ref _ _]
      (on-child-ref-invalidated key child-ref))
@@ -238,9 +241,7 @@
     (pr-writer spec-ref writer opts)
     (-write writer " ")
     (pr-writer cancellation-token writer opts)
-    (-write writer ">"))
-
-  )
+    (-write writer ">")))
 
 (defn- append-deref-child
   [parent child]
@@ -252,7 +253,7 @@
       (ReactiveElement. child cur-elem cancellation-token))
     (transition-element parent @child nil)))
 ;
-(defn append-child! [parent child]
+(defn- append-child! [parent child]
   (cond
     (satisfies? IDeref child)
     (append-deref-child parent child)
@@ -286,16 +287,33 @@
             (append-children! elem children))
           elem)))))
 
-(defn get-body []
-  (aget (.getElementsByTagName js/document "body") 0))
+;(defn get-body []
+;  (aget (.getElementsByTagName js/document "body") 0))
 
-(defn- resolve-element [elem-or-node]
+(defn- resolve-existing-element [elem-or-node]
   (cond
+    (satisfies? IHasElement elem-or-node)
+    (-get-element elem-or-node)
+
     (satisfies? IElement elem-or-node)
     elem-or-node
+
+    (string? elem-or-node)
+    (when-let [node (.getElementById js/document elem-or-node)]
+      (Element. nil node))
 
     :default
     (Element. nil elem-or-node)))
 
+(defn- resolve-child-element [elem-or-node]
+  (cond
+    (satisfies? IHasElement elem-or-node)
+    (-get-element elem-or-node)
+
+    :default
+    elem-or-node))
+
 (defn mount! [element child]
-  (append-child! (resolve-element element) child))
+  (append-child!
+    (resolve-existing-element element)
+    (resolve-child-element child)))
