@@ -2,8 +2,8 @@
 
 The idea of this library is to provide some idioms for functional reactive
 programming based on Clojure's already existing `deref`, `swap!` and `reset!`
-functions. Currently there are reactive `atom`, `rx` (reactive expressions or computations), `lens`
-and `cursor` types.
+functions. Currently there are reactive `atom`, `rx` (reactive expressions or computations),
+and lens-based  `cursor` types.
 
 This library started when I needed to write a fairly
 large Clojure project in JavaFX (using my own [fx-clj](https://github.com/aaronc/fx-clj/)).
