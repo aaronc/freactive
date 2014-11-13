@@ -219,34 +219,34 @@
      (set! (.-sully reactive) (make-sully-fn reactive))
      reactive)))
 
-;(declare update-lens-state)
+;(declare update-cursor-state)
 
-;(defn- add-lens-watch [lens ref]
+;(defn- add-cursor-watch [cursor ref]
 ;  ((get-add-watch* ref)
-;   ref lens
-;   (fn sully-lens
+;   ref cursor
+;   (fn sully-cursor
 ;     ([]
-;      (set! (.-dirty lens) true)
-;      (if-not (empty? (.-watches lens))
+;      (set! (.-dirty cursor) true)
+;      (if-not (empty? (.-watches cursor))
 ;        (binding [*invalidate* nil]
-;          @lens
-;          (-notify-invalidation-watches lens))))
+;          @cursor
+;          (-notify-invalidation-watches cursor))))
 ;     ([_ _]
-;      (remove-invalidation-watch ref lens)
-;      (sully-lens))
+;      (remove-invalidation-watch ref cursor)
+;      (sully-cursor))
 ;     ([_ _ old-value new-value]
-;      (remove-watch ref lens)
-;      (sully-lens)))))
+;      (remove-watch ref cursor)
+;      (sully-cursor)))))
 
-;(defn- update-lens-state [lens ref]
+;(defn- update-cursor-state [cursor ref]
 ;  )
 
-(defn- lens-swap! [ref getter setter f]
+(defn- cursor-swap! [ref getter setter f]
   (swap! ref
          (fn [cur]
            (setter cur (f (getter cur))))))
 
-(deftype ReactiveLens [ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
+(deftype ReactiveCursor [ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -257,17 +257,17 @@
 
   IReactiveExpression
   (-invalidate [_] (sully))
-  (-compute [lens]
-    (set! (.-dirty lens) false)
-    ((.-add-watch-fn lens))
-    (let [new-value ((.-getter lens) @ref)
-          old-value (.-state lens)]
+  (-compute [cursor]
+    (set! (.-dirty cursor) false)
+    ((.-add-watch-fn cursor))
+    (let [new-value ((.-getter cursor) @ref)
+          old-value (.-state cursor)]
       (when (not= old-value new-value)
-        (set! (.-state lens) new-value)
-        (when-not (empty? (.-watches lens))
-          (-notify-watches lens old-value new-value))
-        (when-not (empty? (.-invalidation-watches lens))
-          (-notify-invalidation-watches lens))
+        (set! (.-state cursor) new-value)
+        (when-not (empty? (.-watches cursor))
+          (-notify-watches cursor old-value new-value))
+        (when-not (empty? (.-invalidation-watches cursor))
+          (-notify-invalidation-watches cursor))
         new-value)))
 
   cljs.core/IEquiv
@@ -284,7 +284,7 @@
 
   IPrintWithWriter
   (-pr-writer [a writer opts]
-    (-write writer "#<ReactiveLens: ")
+    (-write writer "#<ReactiveCursor: ")
     (pr-writer state writer opts)
     (-write writer ">"))
 
@@ -316,33 +316,39 @@
     (swap! ref (fn [cur] (setter cur new-value))))
 
   ISwap
-  (-swap! [_ f] (lens-swap! ref getter setter f))
-  (-swap! [_ f x] (lens-swap! ref getter setter #(f % x)))
-  (-swap! [_ f x y] (lens-swap! ref getter setter #(f % x y)))
-  (-swap! [_ f x y more] (lens-swap! ref getter setter #(apply f % x y more))))
+  (-swap! [_ f] (cursor-swap! ref getter setter f))
+  (-swap! [_ f x] (cursor-swap! ref getter setter #(f % x)))
+  (-swap! [_ f x y] (cursor-swap! ref getter setter #(f % x y)))
+  (-swap! [_ f x y more] (cursor-swap! ref getter setter #(apply f % x y more))))
 
-(defn- lens* [ref getter setter lazy]
-  (let [setter (or setter (fn [_ _] (assert false "Lens does not support updates")))
-        lens (ReactiveLens. ref getter setter true nil nil nil nil lazy nil nil)
-        sully  (make-sully-fn lens)
+(defn cursor* [ref korks-or-getter setter lazy suppress-watch]
+  (let [ks (cond
+            (keyword? korks-or-getter)
+            [korks-or-getter]
+
+            (sequential? korks-or-getter)
+            korks-or-getter)
+        getter (if ks (fn [cur] (get-in cur path)) korks-or-getter)
+        setter (or
+                setter
+                (when ks
+                  (fn [cur new-sub] (assoc-in cur path new-sub)))
+                (fn [_ _] (assert false "Cursor does not support updates")))
+        cursor (ReactiveCursor. ref getter setter true nil nil nil nil lazy nil nil)
+        sully  (make-sully-fn cursor)
         add-watch-fn (if-let [add-watch* (get-add-watch* ref)]
-                        (fn [] (add-watch* ref lens sully))
+                        (fn [] (add-watch* ref cursor sully))
                         (fn []))]
-     (set! (.-sully lens) sully)
-     (set! (.-add-watch-fn lens) add-watch-fn)
-     (add-watch-fn)
-     lens))
+     (set! (.-sully cursor) sully)
+     (when-not supress-watch
+       (set! (.-add-watch-fn cursor) add-watch-fn)
+       (add-watch-fn))
+     cursor))
 
-(defn lens
-  ([ref getter] (lens* ref getter nil false))
-  ([ref getter setter] (lens* ref getter setter false)))
+(defn cursor
+  ([ref korks-or-getter] (cursor* ref korks-or-getter nil false false))
+  ([ref getter setter] (cursor* ref getter setter false false)))
 
-(defn lazy-lens
-  ([ref getter] (lens* ref getter nil true))
-  ([ref getter setter] (lens* ref getter setter true)))
-
-(defn cursor [ref korks]
-  (let [path (if (keyword? korks) [korks] korks)]
-    (lens ref
-          (fn [cur] (get-in cur path))
-          (fn [cur new-sub] (assoc-in cur path new-sub)))))
+(defn lazy-cursor
+  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true))
+  ([ref getter setter] (cursor* ref getter setter true false)))
