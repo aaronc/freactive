@@ -1,12 +1,16 @@
 # freactive
 
-Work in progress!
-
-## Overview
-
-The goal of this library is to provide some idioms for functional reactive
+The idea of this library is to provide some idioms for functional reactive
 programming based on Clojure's already existing `deref`, `swap!` and `reset!`
-patterns.
+functions. Currently there are reactive `atom`, `rx` (reactive expressions or computations), `lens`
+and `cursor` types.
+
+I started this library when I needed to write a fairly
+large Clojure project in JavaFX (using my own [fx-clj](https://github.com/aaronc/fx-clj/)).
+I was aware of [Om](https://github.com/swannodette/om) and [Reagent](https://github.com/reagent-project/reagent)
+and figured I could create something along those lines by creating reactive atoms (as in Reagent) that interacted with JavaFX.
+As I was doing this, I realized that a library with the same API could be created in ClojureScript and that also,
+a DOM library with a similar API to the JavaFX library could be created.
 
 Example:
 ```clj
