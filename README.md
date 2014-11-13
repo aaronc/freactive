@@ -57,11 +57,7 @@ a computation that can be updated reactively when it's dependencies are
 invalidatted.
 
 
-## Reactive Lenses
-
-
 ## Reactive Cursors
-
 
 ## License
 
