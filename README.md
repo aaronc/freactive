@@ -1,17 +1,14 @@
 # freactive
 
-The idea of this library is to provide some idioms for functional reactive
-programming based on Clojure's already existing `deref`, `swap!` and `reset!`
-functions. Currently there are reactive `atom`, `rx` (reactive expressions or computations),
-and lens-based  `cursor` types.
+The goal of this library is to provide some idioms for functional reactive programming based on Clojure's existing `deref`, `swap!` and `reset!` functions. Currently freactive has reactive `atom`, `rx` (reactive expressions or computations), and lens-based  `cursor` types.
 
-This library started when I needed to write a fairly
-large Clojure project in JavaFX (using my own [fx-clj](https://github.com/aaronc/fx-clj/)).
-I was aware of [Om](https://github.com/swannodette/om) and [Reagent](https://github.com/reagent-project/reagent)
-and figured something along those lines could be created with a Reagent-like reactive atom library that
-interacted with JavaFX. While doing this, I realized that a library with the same API could be created 
-in ClojureScript and that also, a DOM library with a similar API to the JavaFX library could be created.
-I created this [spec](https://github.com/aaronc/freactive/wiki/User-Interface-Spec) for user interface libraries that could be based upon freactive using a similar API.
+This idea for this came when I needed to write a fairly complex, real-time JavaFX app (using my own [fx-clj](https://github.com/aaronc/fx-clj/)). I knew of [Om](https://github.com/swannodette/om) and [Reagent](https://github.com/reagent-project/reagent) and wanted something for JavaFX that used Reagent-like reactive atoms. While doing this, I realized that with a common library of reactive "ref"'s, different UI libaries could share the same data structures and state management idioms. That's the vision of this library.
+
+Pains were taken while developing this library to keep the propogation of state changes to the minimum necessary and to allow for configurable laziness where applicable.
+
+*I have drafted a brief [spec](https://github.com/aaronc/freactive/wiki/User-Interface-Spec) for user interface libraries that could be based upon freactive using a similar Hiccup-like API. The goal is for fx-clj and an freactive-based DOM library to support this spec.*
+
+*The ClojureScript version of the API is described here - as the Java-version was designed first, the ClojureScript version had the benefit of further refinement. The Java-version will be updated to match this document as soon as I have a chance.*
 
 Example:
 ```clojure
