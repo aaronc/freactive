@@ -16,22 +16,23 @@
 (defn- do-tx [state tx]
   (cond
     (sequential? tx)
-    (let [[id op & args] tx]
+    (let [[op id arg & args] tx]
       (cond
-        (sequential? id)
-        (do-txs state tx auto-key)
-
-        (nil? op)
-        [(dissoc state id) [id nil]]
-
-        (ifn? op)
-        (let [cur (get state id)
-              res (apply op cur args)]
-          [(assoc state id res) [id res]])
-
+        (sequential? op)
+        (do-txs state tx)
 
         :default
-        [(assoc state id op) [id op]]))))
+        (case op
+          :assoc!
+          [(assoc state id arg) [id arg]]
+
+          :dissoc!
+          [(dissoc state id) [id nil]]
+
+          :update!
+          (let [cur (get state id)
+                res (apply op cur arg args)]
+            [(assoc state id res) [id res]]))))))
 
 (defn- do-txs [state txs]
   (loop [state state
@@ -65,11 +66,20 @@
 (defn transact! [coll & tx-data]
   (let [fst (first tx-data)]
     (cond
-      (or (keyword? fst) (integer? fst) (string? fst))
+      (keyword? fst)
       (transact!* coll [tx-data])
 
       :default
       (transact!* coll tx-data))))
+
+;(defn assoc! [coll id value]
+;  (transact!* coll [[:insert id value]]))
+;
+;(defn update! [coll id value]
+;  (transact!* coll [[:insert id value]]))
+;
+;(defn insert! [coll id value]
+;  (transact!* coll [[:insert id value]]))
 
 ;(defn transact! [coll & tx-data]
 ;  (apply transact!* coll tx-data))

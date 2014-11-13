@@ -88,7 +88,7 @@
       :default
       (if (satisfies? cljs.core/IDeref attr-value)
         ((on-value-ref-invalidated* set-attr!) attr-value [element attr-name])
-        ))))
+        (set-attr! element attr-name attr-value)))))
 
 (defn- create-elem [kw]
   (.createElement js/document (name kw)))

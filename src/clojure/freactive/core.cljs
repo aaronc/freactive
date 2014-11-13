@@ -100,6 +100,10 @@
   ([x] (ReactiveAtom. x nil nil nil))
   ([x & {:keys [meta validator]}] (ReactiveAtom. x meta validator nil)))
 
+(defprotocol IReactiveExpression
+  (-invalidate [this])
+  (-compute [this]))
+
 (defn- make-sully-fn [reactive]
   (fn sully
     ([]
@@ -107,7 +111,8 @@
        (set! (.-dirty reactive) true)
        (if-not (empty? (.-watches reactive))
          ;; updates state and notifies watches
-         (binding [*invalidate-rx* nil] @reactive)
+         (when (-compute reactive)
+           (-notify-invalidation-watches reactive))
          ;; updates only invalidation watches
          (-notify-invalidation-watches reactive))))
     ([key ref]
@@ -138,9 +143,6 @@
     (satisfies? IWatchable ref)
     [add-watch remove-watch]))
 
-(defprotocol IReactiveExpression
-  (-invalidate [this]))
-
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
 
@@ -160,6 +162,14 @@
 
   IReactiveExpression
   (-invalidate [_] (sully))
+  (-compute [this]
+    (set! dirty false)
+    (let [old-val state
+          new-val (binding [*invalidate-rx* sully] (f))]
+      (when (not= old-val new-val)
+        (set! state new-val)
+        (-notify-watches this old-val new-val)
+        new-val)))
 
   IEquiv
   (-equiv [o other] (identical? o other))
@@ -167,17 +177,8 @@
   IDeref
   (-deref [this]
     (register-rx-dep this lazy)
-    (if-not dirty
-      state
-      (do
-        (set! dirty false)
-        (let [old-val state
-              new-val (binding [*invalidate-rx* sully] (f))]
-          (when (not= old-val new-val)
-            (set! state new-val)
-            (-notify-watches this old-val new-val)
-            (-notify-invalidation-watches this))
-          new-val))))
+    (when dirty (-compute this))
+    state)
 
   IMeta
   (-meta [_] meta)
@@ -218,7 +219,7 @@
      (set! (.-sully reactive) (make-sully-fn reactive))
      reactive)))
 
-(declare update-lens-state)
+;(declare update-lens-state)
 
 ;(defn- add-lens-watch [lens ref]
 ;  ((get-add-watch* ref)
@@ -237,18 +238,8 @@
 ;      (remove-watch ref lens)
 ;      (sully-lens)))))
 
-(defn- update-lens-state [lens ref]
-  (set! (.-dirty lens) false)
-  ((.-add-watch-fn lens))
-  (let [new-value ((.-getter lens) @ref)
-        old-value (.-state lens)]
-    (when (not= old-value new-value)
-      (set! (.-state lens) new-value)
-      (when-not (empty? (.-watches lens))
-        (-notify-watches lens old-value new-value))
-      (when-not (empty? (.-invalidation-watches lens))
-        (-notify-invalidation-watches lens)))
-    new-value))
+;(defn- update-lens-state [lens ref]
+;  )
 
 (defn- lens-swap! [ref getter setter f]
   (swap! ref
@@ -266,6 +257,18 @@
 
   IReactiveExpression
   (-invalidate [_] (sully))
+  (-compute [lens]
+    (set! (.-dirty lens) false)
+    ((.-add-watch-fn lens))
+    (let [new-value ((.-getter lens) @ref)
+          old-value (.-state lens)]
+      (when (not= old-value new-value)
+        (set! (.-state lens) new-value)
+        (when-not (empty? (.-watches lens))
+          (-notify-watches lens old-value new-value))
+        (when-not (empty? (.-invalidation-watches lens))
+          (-notify-invalidation-watches lens))
+        new-value)))
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -273,9 +276,8 @@
   cljs.core/IDeref
   (-deref [this]
     (register-rx-dep this lazy)
-    (if dirty
-      (update-lens-state this ref)
-      state))
+    (when dirty (-compute this))
+    state)
 
   IMeta
   (-meta [_] meta)
