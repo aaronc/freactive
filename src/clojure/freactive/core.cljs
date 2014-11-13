@@ -17,7 +17,6 @@
   (-add-invalidation-watch [this key f])
   (-remove-invalidation-watch [this key]))
 
-
 (defn add-invalidation-watch [this key f]
   (-add-invalidation-watch this key f))
 
@@ -242,11 +241,9 @@
 ;  )
 
 (defn- cursor-swap! [ref getter setter f]
-  (swap! ref
-         (fn [cur]
-           (setter cur (f (getter cur))))))
+  ((. -swapper! ref) ref (fn [cur] (setter cur (f (getter cur))))))
 
-(deftype ReactiveCursor [ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
+(deftype ReactiveCursor [ref getter setter swapper! dirty state meta watches invalidation-watches lazy sully add-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -259,7 +256,7 @@
   (-invalidate [_] (sully))
   (-compute [cursor]
     (set! (.-dirty cursor) false)
-    ((.-add-watch-fn cursor))
+    ((.-add-watch-fn cursor) sully)
     (let [new-value ((.-getter cursor) @ref)
           old-value (.-state cursor)]
       (when (not= old-value new-value)
@@ -313,7 +310,7 @@
 
   IReset
   (-reset! [_ new-value]
-    (swap! ref (fn [cur] (setter cur new-value))))
+    (swapper! ref (fn [cur] (setter cur new-value))))
 
   ISwap
   (-swap! [_ f] (cursor-swap! ref getter setter f))
@@ -321,7 +318,7 @@
   (-swap! [_ f x y] (cursor-swap! ref getter setter #(f % x y)))
   (-swap! [_ f x y more] (cursor-swap! ref getter setter #(apply f % x y more))))
 
-(defn cursor* [ref korks-or-getter setter lazy suppress-watch]
+(defn cursor* [ref korks-or-getter setter swapper! lazy add-watch-fn]
   (let [ks (cond
             (keyword? korks-or-getter)
             [korks-or-getter]
@@ -334,21 +331,23 @@
                 (when ks
                   (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
-        cursor (ReactiveCursor. ref getter setter true nil nil nil nil lazy nil nil)
+        swapper! (or swapper! swap!)
+        cursor (ReactiveCursor. ref getter setter swapper! true nil nil nil nil lazy nil nil)
         sully  (make-sully-fn cursor)
-        add-watch-fn (if-let [add-watch* (get-add-watch* ref)]
-                        (fn [] (add-watch* ref cursor sully))
-                        (fn []))]
+        add-watch-fn
+        (or add-watch-fn
+            (if-let [add-watch* (get-add-watch* ref)]
+              (fn [sully] (add-watch* ref cursor sully))
+              (fn [_])))]
      (set! (.-sully cursor) sully)
-     (when-not supress-watch
-       (set! (.-add-watch-fn cursor) add-watch-fn)
-       (add-watch-fn))
+     (set! (.-add-watch-fn cursor) add-watch-fn)
+     (add-watch-fn sully)
      cursor))
 
 (defn cursor
-  ([ref korks-or-getter] (cursor* ref korks-or-getter nil false false))
-  ([ref getter setter] (cursor* ref getter setter false false)))
+  ([ref korks-or-getter] (cursor* ref korks-or-getter nil nil false false))
+  ([ref getter setter] (cursor* ref getter setter nil false false)))
 
 (defn lazy-cursor
-  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true false))
-  ([ref getter setter] (cursor* ref getter setter true false)))
+  ([ref korks-or-getter] (cursor* ref korks-or-getter nil nil true false))
+  ([ref getter setter] (cursor* ref getter setter nil true false)))
