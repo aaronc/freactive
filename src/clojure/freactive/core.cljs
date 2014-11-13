@@ -328,11 +328,11 @@
 
             (sequential? korks-or-getter)
             korks-or-getter)
-        getter (if ks (fn [cur] (get-in cur path)) korks-or-getter)
+        getter (if ks (fn [cur] (get-in cur ks)) korks-or-getter)
         setter (or
                 setter
                 (when ks
-                  (fn [cur new-sub] (assoc-in cur path new-sub)))
+                  (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
         cursor (ReactiveCursor. ref getter setter true nil nil nil nil lazy nil nil)
         sully  (make-sully-fn cursor)
@@ -350,5 +350,5 @@
   ([ref getter setter] (cursor* ref getter setter false false)))
 
 (defn lazy-cursor
-  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true))
+  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true false))
   ([ref getter setter] (cursor* ref getter setter true false)))
