@@ -1,4 +1,4 @@
-(ns freactive.dom
+(ns freactive.experimental.dom
   (:require [freactive.core :as r])
   (:require-macros [freactive.macros :refer [rx]]))
 
@@ -173,6 +173,14 @@
           (get-dom-node new-elem))
         new-elem))
 
+(defn- clear-children! [parent]
+  (let [dom-node (get-dom-node parent)]
+    (loop []
+      (let [last-child (.-lastChild dom-node)]
+        (when last-child
+          (.removeChild dom-node last-child)
+          (recur))))))
+
 (defn- replace-or-append-child [parent new-elem cur-elem]
   (if cur-elem
     (replace-child parent new-elem cur-elem)
@@ -287,8 +295,8 @@
             (append-children! elem children))
           elem)))))
 
-;(defn get-body []
-;  (aget (.getElementsByTagName js/document "body") 0))
+(defn get-body []
+  (aget (.getElementsByTagName js/document "body") 0))
 
 (defn- resolve-existing-element [elem-or-node]
   (cond
@@ -298,9 +306,9 @@
     (satisfies? IElement elem-or-node)
     elem-or-node
 
-    (string? elem-or-node)
-    (when-let [node (.getElementById js/document elem-or-node)]
-      (Element. nil node))
+    ;(string? elem-or-node)
+    ;(when-let [node (.getElementById js/document elem-or-node)]
+    ;  (Element. nil node))
 
     :default
     (Element. nil elem-or-node)))
@@ -314,6 +322,8 @@
     elem-or-node))
 
 (defn mount! [element child]
-  (append-child!
-    (resolve-existing-element element)
-    (resolve-child-element child)))
+  (let [element (resolve-existing-element element)]
+    ;;(clear-children! element)
+    (append-child!
+      element
+      (resolve-child-element child))))

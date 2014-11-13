@@ -1,4 +1,4 @@
-(ns freactive.observable-collection)
+(ns freactive.experimental.observable-collection)
 
 (deftype ObservableCollection [state observers]
 

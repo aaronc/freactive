@@ -1,7 +1,7 @@
 (ns freactive.core-test
   (:refer-clojure :exclude [atom])
   (:require
-    [freactive.core :refer [atom cursor lens]]
+    [freactive.core :refer [atom cursor]]
     [cljs.reader]
     [cemerick.cljs.test :refer-macros [deftest is run-tests]])
   (:require-macros [freactive.macros :refer [rx]]))
@@ -27,8 +27,8 @@
 
 (deftest lens-test
   (let [a (atom {:a 0})
-        l (lens a pr-str (fn [_ new-value]
-                           (cljs.reader/read-string new-value)))]
+        l (cursor a pr-str (fn [_ new-value]
+                            (cljs.reader/read-string new-value)))]
     (is (= @l "{:a 0}"))
     (reset! l "{:b 1}")
     (is (= @a {:b 1}))

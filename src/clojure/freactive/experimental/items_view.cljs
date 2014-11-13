@@ -1,10 +1,10 @@
-(ns freactive.dom.items-view
+(ns freactive.experimental.items-view
   (:refer-clojure :exclude [atom])
   (:require
     [freactive.core :refer [atom]]
-    [freactive.dom :as dom]
-    [freactive.observable-collection :refer [observable-collection
-                                    observe-changes transact!]])
+    [freactive.experimental.dom :as dom]
+    [freactive.experimental.observable-collection
+     :refer [observable-collection observe-changes transact!]])
   (:require-macros [freactive.macros :refer [rx]]))
 
 (defprotocol IItemsView
@@ -27,7 +27,7 @@
   [container template-fn items]
   (let [coll
         (cond
-          (instance? freactive.observable-collection/ObservableCollection items)
+          (instance? freactive.experimental.observable-collection/ObservableCollection items)
           items
 
           :default
@@ -75,3 +75,7 @@
          )})
 
     view))
+
+
+;(def c0 (observable-collection {:a "abc"}))
+;(dom/mount! (dom/get-body) (items-view :ul (fn [x] (rx [:li x])) c0))
