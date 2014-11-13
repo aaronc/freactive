@@ -2,9 +2,9 @@
 
 The goal of this library is to provide some idioms for functional reactive programming based on Clojure's existing `deref`, `swap!` and `reset!` functions. Currently freactive has reactive `atom`, `rx` (reactive expressions or computations), and lens-based  `cursor` types.
 
-This idea for this came when I needed to write a fairly complex, real-time JavaFX app (using my own [fx-clj](https://github.com/aaronc/fx-clj/)). I knew of [Om](https://github.com/swannodette/om) and [Reagent](https://github.com/reagent-project/reagent) and wanted something for JavaFX that used Reagent-like reactive atoms. While doing this, I realized that with a common library of reactive "ref"'s, different UI libaries could share the same data structures and state management idioms. That's the vision of this library.
+This idea for this came when I needed to write a fairly complex, real-time JavaFX app (using my own [fx-clj](https://github.com/aaronc/fx-clj/)). I knew of [Om](https://github.com/swannodette/om) and [Reagent](https://github.com/reagent-project/reagent) and wanted something for JavaFX that used Reagent-like reactive atoms. While doing this, I realized that with a common library of reactive "ref"'s, different UI libaries could share the same data structures and state management idioms. That is the vision for this library.
 
-Pains were taken while developing this library to keep the propogation of state changes to the minimum necessary and to allow for configurable laziness where applicable.
+For maximal efficieny, pains were taken while to keep the propogation of state changes to the minimum necessary and to allow for configurable laziness where applicable.
 
 *I have drafted a brief [spec](https://github.com/aaronc/freactive/wiki/User-Interface-Spec) for user interface libraries that could be based upon freactive using a similar Hiccup-like API. The goal is for fx-clj and an freactive-based DOM library to support this spec.*
 
