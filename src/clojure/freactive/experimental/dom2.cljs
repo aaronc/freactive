@@ -1,87 +1,59 @@
-(ns freactive.experimental.dom
-  (:require [freactive.core :as r])
-  (:require-macros [freactive.macros :refer [rx]]))
+(ns freactive.experimental.dom2)
+
+;; ## Core Defintions
+
+(def ^:private element-spec-lookup #js {})
 
 (defprotocol IElementSpec
-  (-get-virtual-dom [this]))
-
-(defprotocol IElement
-  (-get-dom-node [this])
-  (-get-element-spec [this]))
-
-(defprotocol IHasElement
-  (-get-element [this]))
-
-(defprotocol IRemove
-  (-remove [this]))
-
-(deftype Element [spec node]
-  IElement
-  (-get-dom-node [_] node)
-  (-get-element-spec [_] spec)
-
-  IPrintWithWriter
-  (-pr-writer [a writer opts]
-    (-write writer "#<Element: ")
-    (pr-writer node writer opts)
-    (-write writer " ")
-    (pr-writer spec writer opts)
-    (-write writer ">"))
-
-  IRemove
-  (-remove [_] (.removeChild (.-parentNode node) node)))
+  (-get-virtual-dom [x]))
 
 (defrecord ElementSpec [spec]
   IElementSpec
-  (-get-virtual-dom [_] spec))
+  (-get-virtual-dom [x] spec))
 
-(defn get-element-spec [element-or-spec]
+(defn- dom-node? [x]
+  (> (.-nodeType x) 0))
+
+(defn- get-virtual-dom [x]
   (cond
-    (satisfies? IElementSpec element-or-spec)
-    element-or-spec
+    (dom-node? x)
+    (get-virtual-dom (aget element-spec-lookup x))
+    (string? x) x
+    (vector? x) x
+    :default (-get-virtual-dom x)))
 
-    (satisfies? IElement element-or-spec)
-    (-get-element-spec element-or-spec)
+(defn- set-element-spec! [dom-node spec]
+  (aset element-spec-lookup dom-node spec))
 
-    :default
-    (ElementSpec. element-or-spec)))
+(defn- get-element-spec [x]
+  (if (dom-node? x)
+    (aget element-spec-lookup x)
+    x))
 
-(defn get-virtual-dom [element-or-spec]
-  (-get-virtual-dom (get-element-spec element-or-spec)))
+(defn- get-transition [x transition-name]
+  (let [spec (get-element-spec x)]
+    (when-not (string? spec)
+      (get (meta spec) transition-name))))
 
-(defn as-element-spec [spec]
-  (if (satisfies? IElementSpec spec)
-    spec
-    (ElementSpec. spec)))
+(defprotocol IHasDOMNode
+  (-get-dom-node [x]))
 
-(defn with-transitions [elem-spec transitions]
-  (if (satisfies? IDeref elem-spec)
-    (rx (with-transitions @elem-spec transitions))
-    (vary-meta (as-element-spec elem-spec) update-in [::transitions] merge transitions)))
+(defn get-dom-node [x]
+  (if (dom-node? x)
+    x
+    (-get-dom-node x)))
 
-(defn get-transition [elem-spec transition-name]
-  (get-in (meta (get-element-spec elem-spec)) [::transitions transition-name]))
+(defprotocol IRemove
+  (-remove! [x]))
 
-(defn- chain-transition [elem-spec transition-name transition-fn chain-fn]
-  (if (satisfies? IDeref elem-spec)
-    (rx (chain-transition @elem-spec transition-name transition-fn chain-fn))
-    (let [cur-transition-fn (get-transition elem-spec transition-name)
-          transition-fn (if cur-transition-fn
-                          (chain-fn cur-transition-fn transition-fn)
-                          transition-fn)]
-      (with-transitions elem-spec {transition-name transition-fn}))))
+(defn- remove-dom-node [x])
 
-(defn prepend-transition [elem-spec transition-name transition-fn]
-  (chain-transition elem-spec transition-name transition-fn
-    (fn [cur-tx new-tx]
-      (fn [elem on-complete]
-        (new-tx elem (fn [elem _] (cur-tx elem on-complete)))))) )
+(defn remove! [x]
+  (if (dom-node? x)
+    (remove-dom-node x)
+    (-remove! x)))
 
-(defn append-transition [elem-spec transition-name transition-fn]
-  (chain-transition elem-spec transition-name transition-fn
-    (fn [cur-tx new-tx]
-      (fn [elem on-complete]
-        (cur-tx elem (fn [elem _] (new-tx elem on-complete)))))) )
+;; ## Polyfills
 
 (defn request-animation-frame [f]
   (.requestAnimationFrame js/window f))
@@ -102,7 +74,7 @@
               ([key ref _ _]
                (on-value-ref-invalidated key ref))
               ([key ref]
-                     ;(set-fn element attr-name @ref)
+               ;(set-fn element attr-name @ref)
                (remove-watch* ref key)
                (request-animation-frame
                  (fn [_]
@@ -159,24 +131,22 @@
     (when class (set! (.-className node) class))
     node))
 
-;; DOM manipulation
+;; ## Core DOM Manipulation Methods
 
 (declare build-element)
 
-(defn get-dom-node [elem]
-  (-get-dom-node elem))
 
-(defn- replace-child [parent new-elem cur-elem]
+(defn- replace-child [parent new-elem-spec cur-elem]
   (let [cur-dom-node (get-dom-node cur-elem)
-        new-virtual-dom (get-virtual-dom new-elem)]
+        new-virtual-dom (get-virtual-dom new-elem-spec)]
     (if (and
           (string? new-virtual-dom)
           (= (.-nodeType cur-dom-node) 3))
       (do
         (set! (.-textContent cur-dom-node) new-virtual-dom)
-        (set! (.-spec cur-elem) (get-element-spec new-elem))
+        (set-element-spec! cur-dom-node new-elem-spec)
         cur-elem)
-      (let [new-elem (build-element new-elem)]
+      (let [new-elem (build-element new-elem-spec)]
         (.replaceChild
           (get-dom-node parent)
           (get-dom-node new-elem)
@@ -186,10 +156,10 @@
 (defn- append-child [parent new-elem]
   ;;(println "appending" new-elem "to" parent)
   (let [new-elem (build-element new-elem)]
-        (.appendChild
-          (get-dom-node parent)
-          (get-dom-node new-elem))
-        new-elem))
+    (.appendChild
+      (get-dom-node parent)
+      (get-dom-node new-elem))
+    new-elem))
 
 (defn- clear-children! [parent]
   (let [dom-node (get-dom-node parent)]
@@ -293,58 +263,18 @@
       (append-child! elem ch))))
 
 (defn build-element [elem-spec]
-  (if (satisfies? IElement elem-spec)
-    elem-spec
-    (let [elem-spec (as-element-spec elem-spec)
-          virtual-dom (get-virtual-dom elem-spec)]
-      (if (string? virtual-dom)
-        (Element. elem-spec (.createTextNode js/document virtual-dom))
-        (let [node (create-dom-node (first virtual-dom))
-              elem (Element. elem-spec node)
-              attrs? (second virtual-dom)
-              attrs (when (map? attrs?) attrs?)
-              children (if attrs (nnext virtual-dom) (next virtual-dom))]
-          (doseq [[k v] attrs]
-            (bind-attr! node k v))
-          (when children
-            (append-children! elem children))
-          elem)))))
-
-(defn get-body []
-  (aget (.getElementsByTagName js/document "body") 0))
-
-(defn- resolve-existing-element [elem-or-node]
-  (cond
-    (satisfies? IHasElement elem-or-node)
-    (-get-element elem-or-node)
-
-    (satisfies? IElement elem-or-node)
-    elem-or-node
-
-    ;(string? elem-or-node)
-    ;(when-let [node (.getElementById js/document elem-or-node)]
-    ;  (Element. nil node))
-
-    :default
-    (Element. nil elem-or-node)))
-
-(defn- resolve-child-element [elem-or-node]
-  (cond
-    (satisfies? IHasElement elem-or-node)
-    (-get-element elem-or-node)
-
-    :default
-    elem-or-node))
-
-(defn append! [element child]
-  (let [element (resolve-existing-element element)]
-    (append-child!
-      element
-      (resolve-child-element child))))
-
-(defn mount! [element child]
-  (let [element (resolve-existing-element element)]
-    (clear-children! element)
-    (append-child!
-      element
-      (resolve-child-element child))))
+  (let [virtual-dom (get-virtual-dom elem-spec)
+        node
+        (if (string? virtual-dom)
+          (.createTextNode js/document virtual-dom)
+          (let [node (create-dom-node (first virtual-dom))
+                attrs? (second virtual-dom)
+                attrs (when (map? attrs?) attrs?)
+                children (if attrs (nnext virtual-dom) (next virtual-dom))]
+            (doseq [[k v] attrs]
+              (bind-attr! node k v))
+            (when children
+              (append-children! node children))
+            node))]
+    (set-element-spec! node elem-spec)
+    node))
