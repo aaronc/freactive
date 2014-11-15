@@ -83,5 +83,18 @@
 
 (fw/watch-and-reload
   ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
-  ;;:jsload-callback (fn [] (print "reloaded"))
+  ;;:jsload-callback (fn [] (print "reloaded")
   )
+
+
+;; MBA Chrome
+;; n=4, 37-43fps
+;; n=8, 20-30fps
+;; n-12, 4.7fps
+;;
+;; After refactor request-animation-frame
+;; n=4, 47-57fps
+;; n=8, 28fps
+;; n=12, 18fps
+
+

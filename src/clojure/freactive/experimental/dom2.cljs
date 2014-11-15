@@ -131,6 +131,27 @@
 (defn request-animation-frame [f]
   (.requestAnimationFrame js/window f))
 
+;; Render Loop
+
+(def ^:private render-queue #js [])
+
+(defonce
+  render-loop
+  (request-animation-frame
+    (fn render[frame-time]
+      (let [queue render-queue
+            n (alength queue)]
+        (when (> n 0)
+          (set! render-queue #js [])
+          (loop [i 0]
+            (when (< i n)
+              ((aget queue i))
+              (recur (inc i))))))
+      (request-animation-frame render)) ))
+
+(defn queue-animation [f]
+  (.push render-queue f))
+
 ;; ## Attributes, Styles & Events
 
 (defn- set-style-prop! [elem prop-name prop-value]
@@ -149,7 +170,7 @@
               ([key ref]
                ;(set-fn element attr-name @ref)
                (remove-watch* ref key)
-               (request-animation-frame
+               (queue-animation
                  (fn [_]
                    (when-not (.-disposed node-state)
                      (add-watch* ref key on-value-ref-invalidated)
@@ -310,7 +331,7 @@
                                                    (remove! elem)
                                                    (when
                                                      (.-dirty state)
-                                                     (request-animation-frame animate)))))
+                                                     (queue-animation animate)))))
                             cur)))))))
 
           invalidate
@@ -325,7 +346,7 @@
                (when-not (.-updating state)
                  ;(println "updating")
                  (set! (.-updating state) true)
-                 (request-animation-frame animate)))))]
+                 (queue-animation animate)))))]
       (set! (.-invalidate state) invalidate)
       (set! (.-cur-element state) (transition-element parent (or @child-ref [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
