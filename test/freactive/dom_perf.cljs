@@ -1,12 +1,13 @@
 (ns freactive.dom-perf
   (:refer-clojure :exclude [atom])
   (:require
-    [freactive.experimental.dom :as dom]
-    [freactive.core :refer [atom cursor]])
+    [freactive.experimental.dom2 :as dom]
+    [freactive.core :refer [atom cursor]]
+    [figwheel.client :as fw :include-macros true])
   (:require-macros
   [freactive.macros :refer [rx]]))
 
-(defonce root (dom/append! (dom/get-body) [:div#root]))
+(enable-console-print!)
 
 (defonce mouse-x (atom 0))
 
@@ -31,7 +32,7 @@
 (defn circle [x y]
   [:svg/circle {:cx x :cy y :r 2 :stroke "black" :fill "black"}])
 
-(defonce n (atom 7))
+(defonce n (atom 4))
 
 (defn left-offset-x [i]
   (rx (* (inc i) (/ @mouse-x (inc @n)))))
@@ -49,35 +50,38 @@
   [:div
 
    [:svg/svg
-    {:width "100%" :height "100%"
+   {:width "100%" :height "100%"
      :style {:position "absolute" :left 0 :top 0 }}
-    (circle mouse-x mouse-y)
-    (rx [:svg/g (for [i (range @n)] (circle (left-offset-x i) mouse-y))])
-    (rx [:svg/g (for [i (range @n)] (circle (right-offset-x i) mouse-y))])
-    (rx [:svg/g (for [j (range @n)] (circle mouse-x (top-offset-y j)))])
-    (rx [:svg/g (for [j (range @n)] (circle mouse-x (bottom-offset-y j)))])
-    (rx [:svg/g (for [i (range @n) j (range @n)]
+   (circle mouse-x mouse-y)
+   (rx [:svg/g (for [i (range @n)] (circle (left-offset-x i) mouse-y))])
+   (rx [:svg/g (for [i (range @n)] (circle (right-offset-x i) mouse-y))])
+   (rx [:svg/g (for [j (range @n)] (circle mouse-x (top-offset-y j)))])
+   (rx [:svg/g (for [j (range @n)] (circle mouse-x (bottom-offset-y j)))])
+   (rx [:svg/g (for [i (range @n) j (range @n)]
                   (circle (left-offset-x i) (top-offset-y j)))])
-    (rx [:svg/g (for [i (range @n) j (range @n)]
+   (rx [:svg/g (for [i (range @n) j (range @n)]
                   (circle (right-offset-x i) (top-offset-y j)))])
-    (rx [:svg/g (for [i (range @n) j (range @n)]
+   (rx [:svg/g (for [i (range @n) j (range @n)]
                   (circle (left-offset-x i) (bottom-offset-y j)))])
-    (rx [:svg/g (for [i (range @n) j (range @n)]
+   (rx [:svg/g (for [i (range @n) j (range @n)]
                   (circle (right-offset-x i) (bottom-offset-y j)))])
+
+    [:svg/circle {:fill "red" :on-mousedown (fn [e] (swap! n dec))
+                  :r 8 :cx 8 :cy 8}]
+    [:svg/circle {:fill "green" :on-mousedown (fn [e] (swap! n inc))
+                  :r 8 :cx 24 :cy 8}]
     ]
 
    [:span (rx (str @mouse-x ", " @mouse-y))
     ". n = " (rx (str @n))
     ". complexity = " (rx  (str (let [n* @n n* (+ 1 (* 2 n*))]
                                  (* n* n*))))
-    [:button {:on-click (fn [e]
-                          (println e)
-                          (swap! n dec))} "-"]
 
-    [:button {:on-click (fn [e]
-                          (println e)
-                          (swap! n inc))} "+"]
-    ]
-   ])
+    ]])
 
-(dom/mount! root (view))
+(dom/mount! (.getElementById js/document "root") (view))
+
+(fw/watch-and-reload
+  ;; :websocket-url "ws://localhost:3449/figwheel-ws" default
+  ;;:jsload-callback (fn [] (print "reloaded"))
+  )

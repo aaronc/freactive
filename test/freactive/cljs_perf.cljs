@@ -2,7 +2,7 @@
 
 (defn bench [f]
   (time
-    (dotimes [i 30000]
+    (dotimes [i 100000]
       (f))))
 
 (defprotocol ITest1
@@ -11,6 +11,10 @@
 (extend-type string
   ITest1
   (-do-something [this]))
+
+(extend-protocol ITest1
+  js/Object
+  (-do-something [_]))
 
 (defmulti test1 type)
 
@@ -29,9 +33,13 @@
 
 (def js0 #js {})
 
+(def js1 #js [])
+
 (def clj0 {})
 
 (bench #(set! (.-x js0) 0))
+
+(bench #(aset js1 0 0))
 
 (bench #(assoc clj0 :x 0))
 
@@ -108,3 +116,5 @@
     (remove-dom-node x)
     (-remove! x)))
 
+
+()
