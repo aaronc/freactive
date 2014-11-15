@@ -133,12 +133,29 @@
 
 ;; Render Loop
 
-(def ^:private render-queue #js [])
+(defonce ^:private render-queue #js [])
+
+(def ^:private enable-instrumentation true)
+
+(def ^:private instrumentation-i -1)
+
+(def ^:private last-instrumentation-time)
+
+(def fps (r/atom nil))
 
 (defonce
   render-loop
   (request-animation-frame
-    (fn render[frame-time]
+    (fn render[frame-ms]
+      ;;(println "animation" frame-ms)
+      (when enable-instrumentation
+        (if (= instrumentation-i 10)
+          (do
+            (reset! fps (* 1000 (/ 10 (- frame-ms last-instrumentation-time))))
+            (set! instrumentation-i 0))
+          (set! instrumentation-i (inc instrumentation-i)))
+        (when (= 0 instrumentation-i)
+          (set! last-instrumentation-time frame-ms)) )
       (let [queue render-queue
             n (alength queue)]
         (when (> n 0)
