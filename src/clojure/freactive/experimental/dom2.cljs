@@ -1,7 +1,7 @@
 (ns freactive.experimental.dom2
   (:require [freactive.core :as r]
             [goog.object])
-  (:require-macros [freactive.macros :refer [rx]]))
+  (:require-macros [freactive.macros :refer [rx non-reactively]]))
 
 ;; ## Core Defintions
 
@@ -191,7 +191,7 @@
                  (fn [_]
                    (when-not (.-disposed node-state)
                      (add-watch* ref key on-value-ref-invalidated)
-                     (set-fn element attr-name @ref))
+                     (set-fn element attr-name (non-reactively @ref)))
                    )
                  )
                ;(when (.-parentNode element)
@@ -272,6 +272,7 @@
     new-elem))
 
 (defn- replace-or-append-child [parent new-elem cur-elem]
+  ;(println "replacing" cur-elem new-elem)
   (let [new-elem
         (if cur-elem
           (replace-child parent new-elem cur-elem)
@@ -365,7 +366,7 @@
                  (set! (.-updating state) true)
                  (queue-animation animate)))))]
       (set! (.-invalidate state) invalidate)
-      (set! (.-cur-element state) (transition-element parent (or @child-ref [:span]) nil))
+      (set! (.-cur-element state) (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
         (register-with-parent-state parent-state state state))
       (add-watch* child-ref state invalidate)
