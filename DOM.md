@@ -165,7 +165,7 @@ The `rx-debug` macro can be placed around the initialization of any `rx`:
 and you should seeing verbose debug statements corresponding to:
 * start of dependency capture
 * each dependency capture
-* each invalidation event with a print out of watch keys (note: not all watches aware of this `rx` will be registered - part of freactive's optimizations are smart attaching and removing of watches based on dirty flags)
+* each invalidation event with a print out of watch keys (note: not all watches aware of this `rx` may be registered - part of freactive's optimizations are smart attaching and removing of watches based on dirty flags)
 
 ## Items View
 
