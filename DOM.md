@@ -8,7 +8,7 @@ freactive is a high-performance, pure [Clojurescript](https://github.com/clojure
 * Allow for **[high-performance](#performance)** rendering **[good enough for animated graphics][dom-perf]** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
 * Allow for **coordinated management of state via [cursors](#cursors)** (inspiration from [om][om])
-* Provide a **deeply-integrated [animation](#animations)** framework
+* Provide **deeply-integrated [animation](#animations)** support
 * Allow for cursors based on paths as well as **lenses**
 * Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
 * **Minimize unnecessary triggering of update events**
