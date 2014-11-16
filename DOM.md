@@ -151,3 +151,11 @@ TODO
 
 
 [dom-perf]: http://aaronc.github.io/freactive/dom-perf
+
+## Contributions & License
+
+**Contributions (including pull requests) welcome!**
+
+Distributed under the Eclipse Public License like Clojure, either version 1.0 or (at your option) any later version.
+
+
