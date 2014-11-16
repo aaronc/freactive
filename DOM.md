@@ -1,7 +1,7 @@
 # freactive
 *pronounced "f-reactive". Name may be changed. This library should be considered experimental - it has not been widely tested.*
 
-freactive is a high-performance, pure [Clojurescript](https://github.com/clojure/clojurescript), declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
+freactive is a high-performance, pure [Clojurescript](https://github.com/clojure/clojurescript), declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent][reagent], [om][om] and [reflex][reflex] (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
 
 **Goals:**
 * Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious to those familiar with Clojure (inspiration taken from reagent and QML)
@@ -49,7 +49,9 @@ To try this quickly, you can install the [austin](https://github.com/cemerick/au
 
 **Explanation:**
 
-If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's `atom`, you're 90% of the way to understanding freactive. In freactive, instead of Clojure's atom, you should use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent).
+If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's [`atom`](http://clojure.org/atoms), you're 90% of the way to understanding freactive.
+
+**Reactive atoms:** In freactive, instead of Clojure's atom, you should use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression - an `rx` in this case. (This is exactly the same idea as in [reagent][reagent] and I believe originally came from [reflex][reflex]).
 
 **The `rx` macro**: the `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`'s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
@@ -149,9 +151,6 @@ An experimental `items-view` has been created, but has not been documented yet. 
 
 TODO
 
-
-[dom-perf]: http://aaronc.github.io/freactive/dom-perf
-
 ## Contributions & License
 
 **Contributions (including pull requests) welcome!**
@@ -159,3 +158,7 @@ TODO
 Distributed under the Eclipse Public License, either version 1.0 or (at your option) any later version.
 
 
+[dom-perf]: http://aaronc.github.io/freactive/dom-perf
+[reagent]: https://github.com/reagent-project/reagent
+[om]: https://github.com/swannodette/om
+[reflex]: https://github.com/lynaghk/reflex
