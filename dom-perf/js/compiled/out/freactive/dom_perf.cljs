@@ -4,7 +4,7 @@
     [freactive.dom :as dom]
     [freactive.core :refer [atom cursor] :as r]
     [figwheel.client :as fw :include-macros true]
-    [freactive.experimental.animation :as animation]
+    [freactive.animation :as animation]
     [goog.string :as gstring])
   (:require-macros
   [freactive.macros :refer [rx debug-rx]]))
