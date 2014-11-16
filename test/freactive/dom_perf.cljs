@@ -18,17 +18,18 @@
 (defn- get-window-height [] (.-innerHeight js/window))
 
 (defonce width (atom (get-window-width)))
+
 (defonce height (atom (get-window-height)))
 
 (defonce init
-  (dom/listen! js/window "mousemove" (fn [e]
-                                       (reset! mouse-x (.-clientX e))
-                                       (reset! mouse-y (.-clientY e)))))
+         (do
+           (dom/listen! js/window "mousemove" (fn [e]
+                                                (reset! mouse-x (.-clientX e))
+                                                (reset! mouse-y (.-clientY e))))
 
-(defonce init2
-  (dom/listen! js/window "resize" (fn [e]
-                                    (reset! width (get-window-width))
-                                    (reset! height (get-window-height)))))
+           (dom/listen! js/window "resize" (fn [e]
+                                             (reset! width (get-window-width))
+                                             (reset! height (get-window-height))))))
 
 (defn circle [x y]
   [:svg/circle {:cx x :cy y :r 2 :stroke "black" :fill "black"}])
@@ -53,12 +54,29 @@
         x (/ i n)]
     (- 1 (.pow js/Math (- 1 x) 2))))
 
+(defn- btn [x y fill text f]
+  [:svg/g {:on-mousedown f}
+   [:svg/text {:x x :y (+ 4 y) :text-anchor "middle"} text]
+   [:svg/circle {:fill fill :r 8 :cx x :cy y}]])
+
 (defn view []
   [:div
-
+   [:div
+    {:width "100%"
+     :style
+     {:position "absolute" :left 0 :top 0 :height "1em"}}
+    (let [complexity (rx (str (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*))))]
+     [:span (rx (str @mouse-x ", " @mouse-y))
+      ". n = " (rx (str @n)) " "
+      [:button {:on-click (fn [_] (swap! n dec))} "-"]
+      [:button {:on-click (fn [_] (swap! n inc))} "+"]
+      " complexity = " complexity
+      ". fps = " (rx (str @dom/fps)) ". That' is roughly "
+      (rx (str (* @dom/fps @complexity)))
+      " DOM attributes updated per second."])]
    [:svg/svg
    {:width "100%" :height "100%"
-     :style {:position "absolute" :left 0 :top 0 }}
+     :style {:position "absolute" :left 0 :top "1em"}}
    (circle mouse-x mouse-y)
     (debug-rx
       (rx (let [n* @n
@@ -94,21 +112,19 @@
    ;(rx [:svg/g (for [i (range @n) j (range @n)]
    ;               (circle (right-offset-x i) (bottom-offset-y j)))])
 
-    [:svg/circle {:fill "red" :on-mousedown (fn [e] (swap! n dec))
-                  :r 8 :cx 8 :cy 8}]
-    [:svg/circle {:fill "green" :on-mousedown (fn [e] (swap! n inc))
-                  :r 8 :cx 24 :cy 8}]
+    ;(btn (rx (- @width 40)) 16 "red" "-" (fn [e] (swap! n dec)))
+    ;(btn (rx (- @width 16)) 16 "green" "+" (fn [e] (swap! n inc)))
+
+    ;[:svg/g {:on-mousedown (fn [e] (swap! n dec))}
+    ; [:svg/circle {:fill "red"
+    ;               :r    8 :cx (rx ) :cy 16}]
+    ; :svg/text {:x (rx (- @width 50))}]
+    ;[:svg/circle {:fill "green" :on-mousedown (fn [e] (swap! n inc))
+    ;              :r 8 :cx (rx (- @width 16)) :cy 16}]
+    ;
     ]
 
-   (let [complexity (rx (str (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*))))]
-
-     [:span (rx (str @mouse-x ", " @mouse-y))
-      ". n = " (rx (str @n))
-      ". complexity = " complexity
-      ". fps = " (rx (str @dom/fps)) ". That is roughly "
-      (rx (str (* @dom/fps @complexity)))
-      " DOM attribute updates per second."
-      ])])
+   ])
 
 (dom/mount! (.getElementById js/document "root") (view))
 
