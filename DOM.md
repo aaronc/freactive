@@ -10,7 +10,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 * Allow for **coordinated management of state via [cursors](#cursors)** (inspiration taken from om)
 * Provide a **deeply-integrated [animation](#animations)** framework
 * Allow for cursors based on paths as well as **lenses**
-* Provide a generic items view component for **efficient viewing of large data sets**
+* Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
 * **Minimize unnecessary triggering of update events**
 * Coordinate all updates via **requestAnimationFrame** wherever possible
 * Be written in **pure Clojurescript**
@@ -143,7 +143,7 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 
 ## Items View
 
-TODO
+An experimental `items-view` has been created, but has not been documented yet. The API is also subject to change.
 
 ## Configuration of Change Notifications
 
