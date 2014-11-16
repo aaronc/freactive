@@ -102,6 +102,8 @@ Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/ma
 ;; 1.2
 ```
 
+This idea was inspired by [om][om], but for those familiar with om, it should be noted that freactive cursors behave a little bit differently. By design, they do not know anything about the structure of the object they reference (i.e. whether its associative) - they only have a "lens" (a getter and setter pair) to it. Once you have a cursor, you can treat it like an atom.
+
 ## Animations
 
 ### Transitions
