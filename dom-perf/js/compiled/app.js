@@ -13,7 +13,7 @@ goog.addDependency("../cljs/core/async.js", ['cljs.core.async'], ['cljs.core.asy
 goog.addDependency("../clojure/string.js", ['clojure.string'], ['goog.string', 'cljs.core', 'goog.string.StringBuffer']);
 goog.addDependency("../cljs/reader.js", ['cljs.reader'], ['goog.string', 'cljs.core', 'goog.string.StringBuffer']);
 goog.addDependency("../figwheel/client.js", ['figwheel.client'], ['goog.net.jsloader', 'cljs.core', 'cljs.core.async', 'clojure.string', 'cljs.reader']);
-goog.addDependency("../freactive/dom_perf.js", ['freactive.dom_perf'], ['freactive.experimental.animation', 'cljs.core', 'freactive.core', 'figwheel.client', 'freactive.experimental.dom2']);
+goog.addDependency("../freactive/dom_perf.js", ['freactive.dom_perf'], ['freactive.experimental.animation', 'goog.string', 'cljs.core', 'freactive.core', 'figwheel.client', 'freactive.experimental.dom2']);
 goog.addDependency("../freactive/experimental/dom.js", ['freactive.experimental.dom'], ['cljs.core', 'freactive.core']);
 goog.addDependency("../cemerick/cljs/test.js", ['cemerick.cljs.test'], ['cljs.core', 'clojure.string']);
 goog.addDependency("../freactive/experimental/observable_collection.js", ['freactive.experimental.observable_collection'], ['cljs.core']);
