@@ -1,7 +1,7 @@
-(ns freactive.experimental.animation
+(ns freactive.animation
   (:require
     [freactive.core :as r]
-    [freactive.experimental.dom2 :as dom]))
+    [freactive.dom :as dom]))
 
 (deftype AnimationEaser [state easing-fn animating on-complete
                          watches invalidation-watches]

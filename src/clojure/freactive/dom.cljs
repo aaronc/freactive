@@ -1,4 +1,4 @@
-(ns freactive.experimental.dom2
+(ns freactive.dom
   (:require [freactive.core :as r]
             [goog.object])
   (:require-macros [freactive.macros :refer [rx non-reactively]]))
