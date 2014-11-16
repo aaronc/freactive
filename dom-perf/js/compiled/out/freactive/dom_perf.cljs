@@ -10,10 +10,6 @@
 
 (enable-console-print!)
 
-(defonce mouse-x (atom 0))
-
-(defonce mouse-y (atom 0))
-
 (defn- get-window-width [] (.-innerWidth js/window))
 
 (defn- get-window-height [] (.-innerHeight js/window))
@@ -21,6 +17,10 @@
 (defonce width (atom (get-window-width)))
 
 (defonce height (atom (get-window-height)))
+
+(defonce mouse-x (atom (/ (get-window-width) 2)))
+
+(defonce mouse-y (atom (/ (get-window-height) 2)))
 
 (defonce init
          (do
