@@ -5,7 +5,7 @@
 freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as desktop GUI frameworks like QML and JavaFX). [See it in action](http://aaronc.github.io/freactive/).
 
 **Goals:**
-* Provide a **simple, intuitve API** that shoudl be almost obvious for those familiar with Clojure (similar to reagent)
+* Provide a **[simple, intuitive API](#hello-world)** that shoudl be almost obvious for those familiar with Clojure (similar to reagent)
 * Allow for **high-performance** rendering **good enough for animated graphics** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
 * Provide a **deeply-integrated [animation](#animations)** framework
@@ -23,7 +23,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 [![Clojars Project](http://clojars.org/freactive/latest-version.svg)](http://clojars.org/freactive)
 
-**Hello World example:**
+<a name="hello-world"></a>**Hello World example:**
 
 ```clojure
 (ns example1
@@ -38,7 +38,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
   [:div
     {:width "100%" :height "100%"
      :on-mousemove (fn [e] (reset! mouse-pos [(.-clientX e) (.-clientY e)]))}
-    [:h1 "Hello World!]
+    [:h1 "Hello World!"]
     [:p "Your mouse is at: " (rx (str @mouse-pos))]])
 
 (defonce root (dom/append-child! (.-body js/document) [:div#root]))
@@ -48,7 +48,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 **Explanation:**
 
-If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's `atom`, you're 90% there. In freactive, make sure you use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent). We just need to introduce one additional concept - the macro `rx` (for reactive expression).
+If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's `atom`, you're 90% of the way to understanding freactive. In freactive, instead of Clojure's atom, you should use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent).
 
 **The `rx` macro**: the `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
@@ -118,9 +118,6 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 **Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
 
 **Interupting easings in progress:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
-
-
-
 
 ## Items View
 
