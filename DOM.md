@@ -1,7 +1,7 @@
 # freactive
 *pronounced "F-reactive"*
 
-freactive is a pure Clojurescript DOM library inspired by work done in reagent, om and reflex (as well as desktop GUI frameworks like QML and JavaFX). It uses hiccup-style syntax and relies heavily Clojure's built-in deref and atom patterns.
+freactive is a pure Clojurescript DOM library inspired by work done in reagent, om and reflex (as well as desktop GUI frameworks like QML and JavaFX). It uses hiccup-style syntax and Clojure's built-in deref and atom patterns.
 
 **Goals:**
 * Provide a **dead-simple API** that is intuitive and almost obvious for those familiar with Clojure (similar to Reagent)
