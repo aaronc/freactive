@@ -4,7 +4,7 @@
     [freactive.experimental.dom2 :as dom]
     [freactive.core :refer [atom cursor] :as r]
     [figwheel.client :as fw :include-macros true]
-    [freactive.experimental.animation])
+    [freactive.experimental.animation :as animation])
   (:require-macros
   [freactive.macros :refer [rx debug-rx animation-rx]]))
 
@@ -70,29 +70,40 @@
       [:button {:on-click (fn [_] (swap! n dec))} "-"]
       [:button {:on-click (fn [_] (swap! n inc))} "+"]
       " complexity = " complexity
-      ". fps = " (rx (str @dom/fps)) ". That' is roughly "
+      ". fps = " (rx (str @dom/fps)) ". That's roughly "
       (rx (str (* @dom/fps @complexity)))
       " DOM attributes updated per second."])]
    [:svg/svg
    {:width "100%" :height "100%"
      :style {:position "absolute" :left 0 :top "1em"}}
    (circle mouse-x mouse-y)
-    (rx (let [n* @n
-              spacer (partial spacing-factor n*)
-              offsets (map spacer (range n*))
-              lefts (vec (for [x offsets] (rx (* x @mouse-x))))
-              rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x)))))))
-              tops (vec (for [y offsets] (rx (* y @mouse-y))))
-              bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y)))))))]
-          [:svg/g
-           (for [i (range n*)] (circle (nth lefts i) mouse-y))
-           (for [i (range n*)] (circle (nth rights i) mouse-y))
-           (for [j (range n*)] (circle mouse-x (nth tops j)))
-           (for [j (range n*)] (circle mouse-x (nth bottoms j)))
-           (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
-           (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
-           (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
-           (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]))
+    (let [easer (animation/easer 0.0)]
+      (debug-rx
+        (rx (let [n* @n
+                  spacer (partial spacing-factor n*)
+                  offsets (map spacer (range n*))
+                  lefts (vec (for [x offsets] (rx (* x @mouse-x @easer))))
+                  rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @easer))))))
+                  tops (vec (for [y offsets] (rx (* y @mouse-y @easer))))
+                  bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y @easer)))))))]
+              (dom/with-transitions
+                [:svg/g
+                 (for [i (range n*)] (circle (nth lefts i) mouse-y))
+                 (for [i (range n*)] (circle (nth rights i) mouse-y))
+                 (for [j (range n*)] (circle mouse-x (nth tops j)))
+                 (for [j (range n*)] (circle mouse-x (nth bottoms j)))
+                 (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
+                 (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
+                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
+                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
+                {:on-show (fn [x cb]
+                            (println "showing")
+                            (animation/start-easer! easer 1.0 1000 animation/linear cb))
+                 :on-hide (fn [x cb]
+                            (println "hiding")
+                            (animation/start-easer! easer 0.0 1000 animation/linear cb))})))
+        (fn [x] (println "captured" x))
+        (fn [] (println "invalidated"))))
     ]])
 
 (dom/mount! (.getElementById js/document "root") (view))

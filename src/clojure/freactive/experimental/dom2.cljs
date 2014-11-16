@@ -1,7 +1,7 @@
 (ns freactive.experimental.dom2
   (:require [freactive.core :as r]
             [goog.object])
-  (:require-macros [freactive.macros :refer [rx non-reactively]]))
+  (:require-macros [freactive.macros :refer [rx]]))
 
 ;; ## Core Defintions
 
@@ -36,8 +36,11 @@
 (defn- reset-element-spec! [dom-node spec]
   (set! (.-element-spec (get-element-state dom-node)) spec))
 
+(deftype ElementState [disposed element-spec childstates])
+
 (defn- init-element-state! [dom-node element-spec]
-  (let [state #js {:disposed false :element-spec element-spec :childstates {}}]
+  (let [state (ElementState. false element-spec {})]
+    ;;(println "init state" (.-element-spec state))
     (set! element-state-lookup (assoc element-state-lookup dom-node state))
     state))
 
@@ -49,7 +52,7 @@
 
 (defn- get-element-spec [x]
   (if (dom-node? x)
-    (when-let [state (aget element-state-lookup x)]
+    (when-let [state (get-element-state x)]
       (.-element-spec state))
     x))
 
@@ -143,11 +146,13 @@
 
 (def fps (r/atom nil))
 
+(def frame-time (r/atom nil))
+
 (defonce
   render-loop
   (request-animation-frame
     (fn render[frame-ms]
-      ;;(println "animation" frame-ms)
+      (reset! frame-time frame-ms)
       (when enable-instrumentation
         (if (= instrumentation-i 10)
           (do
@@ -191,7 +196,7 @@
                  (fn [_]
                    (when-not (.-disposed node-state)
                      (add-watch* ref key on-value-ref-invalidated)
-                     (set-fn element attr-name (non-reactively @ref)))
+                     (set-fn element attr-name (r/-raw-deref ref)))
                    )
                  )
                ;(when (.-parentNode element)
@@ -311,6 +316,18 @@
           (.removeChild dom-node last-child)
           (recur))))))
 
+
+(defn- exec-transition [node transition-name callback]
+  (if-let [transition (get-transition node transition-name)]
+    (transition node callback)
+    (when callback (callback))))
+
+(defn- hide-node [node callback]
+  (exec-transition node :on-hide callback))
+
+(defn- show-node [node callback]
+  (exec-transition node :on-show callback))
+
 ;; Reactive Element Handling
 
 (deftype ReactiveElement [parent cur-element dirty updating disposed invalidate]
@@ -335,22 +352,36 @@
                 (set! (.-dirty state) false)
                 (add-watch* child-ref state (.-invalidate state))
                 (let [new-elem @child-ref
-                      cur (.-cur-element state)]
+                      cur (.-cur-element state)
+                      new-elem (or new-elem [:span])]
                   ;(println "cur" cur)
-                  (when (or (not cur)
-                            (not= (get-virtual-dom cur) (get-virtual-dom new-elem)))
-                    (set! (.-cur-element state)
-                          (transition-element
-                            parent
-                            (append-transition new-elem :on-show
-                                               (fn [elem _]
-                                                 (set! (.-updating state) false)
-                                                 (if (.-disposed state)
-                                                   (remove! elem)
-                                                   (when
-                                                     (.-dirty state)
-                                                     (queue-animation animate)))))
-                            cur)))))))
+                  (when (not= (get-virtual-dom cur) (get-virtual-dom new-elem))
+                    ;(println "state" (dom-node? cur) (js-keys (get-element-state cur)))
+                    ;(println "spec" (.-element-spec (get-element-state cur)))
+                    ;(println "meta" (meta (get-element-spec cur)))
+                    (hide-node cur
+                               (fn []
+                                 (set! (.-updating state) false)
+                                 (if (.-disposed state)
+                                   (remove-dom-node cur)
+                                   (let [new-node (replace-child parent new-elem cur)]
+                                     (set! (.-cur-element state) new-node)
+                                     (show-node new-node nil)
+                                     (when (.-dirty state)
+                                       (queue-animation animate))))))
+                    ;(set! (.-cur-element state)
+                    ;      (transition-element
+                    ;        parent
+                    ;        (append-transition new-elem :on-show
+                    ;                           (fn [elem _]
+                    ;                             (set! (.-updating state) false)
+                    ;                             (if (.-disposed state)
+                    ;                               (remove! elem)
+                    ;                               (when
+                    ;                                 (.-dirty state)
+                    ;                                 (queue-animation animate)))))
+                    ;        cur))
+                    )))))
 
           invalidate
           (fn on-child-ref-invalidated
@@ -366,7 +397,7 @@
                  (set! (.-updating state) true)
                  (queue-animation animate)))))]
       (set! (.-invalidate state) invalidate)
-      (set! (.-cur-element state) (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
+      (set! (.-cur-element state) (transition-element parent (or (r/-raw-deref child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
         (register-with-parent-state parent-state state state))
       (add-watch* child-ref state invalidate)
