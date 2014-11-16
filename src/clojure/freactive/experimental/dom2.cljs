@@ -364,11 +364,15 @@
                                  (set! (.-updating state) false)
                                  (if (.-disposed state)
                                    (remove-dom-node cur)
-                                   (let [new-node (replace-child parent new-elem cur)]
+                                   (let [new-elem (if (.-dirty state)
+                                                    (do
+                                                      (set! (.-dirty false))
+                                                      (add-watch* child-ref state (.-invalidate state))
+                                                      @child-ref)
+                                                    new-elem)
+                                         new-node (replace-child parent new-elem cur)]
                                      (set! (.-cur-element state) new-node)
-                                     (show-node new-node nil)
-                                     (when (.-dirty state)
-                                       (queue-animation animate))))))
+                                     (show-node new-node nil)))))
                     ;(set! (.-cur-element state)
                     ;      (transition-element
                     ;        parent
