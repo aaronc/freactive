@@ -2,7 +2,7 @@
 *pronounced "F-reactive". This library should be considered experimental - it has not been widely tested.*
 
 
-freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as desktop GUI frameworks like QML and JavaFX). [See it in action](http://aaronc.github.io/freactive/).
+freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). [See it in action](http://aaronc.github.io/freactive/).
 
 **Goals:**
 * Provide a **[simple, intuitive API](#hello-world)** that shoudl be almost obvious for those familiar with Clojure (similar to reagent)
@@ -25,6 +25,8 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 <a name="hello-world"></a>**Hello World example:**
 
+To try this quickly, you can install the [austin](https://github.com/cemerick/austin) repl plugin, run `austin-exec`, open up a browser with the provided URL provided by austin and execute the above code. This code is also compatible with [lein-figwheel](https://github.com/bhauman/lein-figwheel) - this is possibly the best approach for live Clojurescript development available now.
+
 ```clojure
 (ns example1
   (:refer-clojure :exclude [atom])
@@ -45,8 +47,6 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 (dom/mount! root (view))
 ```
-
-To try this quickly, you can install the [austin](https://github.com/cemerick/austin) repl plugin, run `austin-exec`, open up a browser with the provided URL provided by austin and execute the above code. This code is also compatible with [lein-figwheel](https://github.com/bhauman/lein-figwheel) - this is possibly the best approach for live Clojurescript development available now.
 
 **Explanation:**
 
