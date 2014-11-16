@@ -103,8 +103,8 @@
                             (animation/start-easer! ease-y 0.0 1.0 1000 animation/quad-out cb))
                  :on-hide (fn [x cb]
                             ;(println "hiding")
-                            (animation/start-easer! ease-x 1.0 0.0 1000 animation/quad-in cb)
-                            (animation/start-easer! ease-y 1.0 0.0 1000 animation/quad-out cb))})))
+                            (animation/start-easer! ease-x 1.0 0.0 1000 animation/quad-out cb)
+                            (animation/start-easer! ease-y 1.0 0.0 1000 animation/quad-in cb))})))
         (fn [x]                                             ;;(println "captured" x)
           )
         (fn []                                              ;;(println "invalidated")
