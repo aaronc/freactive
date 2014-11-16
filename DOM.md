@@ -80,7 +80,7 @@ All of this is done declaratively with only the [syntax described above](#two-mi
 
 This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It also tests freactive's ability to clean up after itself and create new DOM elements. In the pause between transitions (usually not perceptable for small `n` values), freactive is cleaning up old elements (with attached `rx`'s that need to be deactivated) and creating new DOM elements. If the average frame rate for a given `n` doesn't drop after many transitions, it means that freactive is doing a good job of cleaning up after itself. If you notice a significant drop, please [report](issues) it!
 
-You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers, even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
+You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
 
 ## Cursors
 
