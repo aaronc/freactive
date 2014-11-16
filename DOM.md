@@ -1,7 +1,7 @@
 # freactive
 *pronounced "f-reactive". Name may be changed. This library should be considered experimental - it has not been widely tested.*
 
-freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
+freactive is a high-performance, pure [Clojurescript](https://github.com/clojure/clojurescript), declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
 
 **Goals:**
 * Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious for those familiar with Clojure (inspiration taken from reagent and QML)
