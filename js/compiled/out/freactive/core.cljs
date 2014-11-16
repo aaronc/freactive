@@ -14,7 +14,8 @@
 ;(defn register-dep [ref]
 ;  (when *register-dep* (*register-dep* ref)))
 
-(defprotocol IReactive)
+(defprotocol IReactive
+  (-raw-deref [this]))
 
 (defprotocol IInvalidates
   (-notify-invalidation-watches [this])
@@ -35,6 +36,7 @@
   cljs.core/IAtom
 
   IReactive
+  (-raw-deref [_] state)
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -165,6 +167,9 @@
     (-equiv this other))
 
   IReactive
+  (-raw-deref [this]
+    (when dirty (-compute this))
+    state)
 
   IReactiveExpression
   (-invalidate [_] (sully))
@@ -260,6 +265,9 @@
   cljs.core/IAtom
 
   IReactive
+  (-raw-deref [this]
+    (when dirty (-compute this))
+    state)
 
   IReactiveExpression
   (-invalidate [_] (sully))
@@ -302,7 +310,8 @@
     (set! (.-watches this) (assoc watches key f))
     this)
   (-remove-watch [this key]
-    (set! (.-watches this) (dissoc watches key)))
+    (set! (.-watches this) (dissoc watches key))
+    this)
 
   IInvalidates
   (-notify-invalidation-watches [this]
