@@ -78,9 +78,9 @@ All of this is done declaratively with only the [syntax described above](#two-mi
 
 **Here is the source for the example: https://github.com/aaronc/freactive/blob/master/test/freactive/dom_perf.cljs**
 
-This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It does not benchmark updating DOM text nodes or replacing DOM nodes - the two other types of transformations freactive does - additional examples should be created to benchmark these.
+This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It also tests freactive's ability to clean up after itself and create new DOM elements. In the pause between transitions (usually not perceptable for small `n` values), freactive is cleaning up old elements (with attached `rx`'s that need to be deactivated) and creating new DOM elements. If the average frame rate for a given `n` doesn't drop after many transitions, it means that freactive is doing a good job of cleaning up after itself. If you notice a significant drop, please [report](issues) it!
 
-Even though the frame rate will start drop significantly, you should be able to see fairly smooth animations with thousands of points and with tens of thousands of DOM attributes updated per second on most modern computers. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
+You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers, even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
 
 ## Cursors
 
@@ -162,12 +162,10 @@ The `rx-debug` macro can be placed around the initialization of any `rx`:
  (rx-debug (rx (str @n)))
 ```
 
-and you should see statements like the following in the console (you may need to make sure `(enable-console-print!)` gets called to see it in the browser):
-```
-rx-debug starting capture :  (rx-debug (rx (str @n)))
-rx-debug captured #<ReactiveAtom 4> : (rx-debug (rx (str @n)))
-rx-debug invalidated : (rx-debug (rx (str @n)))
-```
+and you should seeing verbose debug statements corresponding to the:
+* start of capturing dependencies
+* each dependency capture
+* each invalidation event with a print out of watches
 
 ## Items View
 
@@ -181,6 +179,7 @@ Distributed under the Eclipse Public License, either version 1.0 or (at your opt
 
 
 [dom-perf]: http://aaronc.github.io/freactive/dom-perf
+[issues]: https://github.com/aaronc/freactive/issues
 [reagent]: https://github.com/reagent-project/reagent
 [om]: https://github.com/swannodette/om
 [reflex]: https://github.com/lynaghk/reflex
