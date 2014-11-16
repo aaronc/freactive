@@ -4,10 +4,10 @@
 freactive is a high-performance, pure [Clojurescript](https://github.com/clojure/clojurescript), declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent][reagent], [om][om] and [reflex][reflex] (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
 
 **Goals:**
-* Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious to those familiar with Clojure (inspiration taken from reagent and QML)
+* Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious to those familiar with Clojure (inspiration from [reagent][reagent])
 * Allow for **[high-performance](#performance)** rendering **[good enough for animated graphics][dom-perf]** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
-* Allow for **coordinated management of state via [cursors](#cursors)** (inspiration taken from om)
+* Allow for **coordinated management of state via [cursors](#cursors)** (inspiration from [om][om])
 * Provide a **deeply-integrated [animation](#animations)** framework
 * Allow for cursors based on paths as well as **lenses**
 * Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
