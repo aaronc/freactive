@@ -13,6 +13,7 @@ freactive is a high-performance, pure [Clojurescript](https://github.com/clojure
 * Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
 * **Minimize unnecessary triggering of update events**
 * Coordinate all updates via **requestAnimationFrame** wherever possible
+* Be easy to [debug](#debugging)
 * Be written in **pure Clojurescript**
 * Provide support for older browsers via polyfills (not yet implemented)
 
@@ -145,6 +146,22 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 **Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
 
 **Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
+
+## Debugging Reactive Expressions
+
+Reactive expressions can be hard to debug. Something should be getting invalidated that isn't or it seems like something is getting updated too often.
+
+The `rx-debug` macro can be placed around the initialization of any `rx`:
+```clojure
+ (rx-debug (rx (str @n)))
+```
+
+and you should see statements like the following in the console (you may need to make sure `(enable-console-print!)` gets called to see it in the browser):
+```
+rx-debug starting capture :  (rx-debug (rx (str @n)))
+rx-debug captured #<ReactiveAtom 4> : (rx-debug (rx (str @n)))
+rx-debug invalidated : (rx-debug (rx (str @n)))
+```
 
 ## Items View
 
