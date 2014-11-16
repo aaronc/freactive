@@ -83,13 +83,11 @@ An easer is designed to be used as a dependency in a reactive computation, like 
     {:on-show (fn [node callback] (start-easing! easer 0 1.0 1000 easing/quad-in on-complete)}))
 ```
 
-Note: if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
+**Interupting easings in progress:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
 
-Note: the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
+**Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
 
-### Easing functions
-
-An easing function, `f` is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(f (f 1) 1)`. Basically the easer is supposed to smoothly transition from `0` to `1`. The easer, takes care of scaling the values based on `duration` and `from` and `to` values.
+**Easing functions:** an easing function, `f`, is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(= (f 1) 1)`. Basically the easer is supposed to smoothly transition from `0` to `1`. The easer, takes care of scaling the values based on `duration` and `from` and `to` values.
 
 ## Cursors
 
