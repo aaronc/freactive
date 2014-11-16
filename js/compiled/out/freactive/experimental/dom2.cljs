@@ -1,7 +1,7 @@
 (ns freactive.experimental.dom2
   (:require [freactive.core :as r]
             [goog.object])
-  (:require-macros [freactive.macros :refer [rx]]))
+  (:require-macros [freactive.macros :refer [rx non-reactively]]))
 
 ;; ## Core Defintions
 
@@ -131,6 +131,44 @@
 (defn request-animation-frame [f]
   (.requestAnimationFrame js/window f))
 
+;; Render Loop
+
+(defonce ^:private render-queue #js [])
+
+(def ^:private enable-instrumentation true)
+
+(def ^:private instrumentation-i -1)
+
+(def ^:private last-instrumentation-time)
+
+(def fps (r/atom nil))
+
+(defonce
+  render-loop
+  (request-animation-frame
+    (fn render[frame-ms]
+      ;;(println "animation" frame-ms)
+      (when enable-instrumentation
+        (if (= instrumentation-i 10)
+          (do
+            (reset! fps (* 1000 (/ 10 (- frame-ms last-instrumentation-time))))
+            (set! instrumentation-i 0))
+          (set! instrumentation-i (inc instrumentation-i)))
+        (when (= 0 instrumentation-i)
+          (set! last-instrumentation-time frame-ms)) )
+      (let [queue render-queue
+            n (alength queue)]
+        (when (> n 0)
+          (set! render-queue #js [])
+          (loop [i 0]
+            (when (< i n)
+              ((aget queue i))
+              (recur (inc i))))))
+      (request-animation-frame render)) ))
+
+(defn queue-animation [f]
+  (.push render-queue f))
+
 ;; ## Attributes, Styles & Events
 
 (defn- set-style-prop! [elem prop-name prop-value]
@@ -149,11 +187,11 @@
               ([key ref]
                ;(set-fn element attr-name @ref)
                (remove-watch* ref key)
-               (request-animation-frame
+               (queue-animation
                  (fn [_]
                    (when-not (.-disposed node-state)
                      (add-watch* ref key on-value-ref-invalidated)
-                     (set-fn element attr-name @ref))
+                     (set-fn element attr-name (non-reactively @ref)))
                    )
                  )
                ;(when (.-parentNode element)
@@ -234,6 +272,7 @@
     new-elem))
 
 (defn- replace-or-append-child [parent new-elem cur-elem]
+  ;(println "replacing" cur-elem new-elem)
   (let [new-elem
         (if cur-elem
           (replace-child parent new-elem cur-elem)
@@ -310,7 +349,7 @@
                                                    (remove! elem)
                                                    (when
                                                      (.-dirty state)
-                                                     (request-animation-frame animate)))))
+                                                     (queue-animation animate)))))
                             cur)))))))
 
           invalidate
@@ -325,9 +364,9 @@
                (when-not (.-updating state)
                  ;(println "updating")
                  (set! (.-updating state) true)
-                 (request-animation-frame animate)))))]
+                 (queue-animation animate)))))]
       (set! (.-invalidate state) invalidate)
-      (set! (.-cur-element state) (transition-element parent (or @child-ref [:span]) nil))
+      (set! (.-cur-element state) (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
         (register-with-parent-state parent-state state state))
       (add-watch* child-ref state invalidate)

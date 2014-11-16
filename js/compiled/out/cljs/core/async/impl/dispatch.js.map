@@ -13,7 +13,7 @@
   "cljs.core.async.impl.dispatch/TASK_BATCH_SIZE",
   "cljs.core.async.impl.dispatch/process-messages", "count", "m",
   "cljs.core.async.impl.dispatch/queue-dispatcher",
-  "and__11483__auto__", "goog/async.nextTick",
+  "and__11485__auto__", "goog/async.nextTick",
   "cljs.core.async.impl.dispatch/run", "f",
   "cljs.core.async.impl.dispatch/queue-delay", "delay",
   "js/setTimeout"]}

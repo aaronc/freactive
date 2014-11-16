@@ -7,6 +7,10 @@
 
 (def ^:dynamic *lazy* nil)
 
+(def ^:dynamic *do-trace-captures* nil)
+
+(def ^:dynamic *trace-capture* nil)
+
 ;(defn register-dep [ref]
 ;  (when *register-dep* (*register-dep* ref)))
 
@@ -38,7 +42,8 @@
   cljs.core/IDeref
   (-deref [this]
     (when-let [invalidate *invalidate-rx*]
-      (-add-watch this invalidate invalidate))
+      (-add-watch this invalidate invalidate)
+      (when *trace-capture* (*trace-capture* this)))
     state)
 
   IMeta
@@ -147,12 +152,14 @@
 
 (defn- register-rx-dep [rx default-laziness]
   (when-let [invalidate *invalidate-rx*]
+    (when *trace-capture* (*trace-capture* rx))
     (if (lazy? default-laziness)
       (-add-invalidation-watch rx invalidate invalidate)
       (-add-watch rx invalidate invalidate))))
 
 (deftype ReactiveExpression [^:mutable state ^:mutable dirty f ^:mutable deps meta
-                              ^:mutable watches ^:mutable invalidation-watches sully lazy]
+                              ^:mutable watches ^:mutable invalidation-watches sully lazy
+                             trace-captures]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -164,7 +171,8 @@
   (-compute [this]
     (set! dirty false)
     (let [old-val state
-          new-val (binding [*invalidate-rx* sully] (f))]
+          new-val (binding [*invalidate-rx* sully
+                            *trace-capture* trace-captures] (f))]
       (when (not= old-val new-val)
         (set! state new-val)
         (-notify-watches this old-val new-val)
@@ -214,7 +222,8 @@
 (defn rx*
   ([f] (rx* f true))
   ([f lazy]
-   (let [reactive (ReactiveExpression. nil true f nil nil nil nil nil lazy)]
+   (let [reactive (ReactiveExpression. nil true f nil nil nil nil nil lazy
+                                       (or *do-trace-captures* (fn [_])))]
      (set! (.-sully reactive) (make-sully-fn reactive))
      reactive)))
 
@@ -349,3 +358,8 @@
 (defn lazy-cursor
   ([ref korks-or-getter] (cursor* ref korks-or-getter nil true ))
   ([ref getter setter] (cursor* ref getter setter true)))
+
+(defn debug-rx* [the-rx capture-callback invalidation-callback]
+  (add-invalidation-watch the-rx capture-callback invalidation-callback)
+  (add-invalidation-watch the-rx capture-callback invalidation-callback)
+  )

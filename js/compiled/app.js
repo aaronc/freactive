@@ -1,6 +1,7 @@
 goog.addDependency("base.js", ['goog'], []);
 goog.addDependency("../cljs/core.js", ['cljs.core'], ['goog.string', 'goog.object', 'goog.string.StringBuffer', 'goog.array']);
 goog.addDependency("../freactive/core.js", ['freactive.core'], ['cljs.core']);
+goog.addDependency("../freactive/experimental/animation.js", ['freactive.experimental.animation'], ['cljs.core', 'freactive.core']);
 goog.addDependency("../cljs/core/async/impl/protocols.js", ['cljs.core.async.impl.protocols'], ['cljs.core']);
 goog.addDependency("../cljs/core/async/impl/buffers.js", ['cljs.core.async.impl.buffers'], ['cljs.core', 'cljs.core.async.impl.protocols']);
 goog.addDependency("../cljs/core/async/impl/dispatch.js", ['cljs.core.async.impl.dispatch'], ['cljs.core', 'cljs.core.async.impl.buffers', 'goog.async.nextTick']);
@@ -12,7 +13,7 @@ goog.addDependency("../clojure/string.js", ['clojure.string'], ['goog.string', '
 goog.addDependency("../cljs/reader.js", ['cljs.reader'], ['goog.string', 'cljs.core', 'goog.string.StringBuffer']);
 goog.addDependency("../figwheel/client.js", ['figwheel.client'], ['goog.net.jsloader', 'cljs.core', 'cljs.core.async', 'clojure.string', 'cljs.reader']);
 goog.addDependency("../freactive/experimental/dom2.js", ['freactive.experimental.dom2'], ['cljs.core', 'goog.object', 'freactive.core']);
-goog.addDependency("../freactive/dom_perf.js", ['freactive.dom_perf'], ['cljs.core', 'freactive.core', 'figwheel.client', 'freactive.experimental.dom2']);
+goog.addDependency("../freactive/dom_perf.js", ['freactive.dom_perf'], ['freactive.experimental.animation', 'cljs.core', 'freactive.core', 'figwheel.client', 'freactive.experimental.dom2']);
 goog.addDependency("../freactive/experimental/dom.js", ['freactive.experimental.dom'], ['cljs.core', 'freactive.core']);
 goog.addDependency("../cemerick/cljs/test.js", ['cemerick.cljs.test'], ['cljs.core', 'clojure.string']);
 goog.addDependency("../freactive/experimental/observable_collection.js", ['freactive.experimental.observable_collection'], ['cljs.core']);
