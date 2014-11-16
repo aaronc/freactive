@@ -177,7 +177,9 @@
     (set! dirty false)
     (let [old-val state
           new-val (binding [*invalidate-rx* sully
-                            *trace-capture* trace-captures] (f))]
+                            *trace-capture* (when trace-captures
+                                              (trace-captures)
+                                              trace-captures)] (f))]
       (when (not= old-val new-val)
         (set! state new-val)
         (-notify-watches this old-val new-val)

@@ -1,7 +1,7 @@
 (ns freactive.experimental.dom2
   (:require [freactive.core :as r]
             [goog.object])
-  (:require-macros [freactive.macros :refer [rx]]))
+  (:require-macros [freactive.macros :refer [rx non-reactively]]))
 
 ;; ## Core Defintions
 
@@ -138,7 +138,11 @@
 
 (defonce ^:private render-queue #js [])
 
-(def ^:private enable-instrumentation true)
+(def ^:private enable-fps-instrumentation false)
+
+(defn- enable-fps-instrumentation!
+  ([] (enable-fps-instrumentation! true))
+  ([enable] (set! enable-fps-instrumentation enable)))
 
 (def ^:private instrumentation-i -1)
 
@@ -153,10 +157,10 @@
   (request-animation-frame
     (fn render[frame-ms]
       (reset! frame-time frame-ms)
-      (when enable-instrumentation
-        (if (= instrumentation-i 10)
+      (when enable-fps-instrumentation
+        (if (= instrumentation-i 4)
           (do
-            (reset! fps (* 1000 (/ 10 (- frame-ms last-instrumentation-time))))
+            (reset! fps (* 1000 (/ 5 (- frame-ms last-instrumentation-time))))
             (set! instrumentation-i 0))
           (set! instrumentation-i (inc instrumentation-i)))
         (when (= 0 instrumentation-i)
@@ -196,7 +200,7 @@
                  (fn [_]
                    (when-not (.-disposed node-state)
                      (add-watch* ref key on-value-ref-invalidated)
-                     (set-fn element attr-name (r/-raw-deref ref)))
+                     (set-fn element attr-name (non-reactively @ref)))
                    )
                  )
                ;(when (.-parentNode element)
@@ -257,6 +261,7 @@
     (if (and
           (string? new-virtual-dom)
           (= (.-nodeType cur-dom-node) 3))
+
       (do
         (set! (.-textContent cur-dom-node) new-virtual-dom)
         (reset-element-spec! cur-dom-node new-elem-spec)
@@ -346,10 +351,10 @@
           get-new-elem (fn []
                          (set! (.-dirty state) false)
                          (add-watch* child-ref state (.-invalidate state))
-                         (or @child-ref [:span]))
+                         (or (non-reactively @child-ref) [:span]))
 
           show-new-elem (fn [new-elem cur]
-                          (let [new-node (replace-child parent new-elem cur)]
+                          (let [new-node (replace-or-append-child parent new-elem cur)]
                             (set! (.-cur-element state) new-node)
                             (set! (.-updating state) false)
                             (when (.-dirty state)
@@ -409,10 +414,11 @@
 
       (set! (.-animate state) animate)
       (set! (.-invalidate state) invalidate)
-      (set! (.-cur-element state) (transition-element parent (or (r/-raw-deref child-ref) [:span]) nil))
+      (show-new-elem (get-new-elem) nil)
+      ;(set! (.-cur-element state)
+      ;      (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
         (register-with-parent-state parent-state state state))
-      (add-watch* child-ref state invalidate)
       state)
     (transition-element parent @child-ref nil)))
 

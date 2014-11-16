@@ -4,11 +4,14 @@
     [freactive.experimental.dom2 :as dom]
     [freactive.core :refer [atom cursor] :as r]
     [figwheel.client :as fw :include-macros true]
-    [freactive.experimental.animation :as animation])
+    [freactive.experimental.animation :as animation]
+    [goog.string :as gstring])
   (:require-macros
   [freactive.macros :refer [rx debug-rx]]))
 
 (enable-console-print!)
+
+(dom/enable-fps-instrumentation!)
 
 (defn- get-window-width [] (.-innerWidth js/window))
 
@@ -68,7 +71,8 @@
      {:position "absolute" :left 0 :top 0 :height "12px"
       :font-size "12px"
       :font-family "sans-serif"}}
-    (let [number-of-points (rx (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*)))]
+    (let [number-of-points
+          (rx (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*)))]
      [:span
       [:strong [:em [:a {:href "https://github.com/aaronc/freactive"} "freactive"]
        " performance test. "
@@ -79,17 +83,17 @@
       "N = " (rx (str @n)) " "
       [:button {:on-click (fn [_] (swap! n dec))} "-"]
       [:button {:on-click (fn [_] (swap! n inc))} "+"]
-      ", number of points = " (rx (str @number-of-points))
-      ". fps = " (rx (str @dom/fps))
-      ", DOM attrs updated/second ~= " (rx (str (* @dom/fps @number-of-points)))
+      ", number of points = "
+       (rx (str @number-of-points))
+       ". fps = " (rx (str @dom/fps))
+       ", DOM attrs set/second (when moving) ~= " (rx (str (* @dom/fps @number-of-points)))
        ", mouse at "
        (rx (str @mouse-x ", " @mouse-y))
-      ". "
-        "."]])]
+      ". "]])]
    [:svg/svg
     {:width   "100%" :height "100%"
-     :style   {:position "absolute" :left 0 :top "14px"}
-     :viewBox (rx (str "0 14 " @width " " @height))
+     :style   {:position "absolute" :left 0 :top "20px"}
+     :viewBox (rx (str "0 20 " @width " " @height))
      }
     (circle mouse-x mouse-y)
     (let [ease-x (animation/easer 0.0)

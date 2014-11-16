@@ -23,12 +23,26 @@
   `(binding [freactive.core/*invalidate-rx* nil]
      ~@body))
 
-(defmacro debug-rx [rx capture-callback invalidation-callback]
-  `(let [res# (binding [freactive.core/*do-trace-captures* ~capture-callback] ~rx)]
-    (freactive.core/add-invalidation-watch res# ~invalidation-callback ~invalidation-callback)
-    res#))
+(defmacro debug-rx [rx]
+  (let [dbg-str (str "rx-debug" (pr-str rx))]
+    `(let [dbg-str# ~dbg-str
+           res#
+           (binding [freactive.core/*do-trace-captures*
+                     (fn
+                       ([] (println dbg-str# ": starting capture"))
+                       ([c#] (println dbg-str# "captured :" c#)))]
+             ~rx)
+           invalidation-cb#
+           (fn [k# r#] (println dbg-str#
+                               "notifiying invalidation watches:"
+                               (cljs.core/keys (.-invalidation-watches res#))
+                               "& watches:"
+                               (cljs.core/keys (.-watches res#))))]
+       (freactive.core/add-invalidation-watch res# dbg-str# invalidation-cb#)
+       res#)))
+
 
 ;(defmacro animation-rx [& body]
-;  `(freactive.experimental.animation/animation-rx* (fn [] ~@body)))
-
+;  `(freactive.experimental.animation/animation-rx*
+;     (fn [] ~@body)))
 
