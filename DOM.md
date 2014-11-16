@@ -71,7 +71,7 @@ Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/ma
 
 TODO
 
-## Manual Configuration of Change Notifications
+## Configuration of Change Notifications
 
 TODO
 
