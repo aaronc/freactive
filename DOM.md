@@ -56,6 +56,8 @@ Components are mounted by passing a target node and hiccup vector to the `mount!
 
 ## Animations
 
+### Transitions
+
 Transition callbacks can be added to any DOM element using the `with-transitions` function.
 
 ```clojure
@@ -64,8 +66,23 @@ Transition callbacks can be added to any DOM element using the `with-transitions
   {:on-show (fn [node callback] (animation/animate! node 1000 my-easing-fn {:opacity "100%"} callback)})
 ```
 
-The framework understands the `:on-show` and `:on-hide` transitions. These transitions will be applied upon changes at binding sites - i.e. at the site of an `rx` or an initial `mount!`.
+The framework understands the `:on-show` and `:on-hide` transitions. These transitions will be applied upon changes at binding sites - i.e. at the site of an `rx` or an initial `mount!`. (A mechanism for triggering transitions based on changes to `data-state` is also planned.
 
+### Easers
+
+`easer`'s are the basis of freactive animations. An easer is a specialized type of deref value that is updated at every animation frame based on an easing function and target and duration parameters. Essentially it provides "tween" values. Easers are defined with the `easer` function which takes an initial value. They can be transitioned to another value using the `start-easing!` function which takes the following parameters: `from` (optional), `to`, `duration`, `easing-fn` and a `on-complete` callback.
+
+```clojure
+
+```
+
+Note: if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
+
+Note: the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
+
+### Easing functions
+
+An easing function, `f` is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(f (f 1) 1)`. Basically the easer is supposed to smoothly transition from `0` to `1`. The easer, takes care of scaling the values based on `duration` and `from` and `to` values.
 
 ## Cursors
 
