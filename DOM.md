@@ -69,11 +69,11 @@ This example tries to animate points on the screen (SVG circle nodes) relative t
 
 When you're observing the example you can view the calculated FPS rate as well as the estimated number of DOM attributes updated per second. I recommend trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth. Please report any issues you find here so we can make it better!: https://github.com/aaronc/freactive/issues.
 
-Here is the example: http://aaronc.github.io/freactive/dom-perf
+**Here is the example: http://aaronc.github.io/freactive/dom-perf**
 
 All of this is done declaratively with only the [syntax described above](#two-minute-tutorial), [easers](#easers) and [transitions](#transitions).
 
-Here is the source for the example: https://github.com/aaronc/freactive/blob/master/test/freactive/dom_perf.cljs
+**Here is the source for the example: https://github.com/aaronc/freactive/blob/master/test/freactive/dom_perf.cljs**
 
 This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It does not benchmark updating DOM text nodes or replacing DOM nodes - the two other types of transformations freactive does - additional examples should be created to benchmark these.
 
