@@ -80,6 +80,8 @@ All of this is done declaratively with only the [syntax described above](#two-mi
 
 This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It does not benchmark updating DOM text nodes or replacing DOM nodes - the two other types of transformations freactive does - additional examples should be created to benchmark these.
 
+Even though the frame rate will start drop significantly, you should be able to see fairly smooth animations with thousands of points and with tens of thousands of DOM attributes updated per second on most modern computers. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
+
 ## Cursors
 
 `cursor`'s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
