@@ -1,11 +1,11 @@
 # freactive
-*pronounced "F-reactive". This library should be considered experimental - it has not been widely tested.*
+*pronounced "f-reactive". Name may be changed. This library should be considered experimental - it has not been widely tested.*
 
-freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). [See it in action](http://aaronc.github.io/freactive/).
+freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
 
 **Goals:**
 * Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious for those familiar with Clojure (inspiration taken from reagent and QML)
-* Allow for **[high-performance](#performance)** rendering **[good enough for animated graphics](http://aaronc.github.io/freactive/)** based on a purely declarative syntax
+* Allow for **[high-performance](#performance)** rendering **[good enough for animated graphics][dom-perf]** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
 * Allow for **coordinated management of state via [cursors](#cursors)** (inspiration taken from om)
 * Provide a **deeply-integrated [animation](#animations)** framework
@@ -69,9 +69,9 @@ This example tries to animate points on the screen (SVG circle nodes) relative t
 
 When you're observing the example you can view the calculated FPS rate as well as the estimated number of DOM attributes updated per second. I recommend trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth. Please report any issues you find here so we can make it better!: https://github.com/aaronc/freactive/issues.
 
-Here is the example:
+Here is the example: http://aaronc.github.io/freactive/dom-perf
 
-All of this is done declaritively with only the [syntax described above](#two-minute-tutorial), [easers](#easers) and [transitions](#transitions).
+All of this is done declaratively with only the [syntax described above](#two-minute-tutorial), [easers](#easers) and [transitions](#transitions).
 
 Here is the source for the example: https://github.com/aaronc/freactive/blob/master/test/freactive/dom_perf.cljs
 
@@ -88,7 +88,7 @@ cursors can be created by passing in a path that would be passed to `get-in` or 
 (def ab0 (cursor my-atom [:a :b 0]) ;; -> {:x 0}
 ```
 
-Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure)! That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
+Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure). That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
 
 ```clojure
 (def my-atom (atom 0}))
@@ -139,7 +139,7 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 
 **Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
 
-**Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
+**Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
 
 ## Items View
 
@@ -150,4 +150,4 @@ TODO
 TODO
 
 
-
+[dom-perf]: http://aaronc.github.io/freactive/dom-perf
