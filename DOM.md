@@ -24,7 +24,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 <a name="hello-world"></a>**Hello World example:**
 
-To try this quickly, you can install the [austin](https://github.com/cemerick/austin) repl plugin, run `austin-exec`, open up a browser with the provided URL provided by austin and execute the above code. This code is also compatible with [lein-figwheel](https://github.com/bhauman/lein-figwheel) - this is possibly the best approach for live Clojurescript development available now.
+To try this quickly, you can install the [austin](https://github.com/cemerick/austin) repl plugin, run `austin-exec`, open a browser with the URL provided by austin and execute the code below. This code is also compatible with [lein-figwheel](https://github.com/bhauman/lein-figwheel) - this is possibly the best approach for live Clojurescript development available now.
 
 ```clojure
 (ns example1
@@ -73,7 +73,7 @@ Here is the example:
 
 All of this is done declaritively with only the [syntax described above](#two-minute-tutorial), [easers](#easers) and [transitions](#transitions).
 
-Here is the source for the example:
+Here is the source for the example: https://github.com/aaronc/freactive/blob/master/test/freactive/dom_perf.cljs
 
 This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It does not benchmark updating DOM text nodes or replacing DOM nodes - the two other types of transformations freactive does - additional examples should be created to benchmark these.
 
