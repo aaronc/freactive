@@ -155,17 +155,17 @@ TODO
 
 ## Debugging Reactive Expressions
 
-Reactive expressions can be hard to debug. Something should be getting invalidated that isn't or it seems like something is getting updated too often.
+Reactive expressions can be hard to debug - sometimes we notice that something should be getting invalidated that isn't or it seems like something is getting updated too often.
 
 The `rx-debug` macro can be placed around the initialization of any `rx`:
 ```clojure
  (rx-debug (rx (str @n)))
 ```
 
-and you should seeing verbose debug statements corresponding to the:
-* start of capturing dependencies
+and you should seeing verbose debug statements corresponding to:
+* start of dependency capture
 * each dependency capture
-* each invalidation event with a print out of watches
+* each invalidation event with a print out of watch keys (note: not all watches aware of this `rx` will be registered - part of freactive's optimizations are smart attaching and removing of watches based on dirty flags)
 
 ## Items View
 
