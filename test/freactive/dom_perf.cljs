@@ -10,20 +10,17 @@
 
 (enable-console-print!)
 
-(defonce mouse-x (atom 0))
-
-(defonce mouse-y (atom 0))
-
 (defn- get-window-width [] (.-innerWidth js/window))
+
 (defn- get-window-height [] (.-innerHeight js/window))
 
 (defonce width (atom (get-window-width)))
 
 (defonce height (atom (get-window-height)))
 
-;(defonce width (rx @window-width))
-;
-;(defonce height (rx (- @window-height 12)))
+(defonce mouse-x (atom (/ (get-window-width) 2)))
+
+(defonce mouse-y (atom (/ (get-window-height) 2)))
 
 (defonce init
          (do
@@ -64,57 +61,62 @@
 
 (defn view []
   [:div
+   {:width "100%" :height "100%"}
    [:div
     {:width "100%"
      :style
-     {:position "absolute" :left 0 :top 0 :height "12px"}}
-    (let [complexity (rx (str (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*))))]
-     [:span (rx (str @mouse-x ", " @mouse-y))
-      ". n = " (rx (str @n)) " "
+     {:position "absolute" :left 0 :top 0 :height "12px"
+      :font-size "12px"
+      :font-family "sans-serif"}}
+    (let [number-of-points (rx (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*)))]
+     [:span
+      [:strong [:em [:a {:href "https://github.com/aaronc/freactive"} "freactive"]
+       " performance test. "
+                [:em
+                 "Please report issues "
+                 [:a {:href "https://github.com/aaronc/freactive/issues"} "here"]]
+                ". "]
+      "N = " (rx (str @n)) " "
       [:button {:on-click (fn [_] (swap! n dec))} "-"]
       [:button {:on-click (fn [_] (swap! n inc))} "+"]
-      " complexity = " complexity
-      ". fps = " (rx (str @dom/fps)) ". That's roughly "
-      (rx (str (* @dom/fps @complexity)))
-      " DOM attributes updated per second."])]
+      ", number of points = " (rx (str @number-of-points))
+      ". fps = " (rx (str @dom/fps))
+      ", DOM attrs updated/second ~= " (rx (str (* @dom/fps @number-of-points)))
+       ", mouse at "
+       (rx (str @mouse-x ", " @mouse-y))
+      ". "
+        "."]])]
    [:svg/svg
-   {:width "100%" :height "100%"
-     :style {:position "absolute" :left 0 :top "14px"}
-     :viewBox (rx (str "0 14 " @width " " @height))}
-   (circle mouse-x mouse-y)
+    {:width   "100%" :height "100%"
+     :style   {:position "absolute" :left 0 :top "14px"}
+     :viewBox (rx (str "0 14 " @width " " @height))
+     }
+    (circle mouse-x mouse-y)
     (let [ease-x (animation/easer 0.0)
           ease-y (animation/easer 0.0)]
-      (debug-rx
-        (rx (let [n* @n
-                  spacer (partial spacing-factor n*)
-                  offsets (map spacer (range n*))
-                  lefts (vec (for [x offsets] (rx (* x @mouse-x @ease-x))))
-                  rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @ease-x))))))
-                  tops (vec (for [y offsets] (rx (* y @mouse-y @ease-y))))
-                  bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @ease-y))))))]
-              (dom/with-transitions
-                [:svg/g
-                 (for [i (range n*)] (circle (nth lefts i) mouse-y))
-                 (for [i (range n*)] (circle (nth rights i) mouse-y))
-                 (for [j (range n*)] (circle mouse-x (nth tops j)))
-                 (for [j (range n*)] (circle mouse-x (nth bottoms j)))
-                 (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
-                 (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
-                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
-                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
-                {:on-show (fn [x cb]
-                            ;(println "showing")
-                            (animation/start-easer! ease-x 0.0 1.0 1000 animation/quad-in cb)
-                            (animation/start-easer! ease-y 0.0 1.0 1000 animation/quad-out cb))
-                 :on-hide (fn [x cb]
-                            ;(println "hiding")
-                            (animation/start-easer! ease-x 1.0 0.0 1000 animation/quad-out cb)
-                            (animation/start-easer! ease-y 1.0 0.0 1000 animation/quad-in cb))})))
-        (fn [x]                                             ;;(println "captured" x)
-          )
-        (fn []                                              ;;(println "invalidated")
-          )))
-    ]])
+      (rx (let [n* @n
+                spacer (partial spacing-factor n*)
+                offsets (map spacer (range n*))
+                lefts (vec (for [x offsets] (rx (* x @mouse-x @ease-x))))
+                rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @ease-x))))))
+                tops (vec (for [y offsets] (rx (* y @mouse-y @ease-y))))
+                bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @ease-y))))))]
+            (dom/with-transitions
+              [:svg/g
+               (for [i (range n*)] (circle (nth lefts i) mouse-y))
+               (for [i (range n*)] (circle (nth rights i) mouse-y))
+               (for [j (range n*)] (circle mouse-x (nth tops j)))
+               (for [j (range n*)] (circle mouse-x (nth bottoms j)))
+               (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
+               (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
+               (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
+               (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
+              {:on-show (fn [x cb]
+                          (animation/start-easing! ease-x 0.0 1.0 1000 animation/quad-in cb)
+                          (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out cb))
+               :on-hide (fn [x cb]
+                          (animation/start-easing! ease-x 1.0 0.0 1000 animation/quad-out cb)
+                          (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))}))))]])
 
 (dom/mount! (.getElementById js/document "root") (view))
 

@@ -25,19 +25,19 @@
 (defn easer [init-state]
   (AnimationEaser. init-state nil false nil nil nil))
 
-(defn start-easer!
-  ([easer from to in-ms easing-fn when-complete]
+(defn start-easing!
+  ([easer from to duration easing-fn when-complete]
    (let [cur (.-state easer)
          ratio (/ (- to cur) (- to from))
-         in-ms (* ratio in-ms)]
-     (start-easer! easer to in-ms easing-fn when-complete)))
-  ([easer to in-ms easing-fn when-complete]
+         duration (* ratio duration)]
+     (start-easing! easer to duration easing-fn when-complete)))
+  ([easer to duration easing-fn when-complete]
    (let [start-ms (r/-raw-deref dom/frame-time)
          from (.-state easer)
          total-change (- to from)
          scaled-easing-fn
          (fn [new-ms]
-           (let [t (/ (- new-ms start-ms) in-ms)
+           (let [t (/ (- new-ms start-ms) duration)
                  t (if (>= t 1.0)
                      (do
                        (set! (.-animating easer) false)
