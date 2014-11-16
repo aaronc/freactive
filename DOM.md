@@ -13,7 +13,7 @@ freactive is a high-performance, pure [Clojurescript](https://github.com/clojure
 * Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
 * **Minimize unnecessary triggering of update events**
 * Coordinate all updates via **requestAnimationFrame** wherever possible
-* Be easy to [debug](#debugging)
+* Be easy to [debug](#debugging-reactive-expressions)
 * Be written in **pure Clojurescript**
 * Provide support for older browsers via polyfills (not yet implemented)
 
@@ -147,6 +147,10 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 
 **Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
 
+## Configuration of Reactive Change Notifications
+
+TODO
+
 ## Debugging Reactive Expressions
 
 Reactive expressions can be hard to debug. Something should be getting invalidated that isn't or it seems like something is getting updated too often.
@@ -166,10 +170,6 @@ rx-debug invalidated : (rx-debug (rx (str @n)))
 ## Items View
 
 An experimental `items-view` has been created, but has not been documented yet. The API is also subject to change.
-
-## Configuration of Change Notifications
-
-TODO
 
 ## Contributions & License
 
