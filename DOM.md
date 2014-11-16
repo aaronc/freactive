@@ -71,7 +71,7 @@ When you're observing the example you can view the calculated FPS rate as well a
 
 Here is the example:
 
-All of this is done declaritively with only the syntax described [above](#two-minute-tutorial), [easers](#easers) and [transitions](#transitions).
+All of this is done declaritively with only the [syntax described above](#two-minute-tutorial), [easers](#easers) and [transitions](#transitions).
 
 Here is the source for the example:
 
