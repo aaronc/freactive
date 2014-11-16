@@ -51,7 +51,16 @@ Components are mounted by passing a target node and hiccup vector to the `mount!
 
 ## Animations
 
-TODO
+Transition callbacks can be added to any DOM element using the `with-transitions` function.
+
+```clojure
+(with-transitions
+  [:h1 "Hello World!"]
+  {:on-show (fn [node callback] (animation/animate! node 1000 my-easing-fn {:opacity "100%"} callback)})
+```
+
+The framework understands the `:on-show` and `:on-hide` transitions. These transitions will be applied upon changes at binding sites - i.e. at the site of an `rx` or an initial `mount!`.
+
 
 ## Cursors
 
