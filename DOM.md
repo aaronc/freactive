@@ -5,10 +5,10 @@
 freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). [See it in action](http://aaronc.github.io/freactive/).
 
 **Goals:**
-* Provide a **[simple, intuitive API](#hello-world)** that shoudl be almost obvious for those familiar with Clojure (similar to reagent)
-* Allow for **high-performance** rendering **[good enough for animated graphics](http://aaronc.github.io/freactive/)** based on a purely declarative syntax
+* Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious for those familiar with Clojure (inspiration taken from reagent and QML)
+* Allow for **[high-performance](#performance)** rendering **[good enough for animated graphics](http://aaronc.github.io/freactive/)** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
-* Allow for **coordinated management of state via [cursors](#cursors)** (as in Om)
+* Allow for **coordinated management of state via [cursors](#cursors)** (inspiration taken from om)
 * Provide a **deeply-integrated [animation](#animations)** framework
 * Allow for cursors based on paths as well as **lenses**
 * Provide a generic items view component for **efficient viewing of large data sets**
@@ -52,13 +52,27 @@ To try this quickly, you can install the [austin](https://github.com/cemerick/au
 
 If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's `atom`, you're 90% of the way to understanding freactive. In freactive, instead of Clojure's atom, you should use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent).
 
-**The `rx` macro**: the `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
+**The `rx` macro**: the `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`'s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
 **Binding to attributes, style properties and node positions:** Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that site. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated to directly to that DOM directly site only as often as necessary (coordinated with `requestAnimationFrame`).
 
 **Mounting components:** components are mounted by passing a target node and hiccup vector to the `mount!` function (this will replace the last child of the target node with the mounted node!).
 
 **Helper functions:** a few additional helper functions such as - `append-child!`, `remove!`, and `listen!` - are included, but it is encouraged to use them sparingly and prefer the declarative hiccup syntax wherever possible.
+
+## Performance
+
+freactive should be able to handle fairly high performance graphics. Rather than trying to compare it to existing client-side frameworks (which isn't always particularly productive), I decided to create an example that would really tax its ability to render. This is to give me (as well as potential library users) an idea of what types of situations it actually can and can't handle on different platforms - which is really what's important rather than can it do thing X, which we may or may not really care about, faster than framework Y.
+
+Basically this example tries to animate points on the screen (defined declaritively using SVG) relative to the current mouse position. It has a complexity factor, `n`, which can be controlled by the `+` and `-` buttons. The number of points is *(2n + 1)<sup>2</sup>*. There are also some transition animations based on [easers](#easers).
+
+When you're observing the example you can view the calculated FPS rate as well as the estimated number of DOM attribute values updated per second. I recommend, trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth
+
+Here is the example:
+
+All of this is done declaritively with only the syntax described above and [easers](#easers) and [transitions](#transitions).
+
+Here is the source for the example:
 
 ## Cursors
 
@@ -93,12 +107,15 @@ Transition callbacks can be added to any DOM element using the `with-transitions
 (with-transitions
   [:h1 "Hello World!"]
   {:on-show (fn [node callback]
-              (animation/animate! node 1000 my-easing-fn {:opacity "100%"} callback)})
+              ;; do something
+              (when callback (callback)))})
 ```
 
 The framework understands the `:on-show` and `:on-hide` transitions. These transitions will be applied upon changes at binding sites - i.e. at the site of an `rx` or an initial `mount!`. (A mechanism for triggering transitions based on changes to `data-state` is also planned.)
 
 ### Easers
+
+*An API that wraps `easer` functionality in a convenient `animate!` function that takes style and attribute properties is planned.*
 
 `easer`'s are the basis of freactive animations. An easer is a specialized type of deref value that is updated at every animation frame based on an easing function and target and duration parameters. Essentially it provides "tween" values. Easers are defined with the `easer` function which takes an initial value. They can be transitioned to another value using the `start-easing!` function which takes the following parameters: `from` (optional), `to`, `duration`, `easing-fn` and a `on-complete` callback.
 
