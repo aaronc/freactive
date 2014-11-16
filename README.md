@@ -64,7 +64,7 @@ If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#
 
 **Helper functions:** a few additional helper functions such as - `append-child!`, `remove!`, and `listen!` - are included, but it is encouraged to use them sparingly and prefer the declarative hiccup syntax wherever possible.
 
-*Note: `atom` and `rx` are also available for Java Clojure and can be used with JavaFX via [fx-clj](https://github.com/aaronc/fx-clj) using a similar API. Originally this library was conceived as just a clj/cljs `atom` and `rx` llibrary. After working with it in fx-clj, I wanted to do the same thing for the DOM and voila. Eventually a "core" library containing just the reactive data types will be split off. The Java version of core.clj is slightly out of sync with core.cljs."*
+*Note: `atom` and `rx` are also available for Java Clojure and can be used with JavaFX via [fx-clj](https://github.com/aaronc/fx-clj) using a similar API. Originally this library was conceived as just a clj/cljs `atom` and `rx` llibrary. After working with it in fx-clj, I wanted to do the same thing for the DOM and voila. Eventually a "core" library containing just the reactive data types will be split off. The Java version of core.clj is slightly out of sync with core.cljs.*
 
 ## Performance
 
