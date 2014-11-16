@@ -85,7 +85,7 @@
                   lefts (vec (for [x offsets] (rx (* x @mouse-x @easer))))
                   rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @easer))))))
                   tops (vec (for [y offsets] (rx (* y @mouse-y @easer))))
-                  bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y @easer)))))))]
+                  bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @easer))))))]
               (dom/with-transitions
                 [:svg/g
                  (for [i (range n*)] (circle (nth lefts i) mouse-y))
@@ -97,13 +97,15 @@
                  (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
                  (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
                 {:on-show (fn [x cb]
-                            (println "showing")
-                            (animation/start-easer! easer 1.0 1000 animation/linear cb))
+                            ;;(println "showing")
+                            (animation/start-easer! easer 1.0 1000 animation/quad-in-out cb))
                  :on-hide (fn [x cb]
-                            (println "hiding")
-                            (animation/start-easer! easer 0.0 1000 animation/linear cb))})))
-        (fn [x] (println "captured" x))
-        (fn [] (println "invalidated"))))
+                            ;;(println "hiding")
+                            (animation/start-easer! easer 0.0 1000 animation/quad-in-out cb))})))
+        (fn [x]                                             ;;(println "captured" x)
+          )
+        (fn []                                              ;;(println "invalidated")
+          )))
     ]])
 
 (dom/mount! (.getElementById js/document "root") (view))
