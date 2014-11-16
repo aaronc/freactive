@@ -1,7 +1,7 @@
 (ns freactive.dom-perf
   (:refer-clojure :exclude [atom])
   (:require
-    [freactive.experimental.dom2 :as dom]
+    [freactive.dom :as dom]
     [freactive.core :refer [atom cursor] :as r]
     [figwheel.client :as fw :include-macros true]
     [freactive.experimental.animation :as animation]
@@ -93,8 +93,7 @@
    [:svg/svg
     {:width   "100%" :height "100%"
      :style   {:position "absolute" :left 0 :top "20px"}
-     :viewBox (rx (str "0 20 " @width " " @height))
-     }
+     :viewBox (rx (str "0 20 " @width " " @height))}
     (circle mouse-x mouse-y)
     (let [ease-x (animation/easer 0.0)
           ease-y (animation/easer 0.0)]
@@ -124,7 +123,6 @@
 
 (dom/mount! (.getElementById js/document "root") (view))
 
-(fw/watch-and-reload)
-
+;;(fw/watch-and-reload)
 
 
