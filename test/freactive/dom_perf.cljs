@@ -6,7 +6,7 @@
     [figwheel.client :as fw :include-macros true]
     [freactive.experimental.animation :as animation])
   (:require-macros
-  [freactive.macros :refer [rx debug-rx animation-rx]]))
+  [freactive.macros :refer [rx debug-rx]]))
 
 (enable-console-print!)
 
@@ -97,11 +97,11 @@
                  (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
                  (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
                 {:on-show (fn [x cb]
-                            ;;(println "showing")
-                            (animation/start-easer! easer 1.0 1000 animation/quad-in-out cb))
+                            (println "showing")
+                            (animation/start-easer! easer 0.0 1.0 1000 animation/quad-in-out cb))
                  :on-hide (fn [x cb]
-                            ;;(println "hiding")
-                            (animation/start-easer! easer 0.0 1000 animation/quad-in-out cb))})))
+                            (println "hiding")
+                            (animation/start-easer! easer 1.0 0.0 1000 animation/quad-in-out cb))})))
         (fn [x]                                             ;;(println "captured" x)
           )
         (fn []                                              ;;(println "invalidated")

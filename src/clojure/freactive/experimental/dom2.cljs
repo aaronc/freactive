@@ -330,7 +330,7 @@
 
 ;; Reactive Element Handling
 
-(deftype ReactiveElement [parent cur-element dirty updating disposed invalidate]
+(deftype ReactiveElement [parent cur-element dirty updating disposed animate invalidate]
   IRemove
   (-remove! [this]
     (set! (.-disposed this) true)
@@ -341,7 +341,20 @@
 
 (defn- append-deref-child [parent child-ref]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
-    (let [state (ReactiveElement. parent nil false false false nil)
+    (let [state (ReactiveElement. parent nil false false false nil nil)
+
+          get-new-elem (fn []
+                         (set! (.-dirty state) false)
+                         (add-watch* child-ref state (.-invalidate state))
+                         (or @child-ref [:span]))
+
+          show-new-elem (fn [new-elem cur]
+                          (let [new-node (replace-child parent new-elem cur)]
+                            (set! (.-cur-element state) new-node)
+                            (set! (.-updating state) false)
+                            (when (.-dirty state)
+                              (queue-animation (.-animate state)))
+                            (show-node new-node nil)))
 
           animate
           (fn animate [x]
@@ -349,30 +362,23 @@
             (if (.-disposed state)
               (remove! (.-cur-element state))
               (do
-                (set! (.-dirty state) false)
-                (add-watch* child-ref state (.-invalidate state))
-                (let [new-elem @child-ref
-                      cur (.-cur-element state)
-                      new-elem (or new-elem [:span])]
-                  ;(println "cur" cur)
+                (let [new-elem (get-new-elem)
+                      cur (.-cur-element state)]
                   (when (not= (get-virtual-dom cur) (get-virtual-dom new-elem))
-                    ;(println "state" (dom-node? cur) (js-keys (get-element-state cur)))
-                    ;(println "spec" (.-element-spec (get-element-state cur)))
-                    ;(println "meta" (meta (get-element-spec cur)))
-                    (hide-node cur
-                               (fn []
-                                 (set! (.-updating state) false)
+                    (let [hide (get-transition cur :on-hide)]
+                      (if hide
+                        (hide cur
+                              (fn []
                                  (if (.-disposed state)
-                                   (remove-dom-node cur)
+                                   (do
+                                     (remove-dom-node cur)
+                                     (set! (.-updating cur) false))
                                    (let [new-elem (if (.-dirty state)
-                                                    (do
-                                                      (set! (.-dirty false))
-                                                      (add-watch* child-ref state (.-invalidate state))
-                                                      @child-ref)
-                                                    new-elem)
-                                         new-node (replace-child parent new-elem cur)]
-                                     (set! (.-cur-element state) new-node)
-                                     (show-node new-node nil)))))
+                                                    (get-new-elem)
+                                                    new-elem)]
+                                     (show-new-elem new-elem cur)))))
+                        (show-new-elem new-elem cur)))
+
                     ;(set! (.-cur-element state)
                     ;      (transition-element
                     ;        parent
@@ -400,6 +406,8 @@
                  ;(println "updating")
                  (set! (.-updating state) true)
                  (queue-animation animate)))))]
+
+      (set! (.-animate state) animate)
       (set! (.-invalidate state) invalidate)
       (set! (.-cur-element state) (transition-element parent (or (r/-raw-deref child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]

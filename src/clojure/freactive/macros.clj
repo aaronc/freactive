@@ -28,7 +28,7 @@
     (freactive.core/add-invalidation-watch res# ~invalidation-callback ~invalidation-callback)
     res#))
 
-(defmacro animation-rx [& body]
-  `(freactive.experimental.animation/animation-rx* (fn [] ~@body)))
+;(defmacro animation-rx [& body]
+;  `(freactive.experimental.animation/animation-rx* (fn [] ~@body)))
 
 
