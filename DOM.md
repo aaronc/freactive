@@ -83,14 +83,7 @@ This example benchmarks performance of reactive `atom`, `rx` and `easer` updates
 
 `cursor`'s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
 
-cursors can be created by passing in a path that would be passed to `get-in` or `assoc-in` to the `cursor` function:
-
-```clojure
-(def my-atom (atom {:a {:b [{:x 0}]}))
-(def ab0 (cursor my-atom [:a :b 0]) ;; -> {:x 0}
-```
-
-Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure). That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
+Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure). That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
 
 ```clojure
 (def my-atom (atom 0}))
@@ -102,7 +95,15 @@ Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/ma
 ;; 1.2
 ```
 
-This idea was inspired by [om][om], but for those familiar with om, it should be noted that freactive cursors behave a little bit differently. By design, they do not know anything about the structure of the object they reference (i.e. whether its associative) - they only have a "lens" (a getter and setter pair) to it. Once you have a cursor, you can treat it like an atom.
+cursors can also be created by passing in a keyword or a key sequence that would be passed to `get-in` or `assoc-in` to the `cursor` function:
+
+```clojure
+(def my-atom (atom {:a {:b [{:x 0}]}))
+(def ab0 (cursor my-atom [:a :b 0]) ;; -> {:x 0}
+(def a (cursor my-atom :a) ;; a keyword can be used as well
+```
+
+This is somewhat similar (but not exactly) to cursors in [om][om] - which was the inspiration for cursors in freactive. It should be noted that in freactive, cursors were designed to work with lenses first and then with key or key sequences (`korks`) for convenience. A cursor doesn't know anything about the structure of data it references (i.e. the associative path from parent to child).
 
 ## Animations
 
