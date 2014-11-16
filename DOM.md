@@ -17,8 +17,6 @@ freactive is a pure Clojurescript DOM library inspired by work done in reagent, 
 
 ## Two-minute tutorial
 
-If you already understand hiccup DOM syntax and Clojure's `atom`, you're 90% there. In freactive, make sure you use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent). We just need to introduce one additional concept - the macro `rx` (for reactive expression).
-
 **Hello World example:**
 
 ```clojure
@@ -41,6 +39,10 @@ If you already understand hiccup DOM syntax and Clojure's `atom`, you're 90% the
 
 (dom/mount! root (view))
 ```
+
+If you already understand hiccup DOM syntax and Clojure's `atom`, you're 90% there. In freactive, make sure you use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent). We just need to introduce one additional concept - the macro `rx` (for reactive expression).
+
+
 
 The `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
