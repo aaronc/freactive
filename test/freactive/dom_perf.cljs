@@ -21,6 +21,10 @@
 
 (defonce height (atom (get-window-height)))
 
+;(defonce width (rx @window-width))
+;
+;(defonce height (rx (- @window-height 12)))
+
 (defonce init
          (do
            (dom/listen! js/window "mousemove"
@@ -63,7 +67,7 @@
    [:div
     {:width "100%"
      :style
-     {:position "absolute" :left 0 :top 0 :height "1em"}}
+     {:position "absolute" :left 0 :top 0 :height "12px"}}
     (let [complexity (rx (str (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*))))]
      [:span (rx (str @mouse-x ", " @mouse-y))
       ". n = " (rx (str @n)) " "
@@ -75,7 +79,8 @@
       " DOM attributes updated per second."])]
    [:svg/svg
    {:width "100%" :height "100%"
-     :style {:position "absolute" :left 0 :top "1em"}}
+     :style {:position "absolute" :left 0 :top "14px"}
+     :viewBox (rx (str "0 14 " @width " " @height))}
    (circle mouse-x mouse-y)
     (let [ease-x (animation/easer 0.0)
           ease-y (animation/easer 0.0)]
@@ -103,8 +108,8 @@
                             (animation/start-easer! ease-y 0.0 1.0 1000 animation/quad-out cb))
                  :on-hide (fn [x cb]
                             ;(println "hiding")
-                            (animation/start-easer! ease-x 1.0 0.0 1000 animation/quad-in cb)
-                            (animation/start-easer! ease-y 1.0 0.0 1000 animation/quad-out cb))})))
+                            (animation/start-easer! ease-x 1.0 0.0 1000 animation/quad-out cb)
+                            (animation/start-easer! ease-y 1.0 0.0 1000 animation/quad-in cb))})))
         (fn [x]                                             ;;(println "captured" x)
           )
         (fn []                                              ;;(println "invalidated")
