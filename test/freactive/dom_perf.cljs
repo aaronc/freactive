@@ -23,13 +23,24 @@
 
 (defonce init
          (do
-           (dom/listen! js/window "mousemove" (fn [e]
-                                                (reset! mouse-x (.-clientX e))
-                                                (reset! mouse-y (.-clientY e))))
+           (dom/listen! js/window "mousemove"
+                        (fn [e]
+                          (reset! mouse-x (.-clientX e))
+                          (reset! mouse-y (.-clientY e))))
 
-           (dom/listen! js/window "resize" (fn [e]
-                                             (reset! width (get-window-width))
-                                             (reset! height (get-window-height))))))
+           (dom/listen! js/window "resize"
+                        (fn [e]
+                          (reset! width (get-window-width))
+                          (reset! height (get-window-height))))
+
+           (dom/listen! js/window "touchmove"
+                        (fn [e]
+                          (let [touches (.-touches e)]
+                            (when (= 1 (alength touches))
+                              (.preventDefault e)
+                              (let [touch (aget touches 0)]
+                                (reset! mouse-x (.-clientX touch))
+                                (reset! mouse-y (.-clientY touch)))))))))
 
 (defn circle [x y]
   [:svg/circle {:cx x :cy y :r 2 :stroke "black" :fill "black"}])
