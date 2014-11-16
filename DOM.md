@@ -5,7 +5,7 @@
 freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses hiccup-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent[(https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as desktop GUI frameworks like QML and JavaFX). [See it in action](http://aaronc.github.io/freactive/).
 
 **Goals:**
-* Provide a **dead-simple API** that is intuitive and almost obvious for those familiar with Clojure (similar to Reagent)
+* Provide a **simple, intuitve API** that shoudl be almost obvious for those familiar with Clojure (similar to Reagent and Hiccup)
 * Allow for **high-performance** rendering **good enough for animated graphics** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
 * Provide a **deeply-integrated [animation](#animations)** framework
