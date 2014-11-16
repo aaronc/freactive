@@ -5,15 +5,16 @@ freactive is a pure Clojurescript DOM library inspired by work done in reagent, 
 
 **Goals:**
 * Provide a **dead-simple API** that is intuitive and almost obvious for those familiar with Clojure (similar to Reagent)
-* All for **high-performance** rendering
+* Allow for **high-performance** rendering **good enough for animated graphics** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
 * Provide a **deeply-integrated animation** framework
-* **Minimize unnecessary triggering of update events**
 * Allow for **coordinated management of state via cursors** (as in Om)
 * Allow for cursors based on paths as well as **lenses**
-* Be written in **pure Clojurescript**
-* Coordinate all updates via **requestAnimationFrame** where possible
 * Provide a generic items view component for **efficient viewing of large data sets**
+* **Minimize unnecessary triggering of update events**
+* Coordinate all updates via **requestAnimationFrame** wherever possible
+* Be written in **pure Clojurescript**
+
 
 ## Two-minute tutorial
 
