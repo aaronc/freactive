@@ -30,9 +30,9 @@ To try this quickly, you can install the [austin](https://github.com/cemerick/au
 ```clojure
 (ns example1
   (:refer-clojure :exclude [atom])
-  (:require [freactive.core :refer [atom]
-            [freactive.dom :as dom)
-  (:require-macros [freactive.macros :refer [rx]))
+  (:require [freactive.core :refer [atom]]
+            [freactive.dom :as dom])
+  (:require-macros [freactive.macros :refer [rx]]))
     
 (defonce mouse-pos (atom nil))
 
