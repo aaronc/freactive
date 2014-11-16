@@ -1,5 +1,5 @@
 (defproject freactive "0.1.0"
-  :description "Reactive atoms, expressions and cursors for Clojure"
+  :description "High-performance, pure Clojurescript, declarative DOM library"
   :url "https://github.com/aaronc/freactive"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
@@ -8,7 +8,7 @@
   :profiles
   {:dev
     {:plugins [[com.cemerick/austin "0.1.5"]
-               [lein-cljsbuild "1.0.3"] ;; 1.0.3 is a requirement
+               [lein-cljsbuild "1.0.3"] 
                [lein-figwheel "0.1.5-SNAPSHOT"]]
      :dependencies
      [[com.cemerick/clojurescript.test "0.3.1"]
