@@ -8,7 +8,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 * Provide a **dead-simple API** that is intuitive and almost obvious for those familiar with Clojure (similar to Reagent)
 * Allow for **high-performance** rendering **good enough for animated graphics** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
-* Provide a **deeply-integrated animation** framework
+* Provide a **deeply-integrated [animation](#animations)** framework
 * Allow for **coordinated management of state via [cursors](#cursors)** (as in Om)
 * Allow for cursors based on paths as well as **lenses**
 * Provide a generic items view component for **efficient viewing of large data sets**
@@ -72,8 +72,15 @@ The framework understands the `:on-show` and `:on-hide` transitions. These trans
 
 `easer`'s are the basis of freactive animations. An easer is a specialized type of deref value that is updated at every animation frame based on an easing function and target and duration parameters. Essentially it provides "tween" values. Easers are defined with the `easer` function which takes an initial value. They can be transitioned to another value using the `start-easing!` function which takes the following parameters: `from` (optional), `to`, `duration`, `easing-fn` and a `on-complete` callback.
 
-```clojure
+An easer is designed to be used as a dependency in a reactive computation, like this:
 
+```clojure
+(def ease-factor (easer 0.0))
+(defn my-view []
+  (with-transitions
+    [:h1 {:opacity (rx (* 100 @ease-factor))
+          :font-size (rx (* 16 @ease-fator))} "Hello World!"]
+    {:on-show (fn [node callback] (start-easing! easer 0 1.0 1000 easing/quad-in on-complete)}))
 ```
 
 Note: if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
