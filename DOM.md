@@ -2,10 +2,10 @@
 *pronounced "F-reactive". This library should be considered experimental - it has not been widely tested.*
 
 
-freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses hiccup-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent[(https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as desktop GUI frameworks like QML and JavaFX). [See it in action](http://aaronc.github.io/freactive/).
+freactive is a high-performance, pure Clojurescript, declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent](https://github.com/reagent-project/reagent), [om](https://github.com/swannodette/om) and [reflex](https://github.com/lynaghk/reflex) (as well as desktop GUI frameworks like QML and JavaFX). [See it in action](http://aaronc.github.io/freactive/).
 
 **Goals:**
-* Provide a **simple, intuitve API** that shoudl be almost obvious for those familiar with Clojure (similar to Reagent and Hiccup)
+* Provide a **simple, intuitve API** that shoudl be almost obvious for those familiar with Clojure (similar to reagent)
 * Allow for **high-performance** rendering **good enough for animated graphics** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
 * Provide a **deeply-integrated [animation](#animations)** framework
@@ -46,7 +46,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 (dom/mount! root (view))
 ```
 
-If you already understand hiccup DOM syntax and Clojure's `atom`, you're 90% there. In freactive, make sure you use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent). We just need to introduce one additional concept - the macro `rx` (for reactive expression).
+If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's `atom`, you're 90% there. In freactive, make sure you use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent). We just need to introduce one additional concept - the macro `rx` (for reactive expression).
 
 The `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
@@ -89,7 +89,7 @@ Transition callbacks can be added to any DOM element using the `with-transitions
   {:on-show (fn [node callback] (animation/animate! node 1000 my-easing-fn {:opacity "100%"} callback)})
 ```
 
-The framework understands the `:on-show` and `:on-hide` transitions. These transitions will be applied upon changes at binding sites - i.e. at the site of an `rx` or an initial `mount!`. (A mechanism for triggering transitions based on changes to `data-state` is also planned.
+The framework understands the `:on-show` and `:on-hide` transitions. These transitions will be applied upon changes at binding sites - i.e. at the site of an `rx` or an initial `mount!`. (A mechanism for triggering transitions based on changes to `data-state` is also planned.)
 
 ### Easers
 
