@@ -48,11 +48,13 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's `atom`, you're 90% there. In freactive, make sure you use freactive's reactive `atom` which allows derefs to be captured by an enclosing reactive expression (this is exactly the same idea as in reagent). We just need to introduce one additional concept - the macro `rx` (for reactive expression).
 
-The `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
+**The `rx` macro**: the `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like `cursor`s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
-Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that attribute, style property or child node position. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated to the DOM directly to the binding site only as often as necessary (coordinated with `requestAnimationFrame`).
+**Binding to attributes, style properties and node positions:** Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that site. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated to directly to that DOM directly site only as often as necessary (coordinated with `requestAnimationFrame`).
 
-Components are mounted by passing a target node and hiccup vector to the `mount!` function (this will replace the last child of the target node with the mounted node!). A few additional convenience functions are included - `append-child!`, `remove!`, and `listen!` - but it is encouraged to use them sparingly and prefer the declarative hiccup syntax wherever possible.
+**Mounting components:** components are mounted by passing a target node and hiccup vector to the `mount!` function (this will replace the last child of the target node with the mounted node!).
+
+**Helper functions:** a few additional helper functions such as - `append-child!`, `remove!`, and `listen!` - are included, but it is encouraged to use them sparingly and prefer the declarative hiccup syntax wherever possible.
 
 ## Cursors
 
