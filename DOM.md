@@ -57,7 +57,15 @@ TODO
 
 ## Cursors
 
-TODO
+`cursor`s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
+
+cursors can be created by passing in a path that would be passed to `get-in` or `assoc-in` to the `cursor` function:
+
+```clojure
+(cursor my-atom [:a :b 0])
+```
+
+Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure)! That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
 
 ## Items View
 
