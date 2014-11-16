@@ -19,7 +19,7 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 ## Two-minute tutorial
 
-[lein](http://leiningen.org) dependency:
+**[Leiningen](http://leiningen.org) dependency info:**
 
 [![Clojars Project](http://clojars.org/freactive/latest-version.svg)](http://clojars.org/freactive)
 
@@ -45,6 +45,8 @@ freactive is a high-performance, pure Clojurescript, declarative DOM library. It
 
 (dom/mount! root (view))
 ```
+
+To try this quickly, you can install the [austin](https://github.com/cemerick/austin) repl plugin, run `austin-exec`, open up a browser with the provided URL provided by austin and execute the above code. This code is also compatible with [lein-figwheel](https://github.com/bhauman/lein-figwheel) - this is possibly the best approach for live Clojurescript development available now.
 
 **Explanation:**
 
