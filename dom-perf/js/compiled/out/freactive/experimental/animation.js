@@ -31,45 +31,45 @@ var this$__$1 = this;if(cljs.core.truth_(freactive.core._STAR_invalidate_rx_STAR
 return self__.state;
 });
 freactive.experimental.animation.AnimationEaser.prototype.cljs$core$IWatchable$_notify_watches$arity$3 = (function (this$,oldval,newval){var self__ = this;
-var this$__$1 = this;var seq__138611 = cljs.core.seq.call(null,self__.watches);var chunk__138612 = null;var count__138613 = (0);var i__138614 = (0);while(true){
-if((i__138614 < count__138613))
-{var vec__138615 = cljs.core._nth.call(null,chunk__138612,i__138614);var key = cljs.core.nth.call(null,vec__138615,(0),null);var f = cljs.core.nth.call(null,vec__138615,(1),null);f.call(null,key,this$__$1,oldval,newval);
+var this$__$1 = this;var seq__140739 = cljs.core.seq.call(null,self__.watches);var chunk__140740 = null;var count__140741 = (0);var i__140742 = (0);while(true){
+if((i__140742 < count__140741))
+{var vec__140743 = cljs.core._nth.call(null,chunk__140740,i__140742);var key = cljs.core.nth.call(null,vec__140743,(0),null);var f = cljs.core.nth.call(null,vec__140743,(1),null);f.call(null,key,this$__$1,oldval,newval);
 {
-var G__138617 = seq__138611;
-var G__138618 = chunk__138612;
-var G__138619 = count__138613;
-var G__138620 = (i__138614 + (1));
-seq__138611 = G__138617;
-chunk__138612 = G__138618;
-count__138613 = G__138619;
-i__138614 = G__138620;
+var G__140745 = seq__140739;
+var G__140746 = chunk__140740;
+var G__140747 = count__140741;
+var G__140748 = (i__140742 + (1));
+seq__140739 = G__140745;
+chunk__140740 = G__140746;
+count__140741 = G__140747;
+i__140742 = G__140748;
 continue;
 }
 } else
-{var temp__4388__auto__ = cljs.core.seq.call(null,seq__138611);if(temp__4388__auto__)
-{var seq__138611__$1 = temp__4388__auto__;if(cljs.core.chunked_seq_QMARK_.call(null,seq__138611__$1))
-{var c__12267__auto__ = cljs.core.chunk_first.call(null,seq__138611__$1);{
-var G__138621 = cljs.core.chunk_rest.call(null,seq__138611__$1);
-var G__138622 = c__12267__auto__;
-var G__138623 = cljs.core.count.call(null,c__12267__auto__);
-var G__138624 = (0);
-seq__138611 = G__138621;
-chunk__138612 = G__138622;
-count__138613 = G__138623;
-i__138614 = G__138624;
+{var temp__4388__auto__ = cljs.core.seq.call(null,seq__140739);if(temp__4388__auto__)
+{var seq__140739__$1 = temp__4388__auto__;if(cljs.core.chunked_seq_QMARK_.call(null,seq__140739__$1))
+{var c__12267__auto__ = cljs.core.chunk_first.call(null,seq__140739__$1);{
+var G__140749 = cljs.core.chunk_rest.call(null,seq__140739__$1);
+var G__140750 = c__12267__auto__;
+var G__140751 = cljs.core.count.call(null,c__12267__auto__);
+var G__140752 = (0);
+seq__140739 = G__140749;
+chunk__140740 = G__140750;
+count__140741 = G__140751;
+i__140742 = G__140752;
 continue;
 }
 } else
-{var vec__138616 = cljs.core.first.call(null,seq__138611__$1);var key = cljs.core.nth.call(null,vec__138616,(0),null);var f = cljs.core.nth.call(null,vec__138616,(1),null);f.call(null,key,this$__$1,oldval,newval);
+{var vec__140744 = cljs.core.first.call(null,seq__140739__$1);var key = cljs.core.nth.call(null,vec__140744,(0),null);var f = cljs.core.nth.call(null,vec__140744,(1),null);f.call(null,key,this$__$1,oldval,newval);
 {
-var G__138625 = cljs.core.next.call(null,seq__138611__$1);
-var G__138626 = null;
-var G__138627 = (0);
-var G__138628 = (0);
-seq__138611 = G__138625;
-chunk__138612 = G__138626;
-count__138613 = G__138627;
-i__138614 = G__138628;
+var G__140753 = cljs.core.next.call(null,seq__140739__$1);
+var G__140754 = null;
+var G__140755 = (0);
+var G__140756 = (0);
+seq__140739 = G__140753;
+chunk__140740 = G__140754;
+count__140741 = G__140755;
+i__140742 = G__140756;
 continue;
 }
 }
@@ -92,10 +92,10 @@ freactive.experimental.animation.__GT_AnimationEaser = (function __GT_AnimationE
 });
 freactive.experimental.animation.easer = (function easer(init_state){return (new freactive.experimental.animation.AnimationEaser(init_state,null,false,null,null,null));
 });
-freactive.experimental.animation.start_easer_BANG_ = (function() {
-var start_easer_BANG_ = null;
-var start_easer_BANG___5 = (function (easer,to,in_ms,easing_fn,when_complete){var start_ms = freactive.core._raw_deref.call(null,freactive.experimental.dom2.frame_time);var from = easer.state;var total_change = (to - from);var scaled_easing_fn = ((function (start_ms,from,total_change){
-return (function (new_ms){var t = ((new_ms - start_ms) / in_ms);var t__$1 = (((t >= 1.0))?(function (){easer.animating = false;
+freactive.experimental.animation.start_easing_BANG_ = (function() {
+var start_easing_BANG_ = null;
+var start_easing_BANG___5 = (function (easer,to,duration,easing_fn,when_complete){var start_ms = freactive.core._raw_deref.call(null,freactive.experimental.dom2.frame_time);var from = easer.state;var total_change = (to - from);var scaled_easing_fn = ((function (start_ms,from,total_change){
+return (function (new_ms){var t = ((new_ms - start_ms) / duration);var t__$1 = (((t >= 1.0))?(function (){easer.animating = false;
 return 1.0;
 })():t);var y = easing_fn.call(null,t__$1);return (from + (y * total_change));
 });})(start_ms,from,total_change))
@@ -122,20 +122,20 @@ return cb.call(null);
 }
 return easer;
 });
-var start_easer_BANG___6 = (function (easer,from,to,in_ms,easing_fn,when_complete){var cur = easer.state;var ratio = ((to - cur) / (to - from));var in_ms__$1 = (ratio * in_ms);return start_easer_BANG_.call(null,easer,to,in_ms__$1,easing_fn,when_complete);
+var start_easing_BANG___6 = (function (easer,from,to,duration,easing_fn,when_complete){var cur = easer.state;var ratio = ((to - cur) / (to - from));var duration__$1 = (ratio * duration);return start_easing_BANG_.call(null,easer,to,duration__$1,easing_fn,when_complete);
 });
-start_easer_BANG_ = function(easer,from,to,in_ms,easing_fn,when_complete){
+start_easing_BANG_ = function(easer,from,to,duration,easing_fn,when_complete){
 switch(arguments.length){
 case 5:
-return start_easer_BANG___5.call(this,easer,from,to,in_ms,easing_fn);
+return start_easing_BANG___5.call(this,easer,from,to,duration,easing_fn);
 case 6:
-return start_easer_BANG___6.call(this,easer,from,to,in_ms,easing_fn,when_complete);
+return start_easing_BANG___6.call(this,easer,from,to,duration,easing_fn,when_complete);
 }
 throw(new Error('Invalid arity: ' + arguments.length));
 };
-start_easer_BANG_.cljs$core$IFn$_invoke$arity$5 = start_easer_BANG___5;
-start_easer_BANG_.cljs$core$IFn$_invoke$arity$6 = start_easer_BANG___6;
-return start_easer_BANG_;
+start_easing_BANG_.cljs$core$IFn$_invoke$arity$5 = start_easing_BANG___5;
+start_easing_BANG_.cljs$core$IFn$_invoke$arity$6 = start_easing_BANG___6;
+return start_easing_BANG_;
 })()
 ;
 freactive.experimental.animation.PI = Math.PI;
