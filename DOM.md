@@ -54,6 +54,29 @@ Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, s
 
 Components are mounted by passing a target node and hiccup vector to the `mount!` function (this will replace the last child of the target node with the mounted node!). A few additional convenience functions are included - `append-child!`, `remove!`, and `listen!` - but it is encouraged to use them sparingly and prefer the declarative hiccup syntax wherever possible.
 
+## Cursors
+
+`cursor`'s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
+
+cursors can be created by passing in a path that would be passed to `get-in` or `assoc-in` to the `cursor` function:
+
+```clojure
+(def my-atom (atom {:a {:b [{:x 0}]}))
+(def ab0 (cursor my-atom [:a :b 0]) ;; -> {:x 0}
+```
+
+Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure)! That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
+
+```clojure
+(def my-atom (atom 0}))
+(def ab0 (cursor my-atom print-number parse-number)
+(println @ab0)
+;; "0"
+(reset! ab0 "1.2)
+(println @my-atom)
+;; 1.2
+```
+
 ## Animations
 
 ### Transitions
@@ -90,17 +113,7 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 **Interupting easings in progress:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled".
 
 
-## Cursors
 
-`cursor`'s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
-
-cursors can be created by passing in a path that would be passed to `get-in` or `assoc-in` to the `cursor` function:
-
-```clojure
-(cursor my-atom [:a :b 0])
-```
-
-Fundamentally, however, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure)! That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
 
 ## Items View
 
