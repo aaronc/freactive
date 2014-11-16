@@ -1,18 +1,19 @@
 # freactive
-*pronounced "f-reactive". Name may be changed. This library should be considered experimental - it has not been widely tested.*
+*pronounced "f-reactive" - name subject to change. This library should be considered experimental - it has not been widely tested.*
 
-freactive is a high-performance, pure [Clojurescript](https://github.com/clojure/clojurescript), declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by work done in [reagent][reagent], [om][om] and [reflex][reflex] (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
+freactive is a high-performance, pure [Clojurescript](https://github.com/clojure/clojurescript), declarative DOM library. It uses [hiccup](https://github.com/weavejester/hiccup)-style syntax and Clojure's built-in deref and atom patterns. It is inspired by [reagent][reagent], [om][om] and [reflex][reflex] (as well as my experience with desktop GUI frameworks such as QML, JavaFX and WPF). **[See it in action!][dom-perf]**
 
 **Goals:**
-* Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious to those familiar with Clojure (inspiration taken from reagent and QML)
+* Provide a **[simple, intuitive API](#hello-world)** that should be almost obvious to those familiar with Clojure (inspiration from [reagent][reagent])
 * Allow for **[high-performance](#performance)** rendering **[good enough for animated graphics][dom-perf]** based on a purely declarative syntax
 * Allow for **reactive binding of any attribute, style property or child node**
-* Allow for **coordinated management of state via [cursors](#cursors)** (inspiration taken from om)
-* Provide a **deeply-integrated [animation](#animations)** framework
+* Allow for **coordinated management of state via [cursors](#cursors)** (inspiration from [om][om])
+* Provide **deeply-integrated [animation](#animations)** support
 * Allow for cursors based on paths as well as **lenses**
 * Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
 * **Minimize unnecessary triggering of update events**
 * Coordinate all updates via **requestAnimationFrame** wherever possible
+* Be easy to [debug](#debugging-reactive-expressions)
 * Be written in **pure Clojurescript**
 * Provide support for older browsers via polyfills (not yet implemented)
 
@@ -77,7 +78,9 @@ All of this is done declaratively with only the [syntax described above](#two-mi
 
 **Here is the source for the example: https://github.com/aaronc/freactive/blob/master/test/freactive/dom_perf.cljs**
 
-This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It does not benchmark updating DOM text nodes or replacing DOM nodes - the two other types of transformations freactive does - additional examples should be created to benchmark these.
+This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It also tests freactive's ability to clean up after itself and create new DOM elements. In the pause between transitions (usually not perceptable for small `n` values), freactive is cleaning up old elements (with attached `rx`'s that need to be deactivated) and creating new DOM elements. If the average frame rate for a given `n` doesn't drop after many transitions, it means that freactive is doing a good job of cleaning up after itself. If you notice a significant drop, please [report](issues) it!
+
+You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
 
 ## Cursors
 
@@ -146,13 +149,27 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 
 **Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
 
+## Configuration of Reactive Change Notifications
+
+TODO
+
+## Debugging Reactive Expressions
+
+Reactive expressions can be hard to debug - sometimes we notice that something should be getting invalidated that isn't or it seems like something is getting updated too often.
+
+The `rx-debug` macro can be placed around the initialization of any `rx`:
+```clojure
+ (rx-debug (rx (str @n)))
+```
+
+and you should seeing verbose debug statements corresponding to:
+* start of dependency capture
+* each dependency capture
+* each invalidation event with a print out of watch keys (note: not all watches aware of this `rx` may be registered - part of freactive's optimizations are smart attaching and removing of watches based on dirty flags)
+
 ## Items View
 
 An experimental `items-view` has been created, but has not been documented yet. The API is also subject to change.
-
-## Configuration of Change Notifications
-
-TODO
 
 ## Contributions & License
 
@@ -162,6 +179,7 @@ Distributed under the Eclipse Public License, either version 1.0 or (at your opt
 
 
 [dom-perf]: http://aaronc.github.io/freactive/dom-perf
+[issues]: https://github.com/aaronc/freactive/issues
 [reagent]: https://github.com/reagent-project/reagent
 [om]: https://github.com/swannodette/om
 [reflex]: https://github.com/lynaghk/reflex
