@@ -62,17 +62,21 @@ If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#
 
 ## Performance
 
-freactive should be able to handle fairly high performance graphics. Rather than trying to compare it to existing client-side frameworks (which isn't always particularly productive), I decided to create an example that would really tax its ability to render. This is to give me (as well as potential library users) an idea of what types of situations it actually can and can't handle on different platforms - which is really what's important rather than can it do thing X, which we may or may not really care about, faster than framework Y.
+freactive should be able to handle fairly high performance graphics.
 
-Basically this example tries to animate points on the screen (defined declaritively using SVG) relative to the current mouse position. It has a complexity factor, `n`, which can be controlled by the `+` and `-` buttons. The number of points is *(2n + 1)<sup>2</sup>*. There are also some transition animations based on [easers](#easers).
+Rather than saying how fast freactive does X compared to framework Y (which isn't always productive), I created an example that would really tax its ability to render. This is to give me (as well as potential library users) an idea of it can and can't handle on different platforms. Isn't that what matters anyway?
 
-When you're observing the example you can view the calculated FPS rate as well as the estimated number of DOM attribute values updated per second. I recommend, trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth
+This example tries to animate points on the screen (SVG circle nodes) relative to the current mouse position. It has a complexity factor, `n`, which can be controlled by the `+` and `-` buttons. The number of points is *(2n + 1)<sup>2</sup>*.
+
+When you're observing the example you can view the calculated FPS rate as well as the estimated number of DOM attributes updated per second. I recommend trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth. Please report any issues you find here so we can make it better!: https://github.com/aaronc/freactive/issues.
 
 Here is the example:
 
-All of this is done declaritively with only the syntax described above and [easers](#easers) and [transitions](#transitions).
+All of this is done declaritively with only the syntax described above, [easers](#easers) and [transitions](#transitions).
 
 Here is the source for the example:
+
+This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It does not benchmark updating DOM text nodes or replacing DOM nodes - the two other types of transformations freactive does - additional examples should be created to benchmark these.
 
 ## Cursors
 
