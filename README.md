@@ -56,7 +56,7 @@ If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#
 
 **The `rx` macro**: The `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like [`cursor`](#cursors)'s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
-**Binding to attributes, style properties and node positions:** Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that site. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated to that DOM site only as often as necessary (coordinated with `requestAnimationFrame`).
+**Binding to attributes, style properties and node positions:** Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that site. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated directly to that DOM site only as often as necessary (coordinated with `requestAnimationFrame`).
 
 **Mounting components:** components are mounted by passing a target node and hiccup vector to the `mount!` function (this will replace the last child of the target node with the mounted node!).
 
@@ -94,10 +94,8 @@ You should be able to see fairly smooth animations with thousands of points (n >
 
 Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure). That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
 
-(CY: NOTE: the following clojure code doesn't compile...)
-
 ```clojure
-(def a (atom 0))
+(def my-atom (atom 0))
 (def a-str (cursor my-atom print-number parse-number))
 ;; @a-str -> "0"
 (reset! ab0 "1.2")
@@ -106,8 +104,6 @@ Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd
 ```
 
 cursors can also be created by passing in a keyword or a key sequence that would be passed to `get-in` or `assoc-in` to the `cursor` function:
-
-(CY: NOTE: in the previous code fragment a was an atom, now a is a cursor which is slightly confusing)
 
 ```clojure
 (def my-atom (atom {:a {:b [{:x 0}]}}))
