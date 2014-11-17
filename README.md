@@ -182,10 +182,6 @@ By creating an `easing-chain`, we can do some more complex things:
 
 **Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
 
-## Configuration of Reactive Change Notifications
-
-TODO
-
 ## Debugging Reactive Expressions
 
 Reactive expressions can be hard to debug - sometimes we notice that something should be getting invalidated that isn't or it seems like something is getting updated too often.
@@ -199,6 +195,32 @@ and you should seeing verbose debug statements corresponding to:
 * start of dependency capture
 * each dependency capture
 * each invalidation event with a print out of watch keys (note: not all watches aware of this `rx` may be registered - part of freactive's optimizations are smart attaching and removing of watches based on dirty flags)
+
+## Configuration of Reactive Change Notifications
+
+### Deciding not to register a reactive dependency
+
+Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` without registering it as a dependency! Or maybe you want to make sure that in library code no surrounding `rx` is calling your function. The `non-reactively` macro (in `freactive.macros`) will take care of this:
+```clojure
+ ;; a is registered as a dependency, but b isn't!
+(rx (+ @a (non-reactively @b)))
+```
+
+### Eagerness and Laziness
+
+**Quick explanation:** A lazy dependency invalidates a parent `rx` whenever it gets invalidated (but it doesn't check to see if its value has really changed). An eager dependency checks to see if it really has changed before notifying its parent. *By default, `rx`'s are lazy and `cursor`'s are eager*. This is because an `rx` is something whose value almost always changes whenever a dependency changes and a `cursor` is usually something that will only change when its portion of a larger state changes (i.e. the path `[:a :b]` in `{:a {:b 1} c: {:d 2}}`). There is also an `eager-rx` and a `lazy-cursor` if you want to invert this default behavior.
+
+**Details:**
+
+*You probably shouldn't need to understand this  to develop most apps, but it will be useful to those trying to maximize performance in complex situations.*
+
+Laziness relates to the `IInvalidates` protocol which freactive introduces. Basically `IInvalidates` defines three protocol methods: `-add-invalidation-watch`, `-remove-invalidation-watch` and `-notify-invalidations-watches`. These take the same parameters as the corresponding `-add-watch`, `-remove-watch`, etc. methods from `IWatchable`. The only difference is that the callback function should take 2 args (instead of 4): `key` and `ref`. When something is invalidated, we are communicating that it's state will probably change, but that we don't know what the new state is yet!
+
+So, if we register an `invalidation-watch` against an `rx`, it will perform lazily - i.e. it will only compute its new state when we `deref` it. If we register a `watch` against it, it will perform eagerly and it will only notify about state changes (to both watches and invalidation watches) if the value has actually change!
+
+So, how do we make an `rx` or `cursor` lazy or eager? Well, it may seem counter-intuitive, but reactives in freactive actually register their own dependencies. Instead of "registering" with the parent, they look for a `*invalidate-rx*` function to be bound in the current context and they they register it either as a watch or invalidation watch. `*invalidate-rx*` actually should be a `fn` with 0, 2 and 4 arity overloads. The 0 arity-overload allows the dependency to take entire control over the invalidation process and the 2 and 4 arities correspond to invalidation watches and watches respectively. Whenever `*invalidate-rx*` is called, it immediately removes the watch on whatever dependency called it (it will be added the next time the `rx` is `deref`ed if it is still in the `rx` scope.) After some benchmarking, this method seemed to be the most efficient general method.
+
+Anyway, because dependencies register themselves, they can decide whether to register themselves lazily or eagerly. It should be noted that a dependency is eager whenever anything registers a `watch` (as opposed to an `invalidation-watch`) against it. We can override a dependency's choice of eagerness or laziness by `deref`ing them within an `eagerly` or `lazily` macro - if you ever should need that: `(eagerly @a)`.
 
 ## Items View
 
