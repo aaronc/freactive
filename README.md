@@ -70,11 +70,11 @@ If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#
 
 freactive should be able to handle fairly high performance graphics.
 
-Rather than saying how fast freactive does X compared to framework Y (which isn't always productive), I created an example that would really tax its ability to render. This is to give me (as well as potential library users) an idea of it can and can't handle on different platforms. Isn't that what matters anyway?
+Rather than saying how fast freactive does X compared to framework Y (which isn't always productive), I created an example that would really tax its ability to render. This is to give me (as well as potential library users) an idea of what it can and can't handle on different platforms.
 
 This example tries to animate points on the screen (SVG circle nodes) relative to the current mouse position. It has a complexity factor, `n`, which can be controlled by the `+` and `-` buttons. The number of points is *(2n + 1)<sup>2</sup>*.
 
-When you're observing the example you can view the calculated FPS rate as well as the estimated number of DOM attributes updated per second. I recommend trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth. Please report any issues you find here so we can make it better!: https://github.com/aaronc/freactive/issues.
+When you're observing the example, you can view the calculated FPS rate as well as the estimated number of DOM attributes updated per second. I recommend trying different values of `n` in different browsers (even try your phone!). Notice at which number of points the animation is and isn't smooth. Please report any issues you find here so we can make it better!: https://github.com/aaronc/freactive/issues.
 
 **Here is the example: http://aaronc.github.io/freactive/dom-perf**
 
@@ -86,7 +86,7 @@ This example benchmarks performance of reactive `atom`, `rx` and `easer` updates
 
 You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
 
-*(Okay... you may be wondering if I did a Reagent comparsion because the code is so similar. [Here it is](http://aaronc.github.io/freactive-reagent-comparison/). Reagent and React are quite fast! freactive does seem to scale better for higher values of `n`. It also has built-in animations.)*
+*(Okay... you may be wondering if I did a Reagent comparsion because the code is so similar. [Here it is](http://aaronc.github.io/freactive-reagent-comparison/). Reagent and React are quite fast! freactive does seem to scale better for higher values of `n`. freactive also provides built-in animations.)*
 
 ## Cursors
 
