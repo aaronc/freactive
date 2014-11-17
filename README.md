@@ -30,7 +30,7 @@ To try this quickly, you can install the [austin](https://github.com/cemerick/au
 ```clojure
 (ns example1
   (:refer-clojure :exclude [atom])
-  (:require [freactive.core :refer [atom]]
+  (:require [freactive.core :refer [atom cursor]]
             [freactive.dom :as dom])
   (:require-macros [freactive.macros :refer [rx]]))
     
@@ -38,7 +38,7 @@ To try this quickly, you can install the [austin](https://github.com/cemerick/au
 
 (defn view []
   [:div
-    {:width "100%" :height "100%"
+    {:width "100%" :height "100%" :style {:border "1px solid black"}
      :on-mousemove (fn [e] (reset! mouse-pos [(.-clientX e) (.-clientY e)]))}
     [:h1 "Hello World!"]
     [:p "Your mouse is at: " (rx (str @mouse-pos))]])
@@ -93,10 +93,9 @@ You should be able to see fairly smooth animations with thousands of points (n >
 Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure). That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
 
 ```clojure
-(def my-atom (atom 0}))
-(def ab0 (cursor my-atom print-number parse-number)
-(println @ab0)
-;; "0"
+(def a (atom 0))
+(def a-str (cursor my-atom print-number parse-number)
+;; @a-str -> "0"
 (reset! ab0 "1.2")
 (println @my-atom)
 ;; 1.2
@@ -105,8 +104,8 @@ Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd
 cursors can also be created by passing in a keyword or a key sequence that would be passed to `get-in` or `assoc-in` to the `cursor` function:
 
 ```clojure
-(def my-atom (atom {:a {:b [{:x 0}]}))
-(def ab0 (cursor my-atom [:a :b 0]) ;; -> {:x 0}
+(def my-atom (atom {:a {:b [{:x 0}]}}))
+(def ab0 (cursor my-atom [:a :b 0])) ;; @ab0 -> {:x 0}
 (def a (cursor my-atom :a) ;; a keyword can be used as well
 ```
 
