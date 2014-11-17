@@ -57,11 +57,6 @@
         x (/ i n)]
     (- 1 (.pow js/Math (- 1 x) 2))))
 
-(defn- btn [x y fill text f]
-  [:svg/g {:on-mousedown f}
-   [:svg/text {:x x :y (+ 4 y) :text-anchor "middle"} text]
-   [:svg/circle {:fill fill :r 8 :cx x :cy y}]])
-
 (defn view []
   [:div
    {:width "100%" :height "100%"}
