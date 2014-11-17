@@ -86,6 +86,8 @@ This example benchmarks performance of reactive `atom`, `rx` and `easer` updates
 
 You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
 
+*(Okay... you may be wondering if I did a Reagent comparsion because the code is so similar. [Here it is](http://aaronc.github.io/freactive-reagent-comparison/). Reagent and React are quite fast! freactive does seem to scale better for higher values of `n`. It also has built-in animations.)*
+
 ## Cursors
 
 `cursor`'s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
