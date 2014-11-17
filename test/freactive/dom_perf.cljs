@@ -118,6 +118,5 @@
 
 (dom/mount! (.getElementById js/document "root") (view))
 
-;;(fw/watch-and-reload)
-
+(fw/watch-and-reload)
 
