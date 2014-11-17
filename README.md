@@ -133,7 +133,7 @@ The framework understands the `:on-show` and `:on-hide` transitions. These trans
 
 *An API that wraps `easer` functionality in a convenient `animate!` function that takes style and attribute properties is planned.*
 
-`easer`'s are the basis of freactive animations. An easer is a specialized type of deref value that is updated at every animation frame based on an easing function and target and duration parameters. Essentially it provides "tween" values. Easers are defined with the `easer` function which takes an initial value. They can be transitioned to another value using the `start-easing!` function which takes the following parameters: `from` (optional), `to`, `duration`, `easing-fn` and a `on-complete` callback.
+`easer`'s are the basis of freactive animations. An easer is a specialized type of `deref` value that is updated at every animation frame based on an easing function and target and duration parameters. Essentially it provides "tween" values. Easers are defined with the `easer` function which takes an initial value. They can be transitioned to another value using the `start-easing!` function which takes the following parameters: `from` (optional), `to`, `duration`, `easing-fn` and a `on-complete` callback.
 
 An easer is designed to be used as a dependency in a reactive computation, like this:
 
@@ -150,7 +150,7 @@ An easer is designed to be used as a dependency in a reactive computation, like 
 
 **Easing functions:** an easing function, `f`, is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(= (f 1) 1)`. Basically the easing function is supposed to smoothly transition from `0` to `1`. The easer itself takes care of properly scaling the values based on `duration` and `from` and `to` values. A selection of easing functions from Dan Kersten's [ominate](https://github.com/danielytics/ominate) (thank you!) is currently included in this library, but this is subject to change.
 
-**Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you, don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
+**Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
 
 **Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
 
