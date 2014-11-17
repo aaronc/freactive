@@ -96,6 +96,15 @@ Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd
 
 ```clojure
 (def my-atom (atom 0))
+(defn print-number [my-atom-state]
+  ;; print the number with some formmating
+)
+(defn parse-number [my-atom-state new-cursor-state]
+  ;; parse new-cursor-state into a number and return it
+  ;; if parsing fails you can just return my-atom-state
+  ;; to cancel the update or throw a validation
+  ;; exception
+)
 (def a-str (cursor my-atom print-number parse-number))
 ;; @a-str -> "0"
 (reset! a-str "1.2")
