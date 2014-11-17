@@ -240,8 +240,11 @@ Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` wi
 
 **Contributions (including pull requests) are welcome!**
 
-Distributed under the Eclipse Public License, either version 1.0 or (at your option) any later version.
+If you would like to contribute, here are things that would be appreciated:
 
+* Good polyfills for things like `requestAnimationFrame`, `addEventListener`, etc. to support older browsers where feasible
+
+Distributed under the Eclipse Public License, either version 1.0 or (at your option) any later version.
 
 [dom-perf]: http://aaronc.github.io/freactive/dom-perf
 [issues]: https://github.com/aaronc/freactive/issues
