@@ -54,9 +54,9 @@ If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#
 
 **Reactive atoms:** In freactive, instead of Clojure's atom, you use freactive's reactive `atom` which allows `deref`'s to be captured by an enclosing reactive expression - an `rx` in this case. (This is exactly the same idea as in [reagent][reagent] and I believe it originally came from [reflex][reflex]).
 
-**The `rx` macro**: the `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like [`cursor`](#cursors)'s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
+**The `rx` macro**: The `rx` macro returns an `IDeref` instance (can be `deref`'ed with `@`) whose value is the body of the expression. This value gets updated when (and only when) one of the dependencies captured in its body (reactive `atom`s, other `rx`'s and also things like [`cursor`](#cursors)'s) gets "invalidated". (Pains were taken to make this invalidation process as efficient and configurable as possible.)
 
-**Binding to attributes, style properties and node positions:** Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that site. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated to directly to that DOM directly site only as often as necessary (coordinated with `requestAnimationFrame`).
+**Binding to attributes, style properties and node positions:** Passing an `rx` or reactive `atom` (or any `IDeref` instance) as an attribute, style property or child of a DOM element represented via a hiccup vector binds it to that site. freactive makes sure that any updates to `rx`'s or `atom`'s are propogated to that DOM site only as often as necessary (coordinated with `requestAnimationFrame`).
 
 **Mounting components:** components are mounted by passing a target node and hiccup vector to the `mount!` function (this will replace the last child of the target node with the mounted node!).
 
@@ -64,7 +64,7 @@ If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#
 
 **Helper functions:** a few additional helper functions such as - `append-child!`, `remove!`, and `listen!` - are included, but it is encouraged to use them sparingly and prefer the declarative hiccup syntax wherever possible.
 
-*Note: `atom` and `rx` are also available for Java Clojure and can be used with JavaFX via [fx-clj](https://github.com/aaronc/fx-clj) using a similar API. Originally this library was conceived as just a clj/cljs `atom` and `rx` llibrary. After working with it in fx-clj, I wanted to do the same thing for the DOM and voila. Eventually a "core" library containing just the reactive data types will be split off. The Java version of core.clj is slightly out of sync with core.cljs.*
+*Note: `atom` and `rx` are also available for Java Clojure and can be used with JavaFX via [fx-clj](https://github.com/aaronc/fx-clj) using a similar API. Originally this library was conceived as just a clj/cljs `atom` and `rx` library. After working with it in fx-clj, I wanted to do the same thing for the DOM and voila. Eventually a "core" library containing just the reactive data types will be split off. The Java version of core.clj is slightly out of sync with core.cljs.*
 
 ## Performance
 
@@ -84,15 +84,17 @@ All of this is done declaratively with only the [syntax described above](#two-mi
 
 This example benchmarks performance of reactive `atom`, `rx` and `easer` updates, freactive's rendering loop and applying those updates to DOM attributes and style properties. It also tests freactive's ability to clean up after itself and create new DOM elements. In the pause between transitions (usually not perceptable for small `n` values), freactive is cleaning up old elements (with attached `rx`'s that need to be deactivated) and creating new DOM elements. If the average frame rate for a given `n` doesn't drop after many transitions, it means that freactive is doing a good job of cleaning up after itself. If you notice a significant drop, please [report](issues) it!
 
-You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers even though the frame rate will start drop significantly. The number of attrs updated calculation is only valid when either the mouse is moving or a transition is happening.
+You should be able to see fairly smooth animations with thousands of points (n >= 16) on most modern computers even though the frame rate will start drop significantly. The "number of attrs updated" calculation is only valid when either the mouse is moving or a transition is happening.
 
-*(Okay... you may be wondering if I did a Reagent comparsion because the code is so similar. [Here it is](http://aaronc.github.io/freactive-reagent-comparison/). Reagent and React are quite fast! freactive does seem to scale better for higher values of `n`. freactive also provides built-in animations.)*
+*(Okay... you may be wondering if I did a Reagent comparsion because the code is so similar. [Here it is](http://aaronc.github.io/freactive-reagent-comparison/). Reagent and React are quite fast! but freactive does seem to scale better for higher values of `n`. freactive also provides built-in animations.)*
 
 ## Cursors
 
 `cursor`'s in freactive behave and look exactly like `atom`'s. You can use Clojurescript's built-in `swap!` and `reset!` functions on them and state will be propogated back to their parents. By default, change notifications from the parent propagate to the cursor when and only when they affect the state of the cursor.
 
 Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd/lens-from-the-ground-up-in-clojure). That means that you can pass any arbitrary getter (of the form `(fn [parent-state])`) and setter (of the form `(fn [parent-state cursor-state])`) and the cursor will handle it.
+
+(CY: NOTE: the following clojure code doesn't compile...)
 
 ```clojure
 (def a (atom 0))
@@ -104,6 +106,8 @@ Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd
 ```
 
 cursors can also be created by passing in a keyword or a key sequence that would be passed to `get-in` or `assoc-in` to the `cursor` function:
+
+(CY: NOTE: in the previous code fragment a was an atom, now a is a cursor which is slightly confusing)
 
 ```clojure
 (def my-atom (atom {:a {:b [{:x 0}]}}))
