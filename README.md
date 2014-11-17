@@ -224,6 +224,10 @@ So, how do we make an `rx` or `cursor` lazy or eager? Well, it may seem counter-
 
 Anyway, because dependencies register themselves, they can decide whether to register themselves lazily or eagerly. It should be noted that a dependency is eager whenever anything registers a `watch` (as opposed to an `invalidation-watch`) against it. We can override a dependency's choice of eagerness or laziness by `deref`ing them within an `eagerly` or `lazily` macro - if you ever should need that: `(eagerly @a)`.
 
+**Propogation of changes to the DOM:**
+
+Attribute and node change listeners always try to register an `invalidation-watch` first and when not available (for atoms for instance) a `watch`. Whenenver they receive a change notification, they remove the watch, queue an update to the render queue, and add the watch again right before the change is applied (when `deref` is called).
+
 ### Deciding not to register a reactive dependency
 
 Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` without registering it as a dependency! Or maybe you want to make sure that in library code, no surrounding `rx` is calling your function. The `non-reactively` macro (in `freactive.macros`) will take care of this:
