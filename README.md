@@ -182,6 +182,12 @@ By creating an `easing-chain`, we can do some more complex things:
 
 **Interupting in progress easings:** if `start-easing!` is called on an easer that is already in an easing transition that hasn't completed, it is equivalent to cancelling the current easing and sending the easer in a different direction starting from the current value. If there was on `on-complete` callback to the easing that was in progress it won't be called and is effectively "cancelled". (This behavior can be observed in the [performance example](#performance) if you click `+` or `-` while a transition is happening.)
 
+## Items View
+
+An experimental `items-view` has been created, but has not been documented yet. The API is also subject to change.
+
+The idea of the `items-view` is to provide a generic container for large collections of objects that send notifications about exactly which items changed so that diffing is not neeeded.
+
 ## Debugging Reactive Expressions
 
 Reactive expressions can be hard to debug - sometimes we notice that something should be getting invalidated that isn't or it seems like something is getting updated too often.
@@ -225,10 +231,6 @@ Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` wi
  ;; a is registered as a dependency, but b isn't!
 (rx (+ @a (non-reactively @b)))
 ```
-
-## Items View
-
-An experimental `items-view` has been created, but has not been documented yet. The API is also subject to change.
 
 ## Contributions & License
 
