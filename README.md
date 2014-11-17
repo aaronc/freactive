@@ -198,21 +198,17 @@ and you should seeing verbose debug statements corresponding to:
 
 ## Configuration of Reactive Change Notifications
 
-### Deciding not to register a reactive dependency
+### Differences between atoms and reactive atoms
 
-Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` without registering it as a dependency! Or maybe you want to make sure that in library code no surrounding `rx` is calling your function. The `non-reactively` macro (in `freactive.macros`) will take care of this:
-```clojure
- ;; a is registered as a dependency, but b isn't!
-(rx (+ @a (non-reactively @b)))
-```
+In addition to their ability to register themselves as a dependency to an `rx`, reactive `atom`'s have one additional difference from regular `atom`s. Reactive `atom`s do an equality check (using `=`) before completing a change and notifying watches. i.e: they will only report a change when the value actually has changed.
 
 ### Eagerness and Laziness
 
-**Quick explanation:** A lazy dependency invalidates a parent `rx` whenever it gets invalidated (but it doesn't check to see if its value has really changed). An eager dependency checks to see if it really has changed before notifying its parent. *By default, `rx`'s are lazy and `cursor`'s are eager*. This is because an `rx` is something whose value almost always changes whenever a dependency changes and a `cursor` is usually something that will only change when its portion of a larger state changes (i.e. the path `[:a :b]` in `{:a {:b 1} c: {:d 2}}`). There is also an `eager-rx` and a `lazy-cursor` if you want to invert this default behavior.
+A lazy dependency invalidates a parent `rx` whenever it gets invalidated (but it doesn't check to see if its value has really changed). An eager dependency checks to see if it really has changed before notifying its parent. *By default, `rx`'s are lazy and `cursor`'s are eager*. This is because an `rx` is something whose value almost always changes whenever a dependency changes and a `cursor` is usually something that will only change when its portion of a larger state changes (i.e. the path `[:a :b]` in `{:a {:b 1} c: {:d 2}}`). There is also an `eager-rx` and a `lazy-cursor` if you want to invert this default behavior.
 
 **Details:**
 
-*You probably shouldn't need to understand this  to develop most apps, but it will be useful to those trying to maximize performance in complex situations.*
+*You probably shouldn't need to understand this  to develop most apps, but it may be useful to those trying to maximize performance in complex situations.*
 
 Laziness relates to the `IInvalidates` protocol which freactive introduces. Basically `IInvalidates` defines three protocol methods: `-add-invalidation-watch`, `-remove-invalidation-watch` and `-notify-invalidations-watches`. These take the same parameters as the corresponding `-add-watch`, `-remove-watch`, etc. methods from `IWatchable`. The only difference is that the callback function should take 2 args (instead of 4): `key` and `ref`. When something is invalidated, we are communicating that it's state will probably change, but that we don't know what the new state is yet!
 
@@ -221,6 +217,14 @@ So, if we register an `invalidation-watch` against an `rx`, it will perform lazi
 So, how do we make an `rx` or `cursor` lazy or eager? Well, it may seem counter-intuitive, but reactives in freactive actually register their own dependencies. Instead of "registering" with the parent, they look for a `*invalidate-rx*` function to be bound in the current context and they they register it either as a watch or invalidation watch. `*invalidate-rx*` actually should be a `fn` with 0, 2 and 4 arity overloads. The 0 arity-overload allows the dependency to take entire control over the invalidation process and the 2 and 4 arities correspond to invalidation watches and watches respectively. Whenever `*invalidate-rx*` is called, it immediately removes the watch on whatever dependency called it (it will be added the next time the `rx` is `deref`ed if it is still in the `rx` scope.) After some benchmarking, this method seemed to be the most efficient general method.
 
 Anyway, because dependencies register themselves, they can decide whether to register themselves lazily or eagerly. It should be noted that a dependency is eager whenever anything registers a `watch` (as opposed to an `invalidation-watch`) against it. We can override a dependency's choice of eagerness or laziness by `deref`ing them within an `eagerly` or `lazily` macro - if you ever should need that: `(eagerly @a)`.
+
+### Deciding not to register a reactive dependency
+
+Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` without registering it as a dependency! Or maybe you want to make sure that in library code, no surrounding `rx` is calling your function. The `non-reactively` macro (in `freactive.macros`) will take care of this:
+```clojure
+ ;; a is registered as a dependency, but b isn't!
+(rx (+ @a (non-reactively @b)))
+```
 
 ## Items View
 
