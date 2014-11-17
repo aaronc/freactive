@@ -204,7 +204,7 @@ and you should seeing verbose debug statements corresponding to:
 
 ## Reactive Change Notifications In-depth
 
-### Differences between atoms and reactive atoms
+### Differences between regular atoms and reactive atoms
 
 In addition to their ability to register themselves as a dependency to an `rx`, reactive `atom`'s have one additional difference from regular `atom`s. Reactive `atom`s do an equality check (using `=`) before completing a change and notifying watches. i.e: they will only report a change when the value actually has changed.
 
@@ -226,7 +226,7 @@ Anyway, because dependencies register themselves, they can decide whether to reg
 
 **Propogation of changes to the DOM:**
 
-Attribute and node change listeners always try to register an `invalidation-watch` first and when not available (for atoms for instance) a `watch`. Whenenver they receive a change notification, they remove the watch, queue an update to the render queue, and add the watch again right before the change is applied (when `deref` is called).
+Attribute and node change listeners always try to register an `invalidation-watch` first and when not available (for atoms for instance) a `watch`. Whenenver they receive a change notification, they remove the watch, queue an update to the render queue, and add the watch again right before the update is applied (when `deref` is called).
 
 ### Deciding not to register a reactive dependency
 
