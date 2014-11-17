@@ -98,7 +98,7 @@ Fundamentally, cursors are based on [lenses](https://speakerdeck.com/markhibberd
 (def my-atom (atom 0))
 (def a-str (cursor my-atom print-number parse-number))
 ;; @a-str -> "0"
-(reset! ab0 "1.2")
+(reset! a-str "1.2")
 (println @my-atom)
 ;; 1.2
 ```
