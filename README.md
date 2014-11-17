@@ -138,14 +138,33 @@ The framework understands the `:on-show` and `:on-hide` transitions. These trans
 An easer is designed to be used as a dependency in a reactive computation, like this:
 
 ```clojure
-(def ease-factor (easer 0.0))
+(def ease-factor (animation/easer 0.0))
 (defn my-view []
-  (with-transitions
-    [:h1 {:opacity (rx (* 100 @ease-factor))
-          :font-size (rx (* 16 @ease-fator))} "Hello World!"]
+  (dom/with-transitions
+    [:h1 {:style
+          {:font-size (rx (str (* 16 @ease-factor) "px"))}} "Hello World!"]
     {:on-show (fn [node callback]
-                (start-easing! easer 0 1.0 1000
-                                     easing/quad-in on-complete)}))
+                (animation/start-easing! ease-factor 0 1.0 1000
+                                         animation/quad-in-out callback))}))
+```
+
+By creating an `easing-chain`, we can do some more complex things:
+```clojure
+(def ease1 (animation/easer 0.0))
+(def ease2 (animation/easer 1.0))
+(def complex-transition
+  (animation/easing-chain
+    [[ease1 0.0 1.0 1000 animation/quad-in-out]
+     [ease2 1.0 0.0 500 animation/quad-out]
+     [ease2 0.0 1.0 150 animation/quint-in]]))
+(defn my-view []
+  (dom/with-transitions
+    [:h1 {:style
+          {:font-size (rx (str (* 16 @ease1) "px"))
+           :opacity (rx (str @ease2))}}
+     "Hello World!"]
+    {:on-show
+     (fn [node callback] (complex-transition callback))}))
 ```
 
 **Easing functions:** an easing function, `f`, is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(= (f 1) 1)`. Basically the easing function is supposed to smoothly transition from `0` to `1`. The easer itself takes care of properly scaling the values based on `duration` and `from` and `to` values. A selection of easing functions from Dan Kersten's [ominate](https://github.com/danielytics/ominate) (thank you!) is currently included in this library, but this is subject to change.
