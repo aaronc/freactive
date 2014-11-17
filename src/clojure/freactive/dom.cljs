@@ -291,7 +291,7 @@
                nil (.createElement js/document tag)
                (assert false (str "Don't know how to handle tag ns " tag-ns)))]
     (when id (set! (.-id node) id))
-    (when class (set! (.-className node) class))
+    (when class (set! (.-className node) (.replace class "." " ")))
     node))
 
 ;; ## Core DOM Manipulation Methods
