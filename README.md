@@ -20,8 +20,9 @@ freactive is a high-performance, pure [Clojurescript](https://github.com/clojure
 ## Two-minute tutorial
 
 **[Leiningen](http://leiningen.org) dependency info:**
-
-[![Clojars Project](http://clojars.org/freactive/latest-version.svg)](http://clojars.org/freactive)
+```clojure
+[freactive "0.1.0"]
+```
 
 <a name="hello-world"></a>**Hello World example:**
 
