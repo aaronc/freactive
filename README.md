@@ -196,7 +196,7 @@ and you should seeing verbose debug statements corresponding to:
 * each dependency capture
 * each invalidation event with a print out of watch keys (note: not all watches aware of this `rx` may be registered - part of freactive's optimizations are smart attaching and removing of watches based on dirty flags)
 
-## Configuration of Reactive Change Notifications
+## Reactive Change Notifications In-depth
 
 ### Differences between atoms and reactive atoms
 
