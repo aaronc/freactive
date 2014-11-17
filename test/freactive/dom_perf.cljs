@@ -57,6 +57,14 @@
         x (/ i n)]
     (- 1 (.pow js/Math (- 1 x) 2))))
 
+(defn- jitter [easer cb]
+  (let [value (- 1.0 (* 0.01 (rand)))]
+    ((animation/easing-chain
+       [[easer value 50 animation/quint-out]
+        [easer 1.0 50 animation/quint-in]
+        [easer value 50 animation/quint-out]
+        [easer 1.0 50 animation/quint-out]]) cb)))
+
 (defn view []
   [:div
    {:width "100%" :height "100%"}
@@ -85,36 +93,45 @@
        ", mouse at "
        (rx (str @mouse-x ", " @mouse-y))
       ". "]])]
-   [:svg/svg
-    {:width   "100%" :height "100%"
-     :style   {:position "absolute" :left 0 :top "20px"}
-     :viewBox (rx (str "0 20 " @width " " @height))}
-    (circle mouse-x mouse-y)
-    (let [ease-x (animation/easer 0.0)
-          ease-y (animation/easer 0.0)]
-      (rx (let [n* @n
-                spacer (partial spacing-factor n*)
-                offsets (map spacer (range n*))
-                lefts (vec (for [x offsets] (rx (* x @mouse-x @ease-x))))
-                rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @ease-x))))))
-                tops (vec (for [y offsets] (rx (* y @mouse-y @ease-y))))
-                bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @ease-y))))))]
-            (dom/with-transitions
-              [:svg/g
-               (for [i (range n*)] (circle (nth lefts i) mouse-y))
-               (for [i (range n*)] (circle (nth rights i) mouse-y))
-               (for [j (range n*)] (circle mouse-x (nth tops j)))
-               (for [j (range n*)] (circle mouse-x (nth bottoms j)))
-               (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
-               (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
-               (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
-               (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
-              {:on-show (fn [x cb]
-                          (animation/start-easing! ease-x 0.0 1.0 1000 animation/quad-in cb)
-                          (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out cb))
-               :on-hide (fn [x cb]
-                          (animation/start-easing! ease-x 1.0 0.0 1000 animation/quad-out cb)
-                          (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))}))))]])
+   (let [ease-x (animation/easer 0.0)
+         ease-y (animation/easer 0.0)
+         graph-state (atom nil)]
+     [:div
+      {:width "100%" :height "100%"
+       :on-mousedown (fn [_] (reset! graph-state "jitter"))}
+      [:svg/svg
+       {:width   "100%" :height "100%"
+        :style   {:position "absolute" :left 0 :top "20px"}
+        :viewBox (rx (str "0 20 " @width " " @height))}
+       (circle mouse-x mouse-y)
+       (rx (let [n* @n
+                 spacer (partial spacing-factor n*)
+                 offsets (map spacer (range n*))
+                 lefts (vec (for [x offsets] (rx (* x @mouse-x @ease-x))))
+                 rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @ease-x))))))
+                 tops (vec (for [y offsets] (rx (* y @mouse-y @ease-y))))
+                 bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @ease-y))))))]
+             (dom/with-transitions
+               [:svg/g {:data-state graph-state}
+                (for [i (range n*)] (circle (nth lefts i) mouse-y))
+                (for [i (range n*)] (circle (nth rights i) mouse-y))
+                (for [j (range n*)] (circle mouse-x (nth tops j)))
+                (for [j (range n*)] (circle mouse-x (nth bottoms j)))
+                (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
+                (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
+                (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
+                (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
+               {:on-show (fn [x cb]
+                           (animation/start-easing! ease-x 0.0 1.0 1000
+                                                    animation/quad-in nil)
+                           (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out cb))
+                :on-jitter (fn [x cb] (jitter ease-x nil) (jitter ease-y
+                                                                  (fn []
+                                                                    (reset! graph-state nil))))
+                :on-hide (fn [x cb]
+                           (animation/start-easing! ease-x 1.0 0.0 1000
+                                                    animation/quad-out nil)
+                           (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))})))]])])
 
 (dom/mount! (.getElementById js/document "root") (view))
 

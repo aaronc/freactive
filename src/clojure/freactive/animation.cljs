@@ -62,7 +62,6 @@
                       (do
                         (remove-watch dom/frame-time easer)
                         (when-let [cb (.-on-complete easer)]
-                          (println "callback" cb)
                           (set! (.-on-complete easer) nil)
                           (cb)))))))
      easer)))
@@ -70,9 +69,7 @@
 (defn easing-chain [easings]
   (if-let [easing-params (first easings)]
     (let [next-easing (easing-chain (rest easings))]
-      (println "params" easing-params)
       (fn [callback]
-        (println "easing" easing-params)
         (apply start-easing!
                (conj easing-params (fn [] (next-easing callback))))))
     (fn [callback]

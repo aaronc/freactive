@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [atom])
   (:require
     [freactive.core :refer [atom]]
-    [freactive.experimental.dom :as dom]
+    [freactive.dom :as dom]
     [freactive.experimental.observable-collection
      :refer [observable-collection observe-changes transact!]])
   (:require-macros [freactive.macros :refer [rx]]))

@@ -40,7 +40,6 @@
 
 (defn- init-element-state! [dom-node element-spec]
   (let [state (ElementState. false element-spec {})]
-    ;;(println "init state" (.-element-spec state))
     (set! element-state-lookup (assoc element-state-lookup dom-node state))
     state))
 
@@ -70,13 +69,13 @@
 (defn- dispose-node
   ([dom-node]
    (dispose-node dom-node (get-element-state dom-node)))
-  ([dom-node state]
-   ;(println "diposing" dom-node state)
+  ([child-key state]
    (when state
      (set! (.-disposed state) true)
-     (js-delete element-state-lookup dom-node)
-     (doseq [[child state] (.-childstates state)]
-       (dispose-node child state)))))
+     (when-not (string? child-key)
+       (js-delete element-state-lookup child-key)
+       (doseq [[child state] (.-childstates state)]
+         (dispose-node child state))))))
 
 (defn- remove-dom-node [dom-node]
   (let [state (aget element-state-lookup dom-node)]
@@ -107,6 +106,11 @@
   (let [spec (get-element-spec x)]
     (when-not (string? spec)
       (get (meta spec) transition-name))))
+
+(defn- exec-transition [node transition-name callback]
+  (if-let [transition (get-transition node transition-name)]
+    (transition node callback)
+    (when callback (callback))))
 
 (defn- chain-transition [elem-spec transition-name transition-fn chain-fn]
   (if (satisfies? IDeref elem-spec)
@@ -188,9 +192,13 @@
   (let [attr-name (name attr-name)]
     (.setAttribute elem attr-name attr-value)))
 
-(defn- on-value-ref-invalidated* [set-fn element attr-name ref node-state]
+(defn- on-value-ref-invalidated* [set-fn element state-prefix attr-name ref node-state]
   (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
-    (let [f (fn on-value-ref-invalidated
+    (let [attr-state #js {:disposed false}
+          key [element attr-name]
+          f (fn on-value-ref-invalidated
+              ([]
+               (on-value-ref-invalidated key ref))
               ([key ref _ _]
                (on-value-ref-invalidated key ref))
               ([key ref]
@@ -198,25 +206,59 @@
                (remove-watch* ref key)
                (queue-animation
                  (fn [_]
-                   (when-not (.-disposed node-state)
+                   (when-not (.-disposed attr-state)
                      (add-watch* ref key on-value-ref-invalidated)
                      (set-fn element attr-name (non-reactively @ref)))
-                   )
-                 )
+                   ))
                ;(when (.-parentNode element)
                ;  (add-watch* ref key on-value-ref-invalidated)
                ;  (set-fn element attr-name @ref))
                ))]
-      (add-watch* ref [element attr-name] f)))
+      (set! (.-invalidate attr-state) f)
+      (set! (.-childstates node-state)
+            (assoc (.-childstates node-state) (str state-prefix attr-name)
+                                              attr-state))
+      (add-watch* ref key f)
+      ))
   (set-fn element attr-name @ref))
 
 (defn bind-style-prop! [element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
-    (on-value-ref-invalidated* set-style-prop! element attr-name attr-value node-state)
+    (on-value-ref-invalidated* set-style-prop! element "style." attr-name attr-value node-state)
     (set-style-prop! element attr-name attr-value)))
 
 (defn listen! [element evt-name handler]
   (.addEventListener element evt-name handler))
+
+(defn- do-set-data-state! [element state]
+  (set-attr! element "data-state" state))
+
+(defn get-data-state [element]
+  (.getAttribute element "data-state"))
+
+(defn- enter-data-state! [element state old-state]
+  (do-set-data-state! element state)
+  (when-let [enter-transition (get-transition element (keyword (str "on-" state)))]
+    (enter-transition element nil old-state)))
+
+(defn set-data-state!
+  ([element _ state] (set-data-state! element state))
+  ([element state]
+    (let [cur-state (get-data-state element)]
+      (when-not (or  (= cur-state state)
+                  (= cur-state "show") (= cur-state "hide"))
+        (let [leave-transition (get-transition element (keyword (str "leave-" cur-state)))]
+          (if leave-transition
+            (leave-transition element
+                              (fn [] (enter-data-state! element state cur-state))
+                              state)
+            (enter-data-state! element state cur-state)))))))
+
+(defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
+  (if (satisfies? cljs.core/IDeref attr-value)
+        (on-value-ref-invalidated* set-fn element "attr." attr-name
+                                   attr-value node-state)
+        (set-fn element attr-name attr-value)))
 
 (defn bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
@@ -227,13 +269,14 @@
         (doseq [[p v] attr-value]
           (bind-style-prop! element p v node-state)))
 
-      (= [\o \n \-] (take 3 attr-name))
+      (= "data-state" attr-name)
+      (bind-prop-attr! set-data-state! element attr-name attr-value node-state)
+
+      (= 0 (.indexOf attr-name "on-"))
       (listen! element (.substring attr-name 3) attr-value)
 
       :default
-      (if (satisfies? cljs.core/IDeref attr-value)
-        (on-value-ref-invalidated* set-attr! element attr-name attr-value node-state)
-        (set-attr! element attr-name attr-value)))))
+      (bind-prop-attr! set-attr! element attr-name attr-value node-state))))
 
 ;; From hiccup.compiler:
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
@@ -261,7 +304,6 @@
     (if (and
           (string? new-virtual-dom)
           (= (.-nodeType cur-dom-node) 3))
-
       (do
         (set! (.-textContent cur-dom-node) new-virtual-dom)
         (reset-element-spec! cur-dom-node new-elem-spec)
@@ -282,13 +324,11 @@
     new-elem))
 
 (defn- replace-or-append-child [parent new-elem cur-elem]
-  ;(println "replacing" cur-elem new-elem)
   (let [new-elem
         (if cur-elem
           (replace-child parent new-elem cur-elem)
           (append-child parent new-elem))]
     (when-let [parent-state (get-element-state parent)]
-      ;(println "parent-state" parent parent-state)
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state new-elem state)))
@@ -299,7 +339,11 @@
     (let [show (get-transition new-elem :on-show)
           new-elem (replace-or-append-child parent new-elem cur-elem)]
       (when show
-        (show new-elem nil)
+        (do-set-data-state! new-elem "show")
+        (show new-elem (fn []
+                         (do-set-data-state! new-elem "")
+                         (when-let [attr-state (aget (.-childstates (get-element-state parent)) "attr.data-state")]
+                           ((.-invalidate attr-state)))))
         new-elem)
       new-elem)))
 
@@ -321,17 +365,20 @@
           (.removeChild dom-node last-child)
           (recur))))))
 
-
-(defn- exec-transition [node transition-name callback]
-  (if-let [transition (get-transition node transition-name)]
-    (transition node callback)
-    (when callback (callback))))
-
 (defn- hide-node [node callback]
   (exec-transition node :on-hide callback))
 
-(defn- show-node [node callback]
-  (exec-transition node :on-show callback))
+(defn- show-node [new-elem]
+  (let [show (get-transition new-elem :on-show) ]
+      (when show
+        (do-set-data-state! new-elem "show")
+        (show new-elem (fn []
+                         (do-set-data-state! new-elem "")
+                         (when-let [attr-state
+                                    (get (.-childstates  (get-element-state new-elem)) "attr.data-state")]
+                           (.invalidate attr-state))))
+        new-elem)
+      new-elem))
 
 ;; Reactive Element Handling
 
@@ -359,11 +406,10 @@
                             (set! (.-updating state) false)
                             (when (.-dirty state)
                               (queue-animation (.-animate state)))
-                            (show-node new-node nil)))
+                            (show-node new-node)))
 
           animate
           (fn animate [x]
-            ;(println "animating")
             (if (.-disposed state)
               (remove! (.-cur-element state))
               (do
@@ -372,30 +418,20 @@
                   (when (not= (get-virtual-dom cur) (get-virtual-dom new-elem))
                     (let [hide (get-transition cur :on-hide)]
                       (if hide
-                        (hide cur
-                              (fn []
-                                 (if (.-disposed state)
-                                   (do
-                                     (remove-dom-node cur)
-                                     (set! (.-updating cur) false))
-                                   (let [new-elem (if (.-dirty state)
-                                                    (get-new-elem)
-                                                    new-elem)]
-                                     (show-new-elem new-elem cur)))))
+                        (do
+                          (do-set-data-state! cur "hide")
+                          (hide cur
+                                (fn []
+                                  (if (.-disposed state)
+                                    (do
+                                      (remove-dom-node cur)
+                                      (set! (.-updating cur) false))
+                                    (let [new-elem (if (.-dirty state)
+                                                     (get-new-elem)
+                                                     new-elem)]
+                                      (show-new-elem new-elem cur))))))
                         (show-new-elem new-elem cur)))
 
-                    ;(set! (.-cur-element state)
-                    ;      (transition-element
-                    ;        parent
-                    ;        (append-transition new-elem :on-show
-                    ;                           (fn [elem _]
-                    ;                             (set! (.-updating state) false)
-                    ;                             (if (.-disposed state)
-                    ;                               (remove! elem)
-                    ;                               (when
-                    ;                                 (.-dirty state)
-                    ;                                 (queue-animation animate)))))
-                    ;        cur))
                     )))))
 
           invalidate
@@ -405,10 +441,8 @@
             ([cur-elem child-ref]
              (remove-watch* child-ref cur-elem)
              (when-not (.-disposed state)
-               ;(println "invalidating")
                (set! (.-dirty state) true)
                (when-not (.-updating state)
-                 ;(println "updating")
                  (set! (.-updating state) true)
                  (queue-animation animate)))))]
 
@@ -460,7 +494,6 @@
     node))
 
 (defn mount! [element child]
-  ;(println "mount!" element child)
   (when-let [last-child (.-lastChild (get-dom-node element))]
     (remove! last-child))
   (append-child! element child))
