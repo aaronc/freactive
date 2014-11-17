@@ -50,7 +50,7 @@ To try this quickly, you can install the [austin](https://github.com/cemerick/au
 
 **Explanation:**
 
-If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's [`atom`](http://clojure.org/atoms), you're 90% of the way to understanding freactive.
+If you already understand [hiccup syntax](https://github.com/weavejester/hiccup#syntax) and Clojure's [`atom`](http://clojure.org/atoms), you're 90% of the way to understanding freactive. freactive's syntax is *very* similar to that of [reagent][reagent] with a few small differences.
 
 **Reactive atoms:** In freactive, instead of Clojure's atom, you use freactive's reactive `atom` which allows `deref`'s to be captured by an enclosing reactive expression - an `rx` in this case. (This is exactly the same idea as in [reagent][reagent] and I believe it originally came from [reflex][reflex]).
 
