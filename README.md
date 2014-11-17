@@ -243,6 +243,7 @@ Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` wi
 If you would like to contribute, here are things that would be appreciated:
 
 * Good polyfills for things like `requestAnimationFrame`, `addEventListener`, etc. to support older browsers where feasible
+* Efficient algorithms for applying stable (possible in place) sorting to the `items-view` (this will probably make more sense once I explain the `items-view` more)
 
 Distributed under the Eclipse Public License, either version 1.0 or (at your option) any later version.
 
