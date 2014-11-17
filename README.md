@@ -178,7 +178,7 @@ An experimental `items-view` has been created, but has not been documented yet. 
 
 ## Contributions & License
 
-**Contributions (including pull requests) welcome!**
+**Contributions (including pull requests) are welcome!**
 
 Distributed under the Eclipse Public License, either version 1.0 or (at your option) any later version.
 
