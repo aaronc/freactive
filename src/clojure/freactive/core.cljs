@@ -256,8 +256,9 @@
 ;(defn- update-cursor-state [cursor ref]
 ;  )
 
-(defn- cursor-swap! [ref getter setter f]
-  (swap! ref (fn [cur] (setter cur (f (getter cur))))))
+(defn- cursor-swap! [cursor ref getter setter f]
+  (swap! ref (fn [cur] (setter cur (f (getter cur)))))
+  (-raw-deref cursor))
 
 (deftype ReactiveCursor [ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
   Object
@@ -329,14 +330,15 @@
   (-hash [this] (goog/getUid this))
 
   IReset
-  (-reset! [_ new-value]
-    (swap! ref (fn [cur] (setter cur new-value))))
+  (-reset! [this new-value]
+    (swap! ref (fn [cur] (setter cur new-value)))
+    (-raw-deref this))
 
   ISwap
-  (-swap! [_ f] (cursor-swap! ref getter setter f))
-  (-swap! [_ f x] (cursor-swap! ref getter setter #(f % x)))
-  (-swap! [_ f x y] (cursor-swap! ref getter setter #(f % x y)))
-  (-swap! [_ f x y more] (cursor-swap! ref getter setter #(apply f % x y more))))
+  (-swap! [this f] (cursor-swap! this ref getter setter f))
+  (-swap! [this f x] (cursor-swap! this ref getter setter #(f % x)))
+  (-swap! [this f x y] (cursor-swap! this ref getter setter #(f % x y)))
+  (-swap! [this f x y more] (cursor-swap! this ref getter setter #(apply f %  x y  more))))
 
 (defn cursor* [ref korks-or-getter setter lazy]
   (let [ks (cond
@@ -372,5 +374,4 @@
 
 (defn debug-rx* [the-rx capture-callback invalidation-callback]
   (add-invalidation-watch the-rx capture-callback invalidation-callback)
-  (add-invalidation-watch the-rx capture-callback invalidation-callback)
-  )
+  (add-invalidation-watch the-rx capture-callback invalidation-callback))
