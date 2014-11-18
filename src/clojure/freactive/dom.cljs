@@ -261,7 +261,8 @@
                ;  (set-fn element attr-name @ref))
                ))]
       ;;(set! (.-invalidate attr-state) f)
-      (register-with-parent-state node-state (str "-" state-prefix attr-name) attr-state)
+      (register-with-parent-state node-state (str "-" state-prefix "."
+                                                  attr-name) attr-state)
       ;(set! (.-child-states node-state)
       ;      (assoc (.-child-states node-state)
       ;                                        attr-state))
@@ -271,7 +272,7 @@
 
 (defn bind-style-prop! [element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
-    (on-value-ref-invalidated* set-style-prop! element "style." attr-name attr-value node-state)
+    (on-value-ref-invalidated* set-style-prop! element "style" attr-name attr-value node-state)
     (set-style-prop! element attr-name attr-value)))
 
 (defn listen! [element evt-name handler]
@@ -301,11 +302,11 @@
 
 (defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
-        (on-value-ref-invalidated* set-fn element "attr." attr-name
+        (on-value-ref-invalidated* set-fn element "attr" attr-name
                                    attr-value node-state)
         (set-fn element attr-name attr-value)))
 
-(defn bind-attr! [element attr-name attr-value node-state]
+(defn- bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
     (cond
       (identical? "style" attr-name)
@@ -324,11 +325,19 @@
       (bind-prop-attr! set-attr! element attr-name attr-value node-state))))
 
 (defn- unbind-attr!* [node-state prefix attr-name]
-  (let [attr-key (str "-" prefix attr-name)]
+  (let [attr-key (str "-" prefix "." attr-name)]
     (when-let [child-states (.-child-states node-state)]
       (when-let [state (aget child-states attr-key)]
         (set! (.-disposed state) true)
         (js-delete child-states attr-key)))))
+
+(defn- rebind-style! [element attr-name styles node-state]
+  (doseq [[p v] styles]
+    (unbind-attr!* node-state "style" attr-name)
+    (bind-style-prop! element p v node-state)))
+
+(defn- rebind-attr! [element attr-name attr-value node-state]
+  )
 
 (defn set-attrs! [node attrs]
   (let [node-state (get-element-state node)]
@@ -345,18 +354,35 @@
               (unbind-attr!* node-state "attr" k))
             (bind-attr! node k v node-state)))))))
 
-(defn- replace-attr!* [node node-state attr-name old-val new-val prefix
-                       binder remover]
-  (if old-val
-    (if new-val
-      (if (not (identical? old-val new-val))
-        (unbind-attr!* node-state prefix attr-name)
-        (binder node attr-name new-val node-state))
-      (remover node attr-name))
-    (binder node attr-name new-val node-state)))
+;(defn- replace-attr!* [node node-state attr-name old-val new-val prefix binder]
+;  (if (not (identical? old-val new-val))
+;    (unbind-attr!* node-state prefix attr-name)
+;    (binder node attr-name new-val node-state)))
+;
+;(defn- replace-attr! [node node-state attr-name old-val new-val]
+;  (replace-attr!* node node-state attr-name old-val new-val "attr"))
+
+(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder binder
+                        remover]
+  (loop [[[k new-val] & new-attrs] (seq new-attrs)
+         old-attrs old-attrs]
+    (if k
+      (let [attr-name (name k)]
+        (if-let [existing (get old-attrs k)]
+          (do
+            (rebinder node node-state attr-name existing new-val)
+            (recur new-attrs (dissoc old-attrs k)))
+          (do
+            (binder node node-state attr-name new-val)
+            (recur new-attrs old-attrs))))
+      (loop [[[k v] & old-attrs] old-attrs]
+        (when k
+          (remover node node-state (name k))
+          (recur old-attrs))))))
 
 (defn- replace-attrs! [node old-attrs new-attrs]
   (let [node-state (get-element-state node)]
+    ;;(replace-attrs!* node node-state old-attrs new-attrs nil nil )
     ))
 
 ;; From hiccup.compiler:
