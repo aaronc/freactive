@@ -323,6 +323,42 @@
       :default
       (bind-prop-attr! set-attr! element attr-name attr-value node-state))))
 
+(defn- unbind-attr!* [node-state prefix attr-name]
+  (let [attr-key (str "-" prefix attr-name)]
+    (when-let [child-states (.-child-states node-state)]
+      (when-let [state (aget child-states attr-key)]
+        (set! (.-disposed state) true)
+        (js-delete child-states attr-key)))))
+
+(defn set-attrs! [node attrs]
+  (let [node-state (get-element-state node)]
+    (doseq [[k v] attrs]
+      (let [k (name k)]
+        (if (= k "style")
+          (doseq [[p v] v]
+            (do
+              (when node-state
+                (unbind-attr!* node-state "style" p))
+              (bind-style-prop! node p v node-state)))
+          (do
+            (when node-state
+              (unbind-attr!* node-state "attr" k))
+            (bind-attr! node k v node-state)))))))
+
+(defn- replace-attr!* [node node-state attr-name old-val new-val prefix
+                       binder remover]
+  (if old-val
+    (if new-val
+      (if (not (identical? old-val new-val))
+        (unbind-attr!* node-state prefix attr-name)
+        (binder node attr-name new-val node-state))
+      (remover node attr-name))
+    (binder node attr-name new-val node-state)))
+
+(defn- replace-attrs! [node old-attrs new-attrs]
+  (let [node-state (get-element-state node)]
+    ))
+
 ;; From hiccup.compiler:
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
        :private true}
