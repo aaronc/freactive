@@ -106,11 +106,10 @@
 
 (defn- dispose-node
   ([dom-node]
-   (println "disposing" dom-node)
-   (time
-     (let [node-id (get-node-id dom-node)
-           state (aget element-state-lookup node-id)]
-       (dispose-node node-id state))))
+   ;(println "disposing" dom-node)
+   (let [node-id (get-node-id dom-node)
+         state (aget element-state-lookup node-id)]
+     (dispose-node node-id state)))
   ([child-key state]
    (when state
      (set! (.-disposed state) true)
@@ -329,13 +328,22 @@
        :private true}
      re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
 
+(def ^:dynamic *xml-namespaces* nil)
+
+(defn- get-xml-namespace [kw-ns]
+  (let [xmlns (get *xml-namespaces* kw-ns)]
+    (assert xmlns (str "Don't know how to handle namespace " kw-ns))))
+
 (defn- create-dom-node [kw]
   (let [tag-ns (namespace kw)
         [_ tag id class] (re-matches re-tag (name kw))
-        node (case tag-ns
-               "svg" (.createElementNS js/document "http://www.w3.org/2000/svg" tag)
-               nil (.createElement js/document tag)
-               (assert false (str "Don't know how to handle tag ns " tag-ns)))]
+        node (if tag-ns
+               (let [resolved-ns
+                     (if (= tag-ns "svg")
+                       "http://www.w3.org/2000/svg"
+                       (get-xml-namespace tag-ns))]
+                 (.createElementNS js/document resolved-ns tag))
+               (.createElement js/document tag))]
     (when id (set! (.-id node) id))
     (when class (set! (.-className node) (.replace class "." " ")))
     node))
@@ -348,7 +356,8 @@
   (= (.-nodeType dom-node) 3))
 
 (defn- replace-child [parent new-elem-spec cur-elem]
-  (let [cur-dom-node (get-dom-node cur-elem)
+  (let [cur-dom-node cur-elem                                       ;;
+  ;; (get-dom-node cur-elem)
         new-virtual-dom (get-virtual-dom new-elem-spec)]
     (if (and
           (string? new-virtual-dom)
@@ -359,8 +368,10 @@
         cur-elem)
       (let [new-elem (build-element new-elem-spec)]
         (.replaceChild
-          (get-dom-node parent)
-          (get-dom-node new-elem)
+          ;(get-dom-node parent)
+          ;(get-dom-node new-elem)
+          parent
+          new-elem
           cur-dom-node)
         (dispose-node cur-dom-node)
         new-elem))))
@@ -368,7 +379,8 @@
 (defn- append-child [parent new-elem]
   (let [new-elem (build-element new-elem)]
     (.appendChild
-      (get-dom-node parent)
+      ;(get-dom-node parent)
+      parent
       new-elem)
     new-elem))
 
@@ -403,7 +415,9 @@
      (do-show-element parent new-elem cur-elem))))
 
 (defn- clear-children! [parent]
-  (let [dom-node (get-dom-node parent)]
+  (let [dom-node parent
+  ;(get-dom-node parent)
+        ]
     (loop []
       (let [last-child (.-lastChild dom-node)]
         (when last-child
@@ -541,6 +555,8 @@
     node))
 
 (defn mount! [element child]
-  (when-let [last-child (.-lastChild (get-dom-node element))]
+  (when-let [last-child (.-lastChild element
+                        ;; (get-dom-node element)
+                          )]
     (remove! last-child))
   (append-child! element child))
