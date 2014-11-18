@@ -5,7 +5,10 @@
 
 ;; ## Core Defintions
 
-(defonce ^:private element-state-lookup {})
+(defonce ^:private auto-node-id 0)
+
+;(defonce ^:private element-state-lookup {})
+(defonce ^:private element-state-lookup #js {})
 
 (defprotocol IElementSpec
   (-get-virtual-dom [x]))
@@ -17,8 +20,18 @@
 (defn- dom-node? [x]
   (> (.-nodeType x) 0))
 
+(defn- get-attr [dom-node attr-name]
+  (when (.-getAttribute dom-node)
+    (.getAttribute dom-node attr-name)))
+
+(defn- get-node-id [x]
+  (get-attr x "data-freactive-id"))
+
 (defn- get-element-state [x]
-  (get element-state-lookup x))
+  ;;(get element-state-lookup x)
+  (when-let [node-id (get-node-id x)]
+    (aget element-state-lookup node-id))
+  )
 
 (defn- get-virtual-dom [x]
   (when x
@@ -36,18 +49,30 @@
 (defn- reset-element-spec! [dom-node spec]
   (set! (.-element-spec (get-element-state dom-node)) spec))
 
-(deftype ElementState [disposed element-spec childstates])
+(deftype ElementState [id disposed element-spec child-states])
+
+(declare set-attr!)
 
 (defn- init-element-state! [dom-node element-spec]
-  (let [state (ElementState. false element-spec {})]
-    (set! element-state-lookup (assoc element-state-lookup dom-node state))
+  (let [node-id (str auto-node-id)
+        state (ElementState. node-id false element-spec nil)]
+    (set! auto-node-id (inc auto-node-id))
+    (set-attr! dom-node "data-freactive-id" node-id)
+    (aset element-state-lookup node-id state)
+    ;;(set! element-state-lookup (assoc element-state-lookup dom-node state))
     state))
 
-(defn- register-with-parent-state [parent-state child state]
-  (set! (.-childstates parent-state) (assoc (.-childstates parent-state) child state)))
+(defn- register-with-parent-state [parent-state child-key state]
+  ;;(set! (.-child-states parent-state) (assoc (.-child-states parent-state) child state))
+  (let [child-states (or (.-child-states parent-state)
+                        (set! (.-child-states parent-state) #js {}))]
+    (aset child-states child-key state)))
 
-(defn- unregister-from-parent-state [parent-state child]
-  (set! (.-childstates parent-state) (dissoc (.-childstates parent-state) child)))
+(defn- unregister-from-parent-state [parent-state child-key]
+  ;;(set! (.-child-states parent-state) (dissoc (.-child-states parent-state) child))
+  (when-let [child-states (.-child-states parent-state)]
+    (js-delete child-states child-key))
+  )
 
 (defn- get-element-spec [x]
   (if (dom-node? x)
@@ -66,24 +91,43 @@
 (defprotocol IRemove
   (-remove! [x]))
 
+(defn- get-transition [x transition-name]
+  (let [spec (get-element-spec x)]
+    (when-not (string? spec)
+      (get (meta spec) transition-name))))
+
 (defn- dispose-node
   ([dom-node]
-   (dispose-node dom-node (get-element-state dom-node)))
+   (println "disposing" dom-node)
+   (time
+     (let [node-id (get-node-id dom-node)
+           state (aget element-state-lookup node-id)]
+       (dispose-node node-id state))))
   ([child-key state]
    (when state
      (set! (.-disposed state) true)
-     (when-not (string? child-key)
+     ;(println "disposing")
+     (when-let [disposed-callback (.-disposed-callback state)]
+       (disposed-callback))
+     ;(when-let [spec (.-element-spec state)]
+     ;  (when-let [disposed (get-transition spec :node-disposed)]
+     ;    (disposed)))
+     (when-not (identical? (aget child-key 0) "-")
        (js-delete element-state-lookup child-key)
-       (doseq [[child state] (.-childstates state)]
-         (dispose-node child state))))))
+       ;(doseq [[child state] (.-child-states state)]
+       ;  (dispose-node child state))
+       (goog.object/forEach (.-child-states state)
+                            (fn [state child-key _]
+                              (dispose-node child-key state)))))))
 
 (defn- remove-dom-node [dom-node]
-  (let [state (aget element-state-lookup dom-node)]
-    (dispose-node dom-node state)
-    (when-let [parent (.-parentNode dom-node)]
-      (.removeChild parent dom-node)
-      (when state
-        (js-delete (.-parent-state state) state)))))
+  (time
+    (let [state (aget element-state-lookup dom-node)]
+      (dispose-node dom-node state)
+      (when-let [parent (.-parentNode dom-node)]
+        (.removeChild parent dom-node)
+        (when state
+          (js-delete (.-parent-state state) state))))))
 
 (defn remove! [x]
   (if (dom-node? x)
@@ -101,11 +145,6 @@
   (if (satisfies? IDeref elem-spec)
     (rx (with-transitions @elem-spec transitions))
     (vary-meta (wrap-element-spec elem-spec) merge transitions)))
-
-(defn- get-transition [x transition-name]
-  (let [spec (get-element-spec x)]
-    (when-not (string? spec)
-      (get (meta spec) transition-name))))
 
 (defn- exec-transition [node transition-name callback]
   (if-let [transition (get-transition node transition-name)]
@@ -215,9 +254,10 @@
                ;  (set-fn element attr-name @ref))
                ))]
       ;;(set! (.-invalidate attr-state) f)
-      (set! (.-childstates node-state)
-            (assoc (.-childstates node-state) (str state-prefix attr-name)
-                                              attr-state))
+      (register-with-parent-state node-state (str "-" state-prefix attr-name) attr-state)
+      ;(set! (.-child-states node-state)
+      ;      (assoc (.-child-states node-state)
+      ;                                        attr-state))
       (add-watch* ref key f)
       ))
   (set-fn element attr-name @ref))
@@ -245,9 +285,7 @@
   ([element state]
     (let [cur-state (get-data-state element)
           state (name state)]
-      (println "cur state" cur-state)
       (when-not (= cur-state state)
-        (println "setting data-state from" cur-state "to" state)
         (do-set-data-state! element state)
         (let [leave-transition (get-transition element (keyword (str "after-" cur-state)))]
           (if leave-transition
@@ -298,15 +336,18 @@
 
 (declare build-element)
 
+(defn- text-node? [dom-node]
+  (= (.-nodeType dom-node) 3))
+
 (defn- replace-child [parent new-elem-spec cur-elem]
   (let [cur-dom-node (get-dom-node cur-elem)
         new-virtual-dom (get-virtual-dom new-elem-spec)]
     (if (and
           (string? new-virtual-dom)
-          (= (.-nodeType cur-dom-node) 3))
+          (text-node? cur-dom-node))
       (do
         (set! (.-textContent cur-dom-node) new-virtual-dom)
-        (reset-element-spec! cur-dom-node new-elem-spec)
+        ;(reset-element-spec! cur-dom-node new-elem-spec)
         cur-elem)
       (let [new-elem (build-element new-elem-spec)]
         (.replaceChild
@@ -328,10 +369,11 @@
         (if cur-elem
           (replace-child parent new-elem cur-elem)
           (append-child parent new-elem))]
-    (when-let [parent-state (get-element-state parent)]
-      (let [state (get-element-state new-elem)]
-        (set! (.-parent-state state) parent-state)
-        (register-with-parent-state parent-state new-elem state)))
+    (when-not (text-node? new-elem)
+      (when-let [parent-state (get-element-state parent)]
+        (let [state (get-element-state new-elem)]
+          (set! (.-parent-state state) parent-state)
+          (register-with-parent-state parent-state (get-node-id new-elem) state))))
     new-elem))
 
 (defn- do-show-element [parent new-elem cur-elem]
@@ -345,7 +387,6 @@
 
 (defn- transition-element
   ([parent new-elem cur-elem]
-   ;(println "transitioning" parent new-elem cur-elem)
    (if cur-elem
      (if-let [hide (get-transition cur-elem :node-detaching)]
        (hide cur-elem
@@ -373,23 +414,31 @@
 
 ;; Reactive Element Handling
 
-(deftype ReactiveElement [parent cur-element dirty updating disposed animate invalidate]
+(def ^:private auto-reactive-id 0)
+
+(defn- new-reactive-id []
+  (let [id auto-reactive-id]
+    (set! auto-reactive-id (inc auto-reactive-id))
+    (str "-r." id)))
+
+(deftype ReactiveElement [id parent cur-element dirty updating disposed animate invalidate]
   IRemove
   (-remove! [this]
     (set! (.-disposed this) true)
     (when-not updating
       (remove! @cur-element))
     (when-let [parent-state (get-element-state parent)]
-      (unregister-from-parent-state parent-state this))))
+      (unregister-from-parent-state parent-state id))))
 
 (defn- append-deref-child [parent child-ref]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
-    (let [state (ReactiveElement. parent nil false false false nil nil)
+    (let [reactive-id (new-reactive-id)
+          state (ReactiveElement. reactive-id parent nil false false false nil  nil)
 
           get-new-elem (fn []
                          (set! (.-dirty state) false)
                          (add-watch* child-ref state (.-invalidate state))
-                         (or (non-reactively @child-ref) [:span]))
+                         (or (non-reactively @child-ref) ""))
 
           show-new-elem (fn [new-elem cur]
                           (let [new-node (replace-or-append-child parent new-elem cur)]
@@ -442,7 +491,7 @@
       ;(set! (.-cur-element state)
       ;      (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
-        (register-with-parent-state parent-state state state))
+        (register-with-parent-state parent-state reactive-id state))
       state)
     (transition-element parent @child-ref nil)))
 
@@ -469,7 +518,7 @@
         node
         (if (string? virtual-dom)
           (let [node (.createTextNode js/document virtual-dom)]
-            (init-element-state! node elem-spec)
+            ;(init-element-state! node elem-spec)
             node)
           (let [node (create-dom-node (first virtual-dom))
                 state (init-element-state! node elem-spec)

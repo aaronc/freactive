@@ -490,7 +490,7 @@
           (do
             (set! (.-state state-machine) requested-state)
             (-notify-watches state-machine cur-state requested-state)
-            (println "from" cur-state "to" requested-state)
+            ;(println "from" cur-state "to" requested-state)
             requested-state)
           cur-state))
       cur-state)))
