@@ -208,12 +208,12 @@
     (fn render[frame-ms]
       (reset! frame-time frame-ms)
       (when enable-fps-instrumentation
-        (if (= instrumentation-i 4)
+        (if (identical? instrumentation-i 4)
           (do
             (reset! fps (* 1000 (/ 5 (- frame-ms last-instrumentation-time))))
             (set! instrumentation-i 0))
           (set! instrumentation-i (inc instrumentation-i)))
-        (when (= 0 instrumentation-i)
+        (when (identical? 0 instrumentation-i)
           (set! last-instrumentation-time frame-ms)) )
       (let [queue render-queue
             n (alength queue)]
@@ -292,7 +292,7 @@
   ([element state]
     (let [cur-state (get-data-state element)
           state (name state)]
-      (when-not (= cur-state state)
+      (when-not (identical? cur-state state)
         (do-set-data-state! element state)
         (let [leave-transition (get-transition element (keyword (str "after-" cur-state)))]
           (if leave-transition
@@ -308,16 +308,16 @@
 (defn bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
     (cond
-      (= "style" attr-name)
+      (identical? "style" attr-name)
       (do
         (assert (map? attr-value))
         (doseq [[p v] attr-value]
           (bind-style-prop! element p v node-state)))
 
-      (= "data-state" attr-name)
+      (identical? "data-state" attr-name)
       (bind-prop-attr! set-data-state! element attr-name attr-value node-state)
 
-      (= 0 (.indexOf attr-name "on-"))
+      (identical? 0 (.indexOf attr-name "on-"))
       (listen! element (.substring attr-name 3) attr-value)
 
       :default
@@ -334,7 +334,7 @@
   (let [node-state (get-element-state node)]
     (doseq [[k v] attrs]
       (let [k (name k)]
-        (if (= k "style")
+        (if (identical? k "style")
           (doseq [[p v] v]
             (do
               (when node-state
@@ -375,7 +375,7 @@
         [_ tag id class] (re-matches re-tag (name kw))
         node (if tag-ns
                (let [resolved-ns
-                     (if (= tag-ns "svg")
+                     (if (identical? tag-ns "svg")
                        "http://www.w3.org/2000/svg"
                        (get-xml-namespace tag-ns))]
                  (.createElementNS js/document resolved-ns tag))
@@ -389,7 +389,7 @@
 (declare build-element)
 
 (defn- text-node? [dom-node]
-  (= (.-nodeType dom-node) 3))
+  (identical? (.-nodeType dom-node) 3))
 
 (defn- replace-child [parent new-elem-spec cur-elem]
   (let [cur-dom-node cur-elem                                       ;;
