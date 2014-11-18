@@ -236,14 +236,23 @@ Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` wi
 (rx (+ @a (non-reactively @b)))
 ```
 
-## Contributions & License
+## Contributions
 
 **Contributions (including pull requests) are welcome!**
 
-**If you would like to contribute, here are things that would be appreciated:**
+### TODO list
 
-* Good polyfills for things like `requestAnimationFrame`, `addEventListener`, etc. to support older browsers where feasible
-* Efficient algorithms for applying stable (possible in place) sorting to the `items-view` (this will probably make more sense once I explain the `items-view`...)
+If you would like to contribute, here are things that would be appreciated organized by category and relative priority. Each item has a link to an issue which you can comment on, assign to yourself possibly, etc.
+
+Core functionality:
+* [Good polyfills for things like `requestAnimationFrame`, `addEventListener`, etc. to support older browsers where feasible](https://github.com/aaronc/freactive/issues/4)
+* [Benchmarking of event handlers - do we need to do something like Facebook's synthentic events?](https://github.com/aaronc/freactive/issues/6)
+
+Items view:
+* [Efficient algorithms for applying stable (possible in place) sorting to the `items-view`](https://github.com/aaronc/freactive/issues/5) (this will probably make more sense once I explain the `items-view`...)
+
+
+## License
 
 Distributed under the Eclipse Public License, either version 1.0 or (at your option) any later version.
 
