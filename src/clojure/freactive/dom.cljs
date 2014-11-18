@@ -306,7 +306,19 @@
                                    attr-value node-state)
         (set-fn element attr-name attr-value)))
 
-(defn- bind-attr! [element attr-name attr-value node-state]
+(defn get-attr-setter [element attr-name]
+  (cond
+   (identical? "data-state" attr-name) 
+   set-data-state!
+
+   (and (identical? (. element -type) "checkbox") (identical? attr-name "checked"))
+   (fn [node attr-name attr-value]
+     (set! (. node -checked) (true? attr-value)))
+
+   :default
+   set-attr!))
+
+(defn bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
     (cond
       (identical? "style" attr-name)
@@ -315,14 +327,12 @@
         (doseq [[p v] attr-value]
           (bind-style-prop! element p v node-state)))
 
-      (identical? "data-state" attr-name)
-      (bind-prop-attr! set-data-state! element attr-name attr-value node-state)
-
       (identical? 0 (.indexOf attr-name "on-"))
       (listen! element (.substring attr-name 3) attr-value)
 
       :default
-      (bind-prop-attr! set-attr! element attr-name attr-value node-state))))
+      (bind-prop-attr! (get-attr-setter element attr-name)
+                       element attr-name attr-value node-state))))
 
 (defn- unbind-attr!* [node-state prefix attr-name]
   (let [attr-key (str "-" prefix "." attr-name)]
