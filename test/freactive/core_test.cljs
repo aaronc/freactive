@@ -1,7 +1,8 @@
 (ns freactive.core-test
   (:refer-clojure :exclude [atom])
   (:require
-    [freactive.core :refer [atom cursor]]
+    [freactive.core :refer [atom cursor state-machine
+                            transition-to!]]
     [cljs.reader]
     [cemerick.cljs.test :refer-macros [deftest is run-tests]])
   (:require-macros [freactive.macros :refer [rx]]))
@@ -34,3 +35,59 @@
     (is (= @a {:b 1}))
     (reset! a {:c 2})
     (is (= @l "{:c 2}"))))
+
+;(defn sm1
+;  (state-machine
+;    :init
+;    {:from-init (fn [to] true)
+;     :to-init (fn [from] false)
+;     :to-running (fn [from]
+;                   (if (or (= from :init) (= :from :stopped))
+;                     true))
+;     :from-running {fn [to]
+;                    (when (= to :)
+;                      true)}
+;     :to-stopped (fn [from]
+;                   (when (= from :running)
+;                     true))
+;     :from-stopped (fn [to]
+;                     (when (= to :running)
+;                       true))}))
+
+(defn sm1 []
+  (state-machine
+    :init
+    {:from-init true
+     :to-init false
+     :from-running-to-stopped true
+     :from-stopped-to-running true
+     :to-finished true
+     :from-finished false}
+    :default-accept false
+    :allowed-states #{:init :running :stopped :finished}))
+
+(defn sm2 []
+  (state-machine
+    :init
+    {:from-init #(true)
+     :to-init #(false)
+     :from-running-to-stopped #(true)
+     :from-stopped-to-running #(true)
+     :to-finished #(true)
+     :from-finished #(false)}
+    :default-accept false
+    :allowed-states #{:init :running :stopped :finished}))
+
+(defn test-sm [sm]
+  (is (= @sm :init))
+  (is (= (transition-to! sm :running)) :running)
+  (is (= (transition-to! sm :stopped)) :stopped)
+  (is (= (transition-to! sm :running)) :running)
+  (is (= (transition-to! sm :finished)) :finished)
+  (is (= (transition-to! sm :running)) :finished)
+  (is (= (transition-to! sm :test1)) :finished)
+  )
+
+(deftest state-machine-test
+  (test-sm (sm1))
+  (test-sm (sm2)))
