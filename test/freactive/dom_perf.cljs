@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [atom])
   (:require
     [freactive.dom :as dom]
-    [freactive.core :refer [atom cursor] :as r]
+    [freactive.core :refer [atom cursor
+                            state-machine transition!] :as r]
     [figwheel.client :as fw :include-macros true]
     [freactive.animation :as animation]
     [goog.string :as gstring])
@@ -95,10 +96,12 @@
       ". "]])]
    (let [ease-x (animation/easer 0.0)
          ease-y (animation/easer 0.0)
-         graph-state (atom nil)]
+         graph-state (state-machine :init
+                                    {:from-showing-to-jitter false
+                                     :from-disposing-to-jitter false})]
      [:div
       {:width "100%" :height "100%"
-       :on-mousedown (fn [_] (reset! graph-state "jitter"))}
+       :on-mousedown (fn [_] (transition! graph-state :jitter))}
       [:svg/svg
        {:width   "100%" :height "100%"
         :style   {:position "absolute" :left 0 :top "20px"}
@@ -121,14 +124,17 @@
                 (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
-               {:node-shown (fn [x cb]
+               {:node-attached (fn [x cb]
+                           (transition! graph-state :showing)
                            (animation/start-easing! ease-x 0.0 1.0 1000
                                                     animation/quad-in nil)
-                           (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out cb))
-                :on-jitter (fn [x cb] (jitter ease-x nil) (jitter ease-y
-                                                                  (fn []
-                                                                    (reset! graph-state nil))))
-                :node-hiding (fn [x cb]
+                           (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out
+                                                    (fn [] (transition! graph-state :ready))))
+                :on-jitter (fn [x cb]
+                             (jitter ease-x nil)
+                             (jitter ease-y (fn [] (transition! graph-state :ready))))
+                :node-detaching (fn [x cb]
+                           (transition! graph-state :disposing)
                            (animation/start-easing! ease-x 1.0 0.0 1000
                                                     animation/quad-out nil)
                            (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))})))]])])

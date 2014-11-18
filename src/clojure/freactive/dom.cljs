@@ -243,8 +243,11 @@
 (defn set-data-state!
   ([element _ state] (set-data-state! element state))
   ([element state]
-    (let [cur-state (get-data-state element)]
+    (let [cur-state (get-data-state element)
+          state (name state)]
+      (println "cur state" cur-state)
       (when-not (= cur-state state)
+        (println "setting data-state from" cur-state "to" state)
         (do-set-data-state! element state)
         (let [leave-transition (get-transition element (keyword (str "after-" cur-state)))]
           (if leave-transition
@@ -333,7 +336,7 @@
 
 (defn- do-show-element [parent new-elem cur-elem]
   (when new-elem
-    (let [show (get-transition new-elem :node-shown)
+    (let [show (get-transition new-elem :node-attached)
           new-elem (replace-or-append-child parent new-elem cur-elem)]
       (when show
         (show new-elem)
@@ -344,7 +347,7 @@
   ([parent new-elem cur-elem]
    ;(println "transitioning" parent new-elem cur-elem)
    (if cur-elem
-     (if-let [hide (get-transition cur-elem :node-hiding)]
+     (if-let [hide (get-transition cur-elem :node-detaching)]
        (hide cur-elem
          (do-show-element parent new-elem cur-elem))
        (do-show-element parent new-elem cur-elem))
@@ -359,10 +362,10 @@
           (recur))))))
 
 (defn- hide-node [node callback]
-  (exec-transition node :node-hiding callback))
+  (exec-transition node :node-detaching callback))
 
 (defn- show-node [new-elem]
-  (let [show (get-transition new-elem :node-shown) ]
+  (let [show (get-transition new-elem :node-attached) ]
       (when show
         (show new-elem)
         new-elem)
@@ -404,7 +407,7 @@
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)]
                   (when (not= (get-virtual-dom cur) (get-virtual-dom new-elem))
-                    (let [hide (get-transition cur :node-hiding)]
+                    (let [hide (get-transition cur :node-detaching)]
                       (if hide
                         (do
                           (hide cur

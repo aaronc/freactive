@@ -376,7 +376,7 @@
 ;  (add-invalidation-watch the-rx capture-callback invalidation-callback)
 ;  (add-invalidation-watch the-rx capture-callback invalidation-callback))
 
-(deftype StateMachine [state state-transtions allowed-states default-accept
+(deftype StateMachine [state state-transitions allowed-states default-accept
                        watches]
   Object
   (equiv [this other]
@@ -427,46 +427,70 @@
 
 (defn- test-transition
   ([transition]
-   (cond (identical? transition true) true
-         (identical? transition false) false
-         :default (transition)))
+   (cond
+     (or (nil? transition)
+         (undefined? transition)) nil
+     (identical? transition true) true
+     (identical? transition false) false
+     :default (transition)))
   ([transition arg]
-   (cond (identical? transition true) true
-         (identical? transition false) false
-         :default (transition arg))))
+   (cond
+     (or (nil? transition)
+         (undefined? transition)) nil
+     (identical? transition true) true
+     (identical? transition false) false
+     :default (transition arg))))
 
-(defn transition-to!
+(defn- test-from-to [transitions from to]
+  (test-transition
+    (get transitions
+         (keyword (str "from-" (name from)
+                       "-to-" (name to))))))
+
+(defn- test-from [transitions from to]
+  (test-transition
+    (get transitions
+         (keyword (str "from-" (name from))))
+    to))
+
+(defn- test-to [transitions from to]
+  (test-transition
+    (get transitions
+         (keyword (str "to-" (name to))))
+    from))
+
+(defn transition!
   "Attempts to transition the state-machine to the requested-state. Returns
   the state of the machine after the request has been made."
   [state-machine requested-state]
   (let [cur-state (.-state state-machine)]
     (if-not (keyword-identical? cur-state requested-state)
-      (let [transitions (.-transition-map state-machine)
+      (let [transitions (.-state-transitions state-machine)
             allowed-states (.-allowed-states state-machine)]
         (if
           (and
             (if allowed-states
               (allowed-states requested-state)
               true)
-            (if-let [from-to-transition (get transitions
-                                             (keyword (str ":from-" cur-state
-                                                           "-to-" requested-state)))]
-              (test-transition from-to-transition)
-              (if-let [from-transition (get transitions (keyword (str ":from-" cur-state)))]
-                (when (test-transition from-transition requested-state)
-                  (if-let [to-transition (get transitions (keyword (str "to-" requested-state)))]
-                    (test-transition to-transition cur-state)
-                    (.-default-accept state-machine)))
-                (if-let [to-transition (get transitions (keyword (str "to-" requested-state)))]
-                  (test-transition to-transition cur-state)
-                  (.-default-accept state-machine)))))
+            (let [from-to (test-from-to transitions cur-state requested-state)]
+              (if-not (nil? from-to)
+                from-to
+                (let [from (test-from transitions cur-state requested-state)]
+                  (if-not (nil? from)
+                    (when from
+                      (let [to (test-to transitions cur-state requested-state)]
+                        (if-not (nil? to)
+                          to
+                          (.-default-accept state-machine))))
+                    (let [to (test-to transitions cur-state requested-state)]
+                      (if-not (nil? to)
+                        to
+                        (.-default-accept state-machine))))))))
+
           (do
             (set! (.-state state-machine) requested-state)
-            (when-let [after (get state-machine (keyword (str "after-"
-                                                              cur-state)))]
-              (after requested-state))
-            (when-let [on (get state-machine (keyword (str "on-" cur-state)))]
-              (on cur-state))
+            (-notify-watches state-machine cur-state requested-state)
+            (println "from" cur-state "to" requested-state)
             requested-state)
           cur-state))
       cur-state)))
@@ -504,3 +528,7 @@
     (assert (set? allowed-states) "allowed-states must be a set")
     (assert (allowed-states initial-state) "initial-state must be in allowed states"))
   (StateMachine. initial-state state-transitions allowed-states default-accept nil))
+
+
+(def s0 (state-machine :x {:from-x-to-y false}))
+(transition! s0 :y)
