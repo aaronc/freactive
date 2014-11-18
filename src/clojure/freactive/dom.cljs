@@ -30,11 +30,14 @@
 (defn- get-element-state [x]
   ;;(get element-state-lookup x)
   (when-let [node-id (get-node-id x)]
-    (aget element-state-lookup node-id))
-  )
+    (aget element-state-lookup node-id)))
+
+(extend-protocol IElementSpec
+  boolean
+  (-get-virtual-dom [x] (str x)))
 
 (defn- get-virtual-dom [x]
-  (when x
+  (if x
     (cond
       (dom-node? x)
       (when-let [state (get-element-state x)]
@@ -44,7 +47,12 @@
 
       (vector? x) x
 
-      :default (-get-virtual-dom x))))
+      (number? x) (str x)
+
+      :default (-get-virtual-dom x))
+
+    ;; nil values treated as empty "placeholder" text nodes
+    ""))
 
 (defn- reset-element-spec! [dom-node spec]
   (set! (.-element-spec (get-element-state dom-node)) spec))
