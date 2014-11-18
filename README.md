@@ -184,9 +184,11 @@ This is somewhat similar (but not exactly) to cursors in [om][om] - which was th
 
 ## Items View
 
-An experimental `items-view` has been created, but has not been documented yet. The API is also subject to change.
+An experimental `items-view` has been created, but is still a work in progress... This documentation describes the concetp in a very general way.
 
-The idea of the `items-view` is to provide a generic container for large collections of objects that send notifications about exactly which items changed so that diffing is not neeeded.
+The idea of the `items-view` is to provide a generic container for large collections of objects that send notifications about exactly which items changed so that diffing is not neeeded. An analogue to this in the desktop UI world is the [WPF `ItemsControl`](http://msdn.microsoft.com/en-us/library/system.windows.controls.itemscontrol%28v=vs.110%29.aspx) which is a base class for `ListView`'s and `TreeView`'s. Basically it allows to framework to observe a collection and add or remove nodes rendering them based on a data template.
+
+In freactive, the `items-view` will take a `container` parameter (hiccup virtual node), a `template-fn` which will receive a single argument representing a `cursor` to a single item in the collection and should return a hiccup virtual node (can be reactive), and a `collection` parameter representing the underlying collection that is being rendered. The `collection` should be satisfy the `IObservableCollection` protocol which is still being fleshed out. A basic implementation of `IObservableCollection` will be provided which wraps an atom containing a Clojure map or vector and provides specific methods for adding/updating/removing individual items so that notifications can be done on an item-specific basis with no need for diffing. This type of idiom will allow for quite large collections. `IObservableCollection` could eventually be extended to support a database-backed collection and then we have something like Meteor in Clojurescript..! The `items-view` should provide built-in support for applying and removing sorts in a stable way, for adding and removing filters and for limiting the displayed elements to a specific range (to support paging and infinite scrolling). It should be agnostic to the underlying `IObservableCollection` as well as the `container` and `template-fn` and do things as generically as possible.
 
 ## Debugging Reactive Expressions
 
@@ -249,7 +251,7 @@ Core functionality:
 * [Benchmarking of event handlers - do we need to do something like React's synthentic events?](https://github.com/aaronc/freactive/issues/6)
 
 Items view:
-* [Efficient algorithms for applying stable (possible in place) sorting to the `items-view`](https://github.com/aaronc/freactive/issues/5) (this will probably make more sense once I explain the `items-view`...)
+* [Efficient algorithms for applying stable (possible in place) sorting to the `items-view`](https://github.com/aaronc/freactive/issues/5)
 
 Animations:
 * [A stable (possibly 3rd party) easings library](https://github.com/aaronc/freactive/issues/7). I incorporated some easings from [ominate](https://github.com/danielytics/ominate) - it has some open bug reports - maybe those can be fixed and the easings part can be forked so that it's shared. There's also [tween-clj](https://github.com/gstamp/tween-clj).
