@@ -121,14 +121,14 @@
                 (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
-               {:on-show (fn [x cb]
+               {:node-shown (fn [x cb]
                            (animation/start-easing! ease-x 0.0 1.0 1000
                                                     animation/quad-in nil)
                            (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out cb))
                 :on-jitter (fn [x cb] (jitter ease-x nil) (jitter ease-y
                                                                   (fn []
                                                                     (reset! graph-state nil))))
-                :on-hide (fn [x cb]
+                :node-hiding (fn [x cb]
                            (animation/start-easing! ease-x 1.0 0.0 1000
                                                     animation/quad-out nil)
                            (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))})))]])])

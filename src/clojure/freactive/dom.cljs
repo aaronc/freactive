@@ -214,7 +214,7 @@
                ;  (add-watch* ref key on-value-ref-invalidated)
                ;  (set-fn element attr-name @ref))
                ))]
-      (set! (.-invalidate attr-state) f)
+      ;;(set! (.-invalidate attr-state) f)
       (set! (.-childstates node-state)
             (assoc (.-childstates node-state) (str state-prefix attr-name)
                                               attr-state))
@@ -237,21 +237,18 @@
   (.getAttribute element "data-state"))
 
 (defn- enter-data-state! [element state old-state]
-  (do-set-data-state! element state)
   (when-let [enter-transition (get-transition element (keyword (str "on-" state)))]
-    (enter-transition element nil old-state)))
+    (enter-transition element old-state)))
 
 (defn set-data-state!
   ([element _ state] (set-data-state! element state))
   ([element state]
     (let [cur-state (get-data-state element)]
-      (when-not (or  (= cur-state state)
-                  (= cur-state "show") (= cur-state "hide"))
-        (let [leave-transition (get-transition element (keyword (str "leave-" cur-state)))]
+      (when-not (= cur-state state)
+        (do-set-data-state! element state)
+        (let [leave-transition (get-transition element (keyword (str "after-" cur-state)))]
           (if leave-transition
-            (leave-transition element
-                              (fn [] (enter-data-state! element state cur-state))
-                              state)
+            (leave-transition element (fn [] (enter-data-state! element state cur-state)) state)
             (enter-data-state! element state cur-state)))))))
 
 (defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
@@ -336,14 +333,10 @@
 
 (defn- do-show-element [parent new-elem cur-elem]
   (when new-elem
-    (let [show (get-transition new-elem :on-show)
+    (let [show (get-transition new-elem :node-shown)
           new-elem (replace-or-append-child parent new-elem cur-elem)]
       (when show
-        (do-set-data-state! new-elem "show")
-        (show new-elem (fn []
-                         (do-set-data-state! new-elem "")
-                         (when-let [attr-state (aget (.-childstates (get-element-state parent)) "attr.data-state")]
-                           ((.-invalidate attr-state)))))
+        (show new-elem)
         new-elem)
       new-elem)))
 
@@ -351,7 +344,7 @@
   ([parent new-elem cur-elem]
    ;(println "transitioning" parent new-elem cur-elem)
    (if cur-elem
-     (if-let [hide (get-transition cur-elem :on-hide)]
+     (if-let [hide (get-transition cur-elem :node-hiding)]
        (hide cur-elem
          (do-show-element parent new-elem cur-elem))
        (do-show-element parent new-elem cur-elem))
@@ -366,17 +359,12 @@
           (recur))))))
 
 (defn- hide-node [node callback]
-  (exec-transition node :on-hide callback))
+  (exec-transition node :node-hiding callback))
 
 (defn- show-node [new-elem]
-  (let [show (get-transition new-elem :on-show) ]
+  (let [show (get-transition new-elem :node-shown) ]
       (when show
-        (do-set-data-state! new-elem "show")
-        (show new-elem (fn []
-                         (do-set-data-state! new-elem "")
-                         (when-let [attr-state
-                                    (get (.-childstates  (get-element-state new-elem)) "attr.data-state")]
-                           (.invalidate attr-state))))
+        (show new-elem)
         new-elem)
       new-elem))
 
@@ -416,10 +404,9 @@
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)]
                   (when (not= (get-virtual-dom cur) (get-virtual-dom new-elem))
-                    (let [hide (get-transition cur :on-hide)]
+                    (let [hide (get-transition cur :node-hiding)]
                       (if hide
                         (do
-                          (do-set-data-state! cur "hide")
                           (hide cur
                                 (fn []
                                   (if (.-disposed state)
