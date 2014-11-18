@@ -242,15 +242,17 @@ Sometimes you want to reference a reactive `atom` or `rx` from within an `rx` wi
 
 ### TODO list
 
-If you would like to contribute, here are things that would be appreciated organized by category and relative priority. Each item has a link to an issue which you can comment on, assign to yourself possibly, etc.
+**If you would like to contribute, here is a list of things that would be appreciated.** The list is organized by category and relative priority. Each item has a link to an issue which you can comment on, assign to yourself possibly, etc.
 
 Core functionality:
 * [Good polyfills for things like `requestAnimationFrame`, `addEventListener`, etc. to support older browsers where feasible](https://github.com/aaronc/freactive/issues/4)
-* [Benchmarking of event handlers - do we need to do something like Facebook's synthentic events?](https://github.com/aaronc/freactive/issues/6)
+* [Benchmarking of event handlers - do we need to do something like React's synthentic events?](https://github.com/aaronc/freactive/issues/6)
 
 Items view:
 * [Efficient algorithms for applying stable (possible in place) sorting to the `items-view`](https://github.com/aaronc/freactive/issues/5) (this will probably make more sense once I explain the `items-view`...)
 
+Animations:
+* [A stable (possibly 3rd party) easings library](https://github.com/aaronc/freactive/issues/7). I incorporated some easings from [ominate](https://github.com/danielytics/ominate) - it has some open bug reports - maybe those can be fixed and the easings part can be forked so that it's shared. There's also [tween-clj](https://github.com/gstamp/tween-clj).
 
 ## License
 
