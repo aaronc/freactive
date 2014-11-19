@@ -61,11 +61,16 @@
 
 (declare set-attr!)
 
+(declare get-transition)
+
 (defn- init-element-state! [dom-node element-spec]
   (let [node-id (str auto-node-id)
         state (ElementState. node-id false element-spec nil)]
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
+    (when-let [m (-meta element-spec)]
+      (when-let [on-disposed (get m :node-disposed)]
+        (set! (.-disposed-callback state) on-disposed)))
     (aset element-state-lookup node-id state)
     ;;(set! element-state-lookup (assoc element-state-lookup dom-node state))
     state))
@@ -581,16 +586,20 @@
       new-elem)
     new-elem))
 
+(defn- register-element-with-parent [parent new-elem]
+  (when-not (text-node? new-elem)
+    (when-let [parent-state (get-element-state parent)]
+      (let [state (get-element-state new-elem)]
+        (set! (.-parent-state state) parent-state)
+        (register-with-parent-state parent-state (get-node-id new-elem) state))))
+  )
+
 (defn- replace-or-append-child [parent new-elem cur-elem top-level]
   (let [new-elem
         (if cur-elem
           (replace-child parent new-elem cur-elem top-level)
           (append-child parent new-elem))]
-    (when-not (text-node? new-elem)
-      (when-let [parent-state (get-element-state parent)]
-        (let [state (get-element-state new-elem)]
-          (set! (.-parent-state state) parent-state)
-          (register-with-parent-state parent-state (get-node-id new-elem) state))))
+   (register-element-with-parent parent new-elem)
     new-elem))
 
 (defn- do-show-element [parent new-elem cur-elem]
@@ -732,22 +741,26 @@
       (append-child! elem ch))))
 
 (defn build-element [elem-spec]
-  (let [virtual-dom (get-virtual-dom elem-spec)
-        node
-        (if (string? virtual-dom)
-          (.createTextNode js/document virtual-dom)
-          (let [virtual-dom (normalize-virtual-element virtual-dom)
-                node (create-dom-node (first virtual-dom))
-                state (init-element-state! node elem-spec)
-                attrs? (second virtual-dom)
-                attrs (when (map? attrs?) attrs?)
-                children (if attrs (nnext virtual-dom) (next virtual-dom))]
-            (doseq [[k v] attrs]
-              (bind-attr! node k v state))
-            (when children
-              (append-children! node children))
-            node))]
-    node))
+  (let [virtual-dom (get-virtual-dom elem-spec)]
+    (cond
+      (string? virtual-dom)
+      (.createTextNode js/document virtual-dom)
+
+      (dom-node? virtual-dom)
+      virtual-dom
+
+      :default
+      (let [  ;;virtual-dom (normalize-virtual-element virtual-dom)
+            node (create-dom-node (first virtual-dom))
+            state (init-element-state! node elem-spec)
+            attrs? (second virtual-dom)
+            attrs (when (map? attrs?) attrs?)
+            children (if attrs (nnext virtual-dom) (next virtual-dom))]
+        (doseq [[k v] attrs]
+          (bind-attr! node k v state))
+        (when children
+          (append-children! node children))
+        node))))
 
 (defn mount! [element child]
   (when-let [last-child (.-lastChild element
