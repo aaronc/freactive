@@ -116,13 +116,8 @@
      ;(println "disposing")
      (when-let [disposed-callback (.-disposed-callback state)]
        (disposed-callback))
-     ;(when-let [spec (.-element-spec state)]
-     ;  (when-let [disposed (get-transition spec :node-disposed)]
-     ;    (disposed)))
      (when-not (identical? (aget child-key 0) "-")
        (js-delete element-state-lookup child-key)
-       ;(doseq [[child state] (.-child-states state)]
-       ;  (dispose-node child state))
        (goog.object/forEach (.-child-states state)
                             (fn [state child-key _]
                               (dispose-node child-key state)))))))
@@ -395,6 +390,21 @@
     (doseq [[k v] attrs]
       (let [k (name k)]
         (rebind-attr! node k v node-state)))))
+
+;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
+;  (let [hit #js {}]
+;    (doseq [[k new-val] new-attrs]
+;      (let [attr-name (name k)]
+;        (if-let [existing (get old-attrs k)]
+;          (do
+;            (when-not (identical? existing new-val)
+;              (rebinder node attr-name new-val node-state))
+;            (aset hit attr-name true))
+;          (rebinder node attr-name new-val node-state))))
+;    (doseq [[k _] old-attrs]
+;      (let [attr-name (name k)]
+;        (when-not (aget hit attr-name)
+;          (rebinder node attr-name nil node-state))))))
 
 (defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
   (loop [[[k new-val] & new-attrs] (seq new-attrs)
