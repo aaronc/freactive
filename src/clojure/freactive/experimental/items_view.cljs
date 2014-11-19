@@ -14,12 +14,12 @@
   (-reset-view [view])
   (-set-view-range [view start end]))
 
-(defrecord ItemsView [element coll]
-  dom/IHasElement
-  (-get-element [_] element)
+(deftype ItemsView [element collection]
+  dom/IElementSpec
+  (-get-virtual-dom [_] element)
 
   dom/IRemove
-  (-remove [_] (dom/-remove element)))
+  (-remove! [_] (dom/remove! element)))
 
 (deftype ItemContainer [elem state])
 
@@ -48,21 +48,21 @@
          view (ItemsView. element coll)
 
          update-fn
-         (fn [view coll changes]
+         (fn [view changes]
            (doseq [[k v] changes]
              (let [elem-container (get @elem-mappings k)]
                (if elem-container
                  (if v
                    (reset! (.-state elem-container) v)
                    (do
-                     (dom/-remove (.-elem elem-container))
+                     (dom/remove! (.-elem elem-container))
                      (swap! elem-mappings dissoc k)))
                  (when v
                    (let [state (atom v)
                          elem (dom/append-child! (.-element view) (template-fn state))]
                      (swap! elem-mappings assoc k (ItemContainer. elem state))))))))]
 
-    (update-fn view coll @(.-state coll))
+    (update-fn view @(.-state coll))
     (observe-changes coll view update-fn)
 
     #_(dom/with-transitions

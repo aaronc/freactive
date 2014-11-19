@@ -7,15 +7,14 @@
 
 (defonce ^:private auto-node-id 0)
 
-;(defonce ^:private element-state-lookup {})
 (defonce ^:private element-state-lookup #js {})
 
 (defprotocol IElementSpec
   (-get-virtual-dom [x]))
 
-(defrecord ElementSpec [spec]
-  IElementSpec
-  (-get-virtual-dom [x] spec))
+;(defrecord ElementSpec [spec]
+;  IElementSpec
+;  (-get-virtual-dom [x] spec))
 
 (defn- dom-node? [x]
   (> (.-nodeType x) 0))
@@ -36,6 +35,12 @@
   boolean
   (-get-virtual-dom [x] (str x)))
 
+(defn- get-element-spec [x]
+  (if (dom-node? x)
+    (when-let [state (get-element-state x)]
+      (.-element-spec state))
+    x))
+
 (defn- get-virtual-dom [x]
   (if x
     (cond
@@ -53,9 +58,6 @@
 
     ;; nil values treated as empty "placeholder" text nodes
     ""))
-
-(defn- reset-element-spec! [dom-node spec]
-  (set! (.-element-spec (get-element-state dom-node)) spec))
 
 (deftype ElementState [id disposed element-spec child-states])
 
@@ -84,14 +86,10 @@
 (defn- unregister-from-parent-state [parent-state child-key]
   ;;(set! (.-child-states parent-state) (dissoc (.-child-states parent-state) child))
   (when-let [child-states (.-child-states parent-state)]
-    (js-delete child-states child-key))
-  )
+    (js-delete child-states child-key)))
 
-(defn- get-element-spec [x]
-  (if (dom-node? x)
-    (when-let [state (get-element-state x)]
-      (.-element-spec state))
-    x))
+(defn- reset-element-spec! [dom-node spec]
+  (set! (.-element-spec (get-element-state dom-node)) spec))
 
 (defprotocol IRemove
   (-remove! [x]))
@@ -130,46 +128,48 @@
 
 (defn remove! [x]
   (if (dom-node? x)
-    (remove-dom-node x)
+    (if-let [node-detaching (get-transition x :node-detaching)]
+      (node-detaching x (fn [] (remove-dom-node x)))
+      (remove-dom-node x))
     (-remove! x)))
 
 ;; ## Defining Transitions
 
-(defn- wrap-element-spec [elem-spec]
-  (if (string? elem-spec)
-    (ElementSpec. elem-spec)
-    elem-spec))
+;(defn- wrap-element-spec [elem-spec]
+;  (if (string? elem-spec)
+;    (ElementSpec. elem-spec)
+;    elem-spec))
 
 (defn with-transitions [elem-spec transitions]
   (if (satisfies? IDeref elem-spec)
-    (rx (with-transitions @elem-spec transitions))
-    (vary-meta (wrap-element-spec elem-spec) merge transitions)))
+    (alter-meta! elem-spec merge transitions)
+    (vary-meta elem-spec merge transitions)))
 
 (defn- exec-transition [node transition-name callback]
   (if-let [transition (get-transition node transition-name)]
     (transition node callback)
     (when callback (callback))))
-
-(defn- chain-transition [elem-spec transition-name transition-fn chain-fn]
-  (if (satisfies? IDeref elem-spec)
-    (rx (chain-transition @elem-spec transition-name transition-fn chain-fn))
-    (let [cur-transition-fn (get-transition elem-spec transition-name)
-          transition-fn (if cur-transition-fn
-                          (chain-fn cur-transition-fn transition-fn)
-                          transition-fn)]
-      (with-transitions elem-spec {transition-name transition-fn}))))
-
-(defn prepend-transition [elem-spec transition-name transition-fn]
-  (chain-transition elem-spec transition-name transition-fn
-                    (fn [cur-tx new-tx]
-                      (fn [elem on-complete]
-                        (new-tx elem (fn [elem _] (cur-tx elem on-complete)))))) )
-
-(defn append-transition [elem-spec transition-name transition-fn]
-  (chain-transition elem-spec transition-name transition-fn
-                    (fn [cur-tx new-tx]
-                      (fn [elem on-complete]
-                        (cur-tx elem (fn [elem _] (new-tx elem on-complete)))))) )
+;
+;(defn- chain-transition [elem-spec transition-name transition-fn chain-fn]
+;  (if (satisfies? IDeref elem-spec)
+;    (rx (chain-transition @elem-spec transition-name transition-fn chain-fn))
+;    (let [cur-transition-fn (get-transition elem-spec transition-name)
+;          transition-fn (if cur-transition-fn
+;                          (chain-fn cur-transition-fn transition-fn)
+;                          transition-fn)]
+;      (with-transitions elem-spec {transition-name transition-fn}))))
+;
+;(defn prepend-transition [elem-spec transition-name transition-fn]
+;  (chain-transition elem-spec transition-name transition-fn
+;                    (fn [cur-tx new-tx]
+;                      (fn [elem on-complete]
+;                        (new-tx elem (fn [elem _] (cur-tx elem on-complete)))))) )
+;
+;(defn append-transition [elem-spec transition-name transition-fn]
+;  (chain-transition elem-spec transition-name transition-fn
+;                    (fn [cur-tx new-tx]
+;                      (fn [elem on-complete]
+;                        (cur-tx elem (fn [elem _] (new-tx elem on-complete)))))) )
 
 ;; ## Polyfills
 
@@ -229,12 +229,16 @@
   (.removeAttribute elem attr-name))
 
 (defn- set-style-prop! [elem prop-name prop-value]
-  (aset (.-style elem) prop-name (str prop-value)))
+  (aset (.-style elem)
+        prop-name
+        (if (.-substring prop-value)
+          prop-value
+          (.toString prop-value))))
 
 (defn- remove-style-prop! [elem prop-name]
   (js-delete (.-style elem) prop-name))
 
-(defn- on-value-ref-invalidated* [set-fn element state-prefix attr-name ref node-state]
+(defn- bind-attr* [set-fn element state-prefix attr-name ref node-state]
   (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
     (let [attr-state #js {:disposed false}
           key [element attr-name]
@@ -253,13 +257,14 @@
       (register-with-parent-state node-state
                                   (str "-" state-prefix "." attr-name) attr-state)
       (add-watch* ref key f)))
-
   (set-fn @ref))
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
-  (let [setter (fn [v] (set-style-prop! element attr-name attr-value))]
+  (let [setter (fn [v]
+                 (println "setting style" element attr-name v)
+                 (set-style-prop! element attr-name v))]
     (if (satisfies? cljs.core/IDeref attr-value)
-      (on-value-ref-invalidated* setter element "style" attr-name attr-value node-state)
+      (bind-attr* setter element "style" attr-name attr-value node-state)
       (setter attr-value))))
 
 (defn listen! [element evt-name handler]
@@ -291,7 +296,7 @@
 
 (defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
-        (on-value-ref-invalidated* set-fn element "attr" attr-name
+        (bind-attr* set-fn element "attr" attr-name
                                    attr-value node-state)
         (set-fn attr-value)))
 
@@ -323,7 +328,12 @@
     (fn [cls] (set! (.-className element) cls))
 
     :default
-    (fn [attr-value] (.setAttribute element attr-name attr-value))))
+    (fn [attr-value]
+      (.setAttribute
+        element attr-name
+        (if (.-substring attr-value)
+          attr-value
+          (.toString attr-value))))))
 
 (defn- bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
@@ -494,15 +504,21 @@
             children)
       dom-vec)))
 
+(defn- register-element-with-parent [parent new-elem]
+  (when-not (text-node? new-elem)
+    (when-let [parent-state (get-element-state parent)]
+      (let [state (get-element-state new-elem)]
+        (set! (.-parent-state state) parent-state)
+        (register-with-parent-state parent-state (get-node-id new-elem) state)))))
+
 (defn- replace-node-completly [parent new-elem-spec cur-dom-node]
   (let [new-elem (build-element new-elem-spec)]
-        (.replaceChild parent new-elem cur-dom-node)
-        (dispose-node cur-dom-node)
-        new-elem))
+    (register-element-with-parent parent new-elem)
+    (.replaceChild parent new-elem cur-dom-node)
+    (dispose-node cur-dom-node)
+    new-elem))
 
 (declare replace-child)
-
-(declare replace-or-append-child)
 
 (declare append-children!)
 
@@ -570,47 +586,40 @@
               (replace-node-completly parent new-elem-spec cur-dom-node))))
         (replace-node-completly parent new-elem-spec cur-dom-node)))))
 
+(defn- insert-child [parent vdom before]
+  (let [new-elem (build-element vdom)]
+    (register-element-with-parent parent new-elem)
+    (.insertBefore parent new-elem before)
+    new-elem))
+
 (defn- append-child [parent new-elem]
   (let [new-elem (build-element new-elem)]
-    (.appendChild
-      ;(get-dom-node parent)
-      parent
-      new-elem)
+    (register-element-with-parent parent new-elem)
+    (.appendChild parent new-elem)
     new-elem))
 
-(defn- register-element-with-parent [parent new-elem]
-  (when-not (text-node? new-elem)
-    (when-let [parent-state (get-element-state parent)]
-      (let [state (get-element-state new-elem)]
-        (set! (.-parent-state state) parent-state)
-        (register-with-parent-state parent-state (get-node-id new-elem) state))))
-  )
+(defn- append-or-insert-child [parent new-elem before]
+  (if before
+    (insert-child parent new-elem before)
+    (append-child parent new-elem)))
 
-(defn- replace-or-append-child [parent new-elem cur-elem top-level]
-  (let [new-elem
-        (if cur-elem
-          (replace-child parent new-elem cur-elem top-level)
-          (append-child parent new-elem))]
-   (register-element-with-parent parent new-elem)
-    new-elem))
+;(defn- do-show-element [parent new-elem nil]
+;  (when new-elem
+;    (let [show (get-transition new-elem :node-attached)
+;          new-elem (replace-or-append-child parent new-elem cur-elem true)]
+;      (when show
+;        (show new-elem)
+;        new-elem)
+;      new-elem)))
 
-(defn- do-show-element [parent new-elem cur-elem]
-  (when new-elem
-    (let [show (get-transition new-elem :node-attached)
-          new-elem (replace-or-append-child parent new-elem cur-elem true)]
-      (when show
-        (show new-elem)
-        new-elem)
-      new-elem)))
-
-(defn- transition-element
-  ([parent new-elem cur-elem]
-   (if cur-elem
-     (if-let [hide (get-transition cur-elem :node-detaching)]
-       (hide cur-elem
-         (do-show-element parent new-elem cur-elem))
-       (do-show-element parent new-elem cur-elem))
-     (do-show-element parent new-elem cur-elem))))
+(defn- mount-element
+  ([parent new-elem before]
+   (let [show (get-transition new-elem :node-mounted)
+         new-elem (append-or-insert-child parent new-elem before)]
+     (when show
+       (show new-elem)
+       new-elem)
+     new-elem)))
 
 (defn- clear-children! [parent]
   (let [dom-node parent
@@ -650,7 +659,7 @@
     (when-let [parent-state (get-element-state parent)]
       (unregister-from-parent-state parent-state id))))
 
-(defn- append-deref-child [parent child-ref]
+(defn- bind-child [parent child-ref before]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
     (let [state (ReactiveElement. nil parent nil false false false nil  nil)
 
@@ -660,7 +669,10 @@
                          (or (non-reactively @child-ref) ""))
 
           show-new-elem (fn [new-elem cur]
-                          (let [new-node (replace-or-append-child parent new-elem cur true)]
+                          (let [new-node
+                                (if cur
+                                  (replace-child parent new-elem cur true)
+                                  (append-or-insert-child parent new-elem before))]
                             (set! (.-cur-element state) new-node)
                             (set! (.-updating state) false)
                             (when (.-dirty state)
@@ -688,9 +700,7 @@
                                                      (get-new-elem)
                                                      new-elem)]
                                       (show-new-elem new-elem cur))))))
-                        (show-new-elem new-elem cur)))
-
-                    )))))
+                        (show-new-elem new-elem cur))))))))
 
           invalidate
           (fn on-child-ref-invalidated
@@ -703,26 +713,38 @@
                (when-not (.-updating state)
                  (set! (.-updating state) true)
                  (queue-animation animate)))))]
-
       (set! (.-animate state) animate)
       (set! (.-invalidate state) invalidate)
-      (show-new-elem (get-new-elem) nil)
-      ;(set! (.-cur-element state)
-      ;      (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
+      (when-let [binding-disposed (get (meta child-ref) :binding-disposed)]
+        (set! (.-disposed-callback state) binding-disposed))
       (when-let [parent-state (get-element-state parent)]
         (register-with-parent-state parent-state "-reactive" state))
+      (when-let [binding-initialized (get (meta child-ref)
+                                          :binding-initialized)]
+        (binding-initialized))
+      (set! (.-updating state) false)
+      ;(let [new-node (append-or-insert-child parent (get-new-elem) before)]
+      ;  (set! (.-cur-element state) new-node)
+      ;  (when-let [node-mounted (get-transition new-node :node-attached)]
+      ;    (node-mounted new-node))
+      ;  (when (.-dirty state)
+      ;    (queue-animation (.-animate state))))
+      (show-new-elem (get-new-elem) nil)
       state)
-    (transition-element parent @child-ref nil)))
+    (mount-element parent @child-ref before)))
 
 ;; Building Elements
 
-(defn append-child! [parent child]
+(defn insert-child! [parent child before]
   (cond
     (satisfies? IDeref child)
-    (append-deref-child parent child)
+    (bind-child parent child before)
 
     :default
-    (transition-element parent child nil)))
+    (mount-element parent child before)))
+
+(defn append-child! [parent child]
+  (insert-child! parent child nil))
 
 (defn- append-children! [elem children]
   (doseq [ch children]
@@ -734,6 +756,7 @@
 
 (defn build-element [elem-spec]
   (let [virtual-dom (get-virtual-dom elem-spec)]
+    (println virtual-dom)
     (cond
       (string? virtual-dom)
       (.createTextNode js/document virtual-dom)
@@ -752,6 +775,9 @@
           (bind-attr! node k v state))
         (when children
           (append-children! node children))
+        (when-let [m (-meta virtual-dom)]
+          (when-let [node-created (get m :node-created)]
+            (node-created node)))
         node))))
 
 (defn mount! [element child]
