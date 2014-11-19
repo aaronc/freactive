@@ -230,13 +230,17 @@
 
 ;; ## Attributes, Styles & Events
 
-(defn- set-style-prop! [elem prop-name prop-value]
-  (let [prop-name (name prop-name)]
-    (aset (.-style elem) prop-name (str prop-value))))
-
 (defn- set-attr! [elem attr-name attr-value]
-  (let [attr-name (name attr-name)]
-    (.setAttribute elem attr-name attr-value)))
+  (.setAttribute elem attr-name attr-value))
+
+(defn- remove-attr! [elem attr-name]
+  (.removeAttribute elem attr-name))
+
+(defn- set-style-prop! [elem prop-name prop-value]
+  (aset (.-style elem) prop-name (str prop-value)))
+
+(defn- remove-style-prop! [elem prop-name]
+  (js-delete (.-style elem) prop-name))
 
 (defn- on-value-ref-invalidated* [set-fn element state-prefix attr-name ref node-state]
   (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
@@ -248,35 +252,29 @@
               ([key ref _ _]
                (on-value-ref-invalidated key ref))
               ([key ref]
-               ;(set-fn element attr-name @ref)
                (remove-watch* ref key)
                (queue-animation
                  (fn [_]
                    (when-not (.-disposed attr-state)
                      (add-watch* ref key on-value-ref-invalidated)
-                     (set-fn element attr-name (non-reactively @ref)))
-                   ))
-               ;(when (.-parentNode element)
-               ;  (add-watch* ref key on-value-ref-invalidated)
-               ;  (set-fn element attr-name @ref))
-               ))]
-      ;;(set! (.-invalidate attr-state) f)
-      (register-with-parent-state node-state (str "-" state-prefix "."
-                                                  attr-name) attr-state)
-      ;(set! (.-child-states node-state)
-      ;      (assoc (.-child-states node-state)
-      ;                                        attr-state))
-      (add-watch* ref key f)
-      ))
-  (set-fn element attr-name @ref))
+                     (set-fn (non-reactively @ref)))))))]
+      (register-with-parent-state node-state
+                                  (str "-" state-prefix "." attr-name) attr-state)
+      (add-watch* ref key f)))
 
-(defn bind-style-prop! [element attr-name attr-value node-state]
-  (if (satisfies? cljs.core/IDeref attr-value)
-    (on-value-ref-invalidated* set-style-prop! element "style" attr-name attr-value node-state)
-    (set-style-prop! element attr-name attr-value)))
+  (set-fn @ref))
+
+(defn- bind-style-prop! [element attr-name attr-value node-state]
+  (let [setter (fn [v] (set-style-prop! element attr-name attr-value))]
+    (if (satisfies? cljs.core/IDeref attr-value)
+      (on-value-ref-invalidated* setter element "style" attr-name attr-value node-state)
+      (setter attr-value))))
 
 (defn listen! [element evt-name handler]
   (.addEventListener element evt-name handler))
+
+(defn remove-event-listener! [element evt-name handler]
+  (.removeEventListener element evt-name handler))
 
 (defn- do-set-data-state! [element state]
   (set-attr! element "data-state" state))
@@ -289,7 +287,6 @@
     (enter-transition element old-state)))
 
 (defn set-data-state!
-  ([element _ state] (set-data-state! element state))
   ([element state]
     (let [cur-state (get-data-state element)
           state (name state)]
@@ -304,96 +301,131 @@
   (if (satisfies? cljs.core/IDeref attr-value)
         (on-value-ref-invalidated* set-fn element "attr" attr-name
                                    attr-value node-state)
-        (set-fn element attr-name attr-value)))
+        (set-fn attr-value)))
 
-(defn get-attr-setter [element attr-name]
+(defn- bind-event-listener! [element event-name handler node-state]
+  (let [attr-state #js {:disposed false :handler handler
+                        :disposed-callback (fn [] (remove-event-listener!
+                                                    element event-name
+                                                    handler))}]
+      (register-with-parent-state node-state (str "-" "event" "." event-name) attr-state)
+      (listen! element event-name handler)))
+
+(defn- bind-style! [element styles node-state]
+  (doseq [[p v] styles]
+    (bind-style-prop! element (name p) v node-state)))
+
+(defn- get-attr-setter [element attr-name]
   (cond
-   (identical? "data-state" attr-name) 
-   set-data-state!
+    (identical? "data-state" attr-name)
+    (fn [state] (set-data-state! element state))
 
-   (and (identical? (. element -type) "checkbox") (identical? attr-name "checked"))
-   (fn [node attr-name attr-value]
-     (set! (. node -checked) (true? attr-value)))
+    (and (identical? (. element -type) "checkbox") (identical? attr-name "checked"))
+    (fn [attr-value]
+      (set! (. element -checked) (true? attr-value)))
 
-   :default
-   set-attr!))
+    (identical? "id" attr-name)
+    (fn [id] (set! (.-id element) id))
 
-(defn bind-attr! [element attr-name attr-value node-state]
+    (identical? "class" attr-name)
+    (fn [cls] (set! (.-className element) cls))
+
+    :default
+    (fn [attr-value] (.setAttribute element attr-name attr-value))))
+
+(defn- bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
     (cond
       (identical? "style" attr-name)
-      (do
-        (assert (map? attr-value))
-        (doseq [[p v] attr-value]
-          (bind-style-prop! element p v node-state)))
+      (bind-style! element attr-value node-state)
 
       (identical? 0 (.indexOf attr-name "on-"))
-      (listen! element (.substring attr-name 3) attr-value)
+      (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
 
       :default
       (bind-prop-attr! (get-attr-setter element attr-name)
                        element attr-name attr-value node-state))))
 
+(defn- dispose-child-state [node-state child-key]
+  (when-let [child-states (.-child-states node-state)]
+      (when-let [state (aget child-states child-key)]
+        (set! (.-disposed state) true)
+        (when-let [disposed-callback (.-disposed-callback state)]
+          (disposed-callback))
+        (js-delete child-states child-key))))
+
 (defn- unbind-attr!* [node-state prefix attr-name]
   (let [attr-key (str "-" prefix "." attr-name)]
-    (when-let [child-states (.-child-states node-state)]
-      (when-let [state (aget child-states attr-key)]
-        (set! (.-disposed state) true)
-        (js-delete child-states attr-key)))))
+    (dispose-child-state node-state attr-key)))
 
-(defn- rebind-style! [element attr-name styles node-state]
+(defn- rebind-style-prop! [element style-name style-value node-state]
+  (unbind-attr!* node-state "style" style-name)
+  (if style-value
+    (bind-style-prop! element style-name style-value node-state)
+    (remove-style-prop! element style-name)))
+
+(defn- rebind-style! [element styles node-state]
   (doseq [[p v] styles]
-    (unbind-attr!* node-state "style" attr-name)
-    (bind-style-prop! element p v node-state)))
+    (rebind-style-prop! element (name p) v node-state)))
+
+(defn- rebind-event! [element event-name handler node-state]
+  (unbind-attr!* node-state "event" event-name)
+  (when handler
+    (listen! element event-name handler)))
+
+(defn- rebind-prop-attr! [element attr-name attr-value node-state]
+  (unbind-attr!* node-state "attr" attr-name)
+  (if attr-value
+    (bind-attr! element attr-name attr-value node-state)
+    (remove-attr! element attr-name)))
 
 (defn- rebind-attr! [element attr-name attr-value node-state]
-  )
+  (cond
+      (identical? "style" attr-name)
+      (rebind-style! element attr-value node-state)
+
+      (identical? 0 (.indexOf attr-name "on-"))
+      (rebind-event! element (.substring attr-name 3) attr-value node-state)
+
+      :default
+      (rebind-prop-attr! element attr-name attr-value node-state)))
 
 (defn set-attrs! [node attrs]
   (let [node-state (get-element-state node)]
     (doseq [[k v] attrs]
       (let [k (name k)]
-        (if (identical? k "style")
-          (doseq [[p v] v]
-            (do
-              (when node-state
-                (unbind-attr!* node-state "style" p))
-              (bind-style-prop! node p v node-state)))
-          (do
-            (when node-state
-              (unbind-attr!* node-state "attr" k))
-            (bind-attr! node k v node-state)))))))
+        (rebind-attr! node k v node-state)))))
 
-;(defn- replace-attr!* [node node-state attr-name old-val new-val prefix binder]
-;  (if (not (identical? old-val new-val))
-;    (unbind-attr!* node-state prefix attr-name)
-;    (binder node attr-name new-val node-state)))
-;
-;(defn- replace-attr! [node node-state attr-name old-val new-val]
-;  (replace-attr!* node node-state attr-name old-val new-val "attr"))
-
-(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder binder
-                        remover]
+(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
   (loop [[[k new-val] & new-attrs] (seq new-attrs)
          old-attrs old-attrs]
     (if k
       (let [attr-name (name k)]
         (if-let [existing (get old-attrs k)]
           (do
-            (rebinder node node-state attr-name existing new-val)
+            (when-not (identical? existing new-val)
+              (rebinder node attr-name new-val node-state))
             (recur new-attrs (dissoc old-attrs k)))
           (do
-            (binder node node-state attr-name new-val)
+            (rebinder node attr-name new-val node-state)
             (recur new-attrs old-attrs))))
-      (loop [[[k v] & old-attrs] old-attrs]
+      (loop [[[k v] & old-attrs] (seq old-attrs)]
         (when k
-          (remover node node-state (name k))
+          (rebinder node (name k) nil node-state)
           (recur old-attrs))))))
 
 (defn- replace-attrs! [node old-attrs new-attrs]
-  (let [node-state (get-element-state node)]
-    ;;(replace-attrs!* node node-state old-attrs new-attrs nil nil )
-    ))
+  (let [node-state (get-element-state node)
+        old-style (:style old-attrs)
+        new-style (:style new-attrs)]
+    (replace-attrs!* node node-state
+                     (dissoc old-attrs :style)
+                     (dissoc new-attrs :style)
+                     rebind-attr!)
+    (replace-attrs!* node node-state
+                     old-style
+                     new-style
+                     rebind-style-prop!)))
 
 ;; From hiccup.compiler:
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
@@ -420,6 +452,17 @@
     (when class (set! (.-className node) (.replace class "." " ")))
     node))
 
+(defn- create-dom-node-simple [tag]
+  (let [tag-ns (namespace tag)
+        node (if tag-ns
+               (let [resolved-ns
+                     (if (identical? tag-ns "svg")
+                       "http://www.w3.org/2000/svg"
+                       (get-xml-namespace tag-ns))]
+                 (.createElementNS js/document resolved-ns tag))
+               (.createElement js/document tag))]
+    node))
+
 ;; ## Core DOM Manipulation Methods
 
 (declare build-element)
@@ -427,26 +470,98 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(defn- replace-child [parent new-elem-spec cur-elem]
-  (let [cur-dom-node cur-elem                                       ;;
-  ;; (get-dom-node cur-elem)
-        new-virtual-dom (get-virtual-dom new-elem-spec)]
-    (if (and
-          (string? new-virtual-dom)
-          (text-node? cur-dom-node))
+(def enable-diffing false)
+
+(defn- can-diff-element [parent new-elem-spec cur-elem])
+
+(defn- normalize-virtual-element [dom-vec]
+  (let [tag (first dom-vec)
+        tag-ns (namespace tag)
+        [_ tag id class] (re-matches re-tag (name tag))
+        class (when class (.replace class "." " "))
+        attrs? (second dom-vec)
+        attrs (when (map? attrs?) attrs?)
+        children (if attrs (nnext dom-vec) (next dom-vec))]
+    (if (or id class)
+      (into [(keyword tag-ns tag) (merge attrs {:id id :class class})]
+            children)
+      dom-vec)))
+
+(defn- replace-node-completly [parent new-elem-spec cur-dom-node]
+  (let [new-elem (build-element new-elem-spec)]
+        (.replaceChild parent new-elem cur-dom-node)
+        (dispose-node cur-dom-node)
+        new-elem))
+
+(declare replace-child)
+
+(declare replace-or-append-child)
+
+(declare append-children!)
+
+(defn- try-diff-subseq [parent cur-child new-children]
+  (loop [cur-child cur-child
+         new-child (first new-children)
+         more (rest new-children)]
+    (if new-child
+      (if cur-child
+        (if (and (sequential? new-child) (not (keyword? (first new-child))))
+          (let [cur-child (try-diff-subseq parent cur-child new-child)]
+            (recur cur-child (first more) (rest more)))
+          (do
+            (replace-child parent new-child cur-child false)
+            (recur (.-nextSibling cur-child) (first more) (rest more))))
+        (do
+          (append-children! parent new-children)
+          nil))
+      cur-child)))
+
+(defn- try-diff [parent vdom cur-dom-node top-level]
+  (let [cur-vdom (get-virtual-dom cur-dom-node)
+        vdom (normalize-virtual-element vdom)]
+    (if (keyword-identical? (first vdom) (first cur-vdom))
+      (let [old-attrs? (second cur-vdom)
+            new-attrs? (second vdom)
+            new-attrs (when (map? new-attrs?) new-attrs?)]
+        (replace-attrs! cur-dom-node
+                        (when (map? old-attrs?) old-attrs?)
+                        new-attrs)
+        (when-not top-level
+          (dispose-child-state (get-element-state cur-dom-node) "-reactive"))
+        (reset-element-spec! cur-dom-node vdom)
+        (let [new-children (if new-attrs (nnext vdom) (next vdom))
+              dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
+          (loop [cur-child dangling-child]
+            (when cur-child
+              (let [next-sib (.-nextSibling cur-child)]
+                (.removeChild cur-dom-node cur-child)
+                (recur next-sib)))))
+        cur-dom-node)
+      (replace-node-completly parent vdom cur-dom-node))))
+
+(defn- replace-child [parent new-elem-spec cur-dom-node top-level]
+  (let [new-virtual-dom (get-virtual-dom new-elem-spec)]
+    (if
+      (and (string? new-virtual-dom)
+           (text-node? cur-dom-node))
       (do
         (set! (.-textContent cur-dom-node) new-virtual-dom)
-        ;(reset-element-spec! cur-dom-node new-elem-spec)
-        cur-elem)
-      (let [new-elem (build-element new-elem-spec)]
-        (.replaceChild
-          ;(get-dom-node parent)
-          ;(get-dom-node new-elem)
-          parent
-          new-elem
-          cur-dom-node)
-        (dispose-node cur-dom-node)
-        new-elem))))
+        cur-dom-node)
+
+      (if enable-diffing
+        (if top-level
+          (do
+            (println "starting diff replace")
+            (time
+              (try-diff parent new-virtual-dom cur-dom-node top-level)))
+          (try-diff parent new-virtual-dom cur-dom-node top-level))
+
+        (if top-level
+          (do
+            (println "starting full replace")
+            (time
+              (replace-node-completly parent new-elem-spec cur-dom-node))))
+        (replace-node-completly parent new-elem-spec cur-dom-node)))))
 
 (defn- append-child [parent new-elem]
   (let [new-elem (build-element new-elem)]
@@ -456,10 +571,10 @@
       new-elem)
     new-elem))
 
-(defn- replace-or-append-child [parent new-elem cur-elem]
+(defn- replace-or-append-child [parent new-elem cur-elem top-level]
   (let [new-elem
         (if cur-elem
-          (replace-child parent new-elem cur-elem)
+          (replace-child parent new-elem cur-elem top-level)
           (append-child parent new-elem))]
     (when-not (text-node? new-elem)
       (when-let [parent-state (get-element-state parent)]
@@ -471,7 +586,7 @@
 (defn- do-show-element [parent new-elem cur-elem]
   (when new-elem
     (let [show (get-transition new-elem :node-attached)
-          new-elem (replace-or-append-child parent new-elem cur-elem)]
+          new-elem (replace-or-append-child parent new-elem cur-elem true)]
       (when show
         (show new-elem)
         new-elem)
@@ -508,12 +623,12 @@
 
 ;; Reactive Element Handling
 
-(def ^:private auto-reactive-id 0)
-
-(defn- new-reactive-id []
-  (let [id auto-reactive-id]
-    (set! auto-reactive-id (inc auto-reactive-id))
-    (str "-r." id)))
+;(def ^:private auto-reactive-id 0)
+;
+;(defn- new-reactive-id []
+;  (let [id auto-reactive-id]
+;    (set! auto-reactive-id (inc auto-reactive-id))
+;    (str "-r." id)))
 
 (deftype ReactiveElement [id parent cur-element dirty updating disposed animate invalidate]
   IRemove
@@ -526,8 +641,7 @@
 
 (defn- append-deref-child [parent child-ref]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
-    (let [reactive-id (new-reactive-id)
-          state (ReactiveElement. reactive-id parent nil false false false nil  nil)
+    (let [state (ReactiveElement. nil parent nil false false false nil  nil)
 
           get-new-elem (fn []
                          (set! (.-dirty state) false)
@@ -535,7 +649,7 @@
                          (or (non-reactively @child-ref) ""))
 
           show-new-elem (fn [new-elem cur]
-                          (let [new-node (replace-or-append-child parent new-elem cur)]
+                          (let [new-node (replace-or-append-child parent new-elem cur true)]
                             (set! (.-cur-element state) new-node)
                             (set! (.-updating state) false)
                             (when (.-dirty state)
@@ -585,7 +699,7 @@
       ;(set! (.-cur-element state)
       ;      (transition-element parent (or (non-reactively @child-ref) [:span]) nil))
       (when-let [parent-state (get-element-state parent)]
-        (register-with-parent-state parent-state reactive-id state))
+        (register-with-parent-state parent-state "-reactive" state))
       state)
     (transition-element parent @child-ref nil)))
 
@@ -611,10 +725,9 @@
   (let [virtual-dom (get-virtual-dom elem-spec)
         node
         (if (string? virtual-dom)
-          (let [node (.createTextNode js/document virtual-dom)]
-            ;(init-element-state! node elem-spec)
-            node)
-          (let [node (create-dom-node (first virtual-dom))
+          (.createTextNode js/document virtual-dom)
+          (let [virtual-dom (normalize-virtual-element virtual-dom)
+                node (create-dom-node (first virtual-dom))
                 state (init-element-state! node elem-spec)
                 attrs? (second virtual-dom)
                 attrs (when (map? attrs?) attrs?)
