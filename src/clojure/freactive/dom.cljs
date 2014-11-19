@@ -93,14 +93,6 @@
       (.-element-spec state))
     x))
 
-(defprotocol IHasDOMNode
-  (-get-dom-node [x]))
-
-(defn get-dom-node [x]
-  (if (dom-node? x)
-    x
-    (-get-dom-node x)))
-
 (defprotocol IRemove
   (-remove! [x]))
 
@@ -289,7 +281,7 @@
 (defn set-data-state!
   ([element state]
     (let [cur-state (get-data-state element)
-          state (name state)]
+          state (when state (name state))]
       (when-not (identical? cur-state state)
         (do-set-data-state! element state)
         (let [leave-transition (get-transition element (keyword (str "after-" cur-state)))]

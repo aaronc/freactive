@@ -12,7 +12,8 @@
                [lein-figwheel "0.1.5-SNAPSHOT"]]
      :dependencies
      [[com.cemerick/clojurescript.test "0.3.1"]
-      [figwheel "0.1.5-SNAPSHOT"]]
+      [figwheel "0.1.5-SNAPSHOT"]
+      [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
      :resource-paths ["example"]
      :cljsbuild {:builds [{:id           "example"
                            :source-paths ["src/clojure" "test"]

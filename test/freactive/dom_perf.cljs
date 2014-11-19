@@ -2,12 +2,13 @@
   (:refer-clojure :exclude [atom])
   (:require
     [freactive.dom :as dom]
-    [freactive.core :refer [atom cursor
-                            state-machine transition!] :as r]
+    [freactive.core :refer [atom cursor] :as r]
     [figwheel.client :as fw :include-macros true]
     [freactive.animation :as animation]
-    [goog.string :as gstring])
+    [goog.string :as gstring]
+    [cljs.core.async :refer [chan put! <!]])
   (:require-macros
+  [cljs.core.async.macros :refer [go go-loop]]
   [freactive.macros :refer [rx debug-rx]]))
 
 (enable-console-print!)
@@ -96,12 +97,19 @@
       ". "]])]
    (let [ease-x (animation/easer 0.0)
          ease-y (animation/easer 0.0)
-         graph-state (state-machine :init
-                                    {:from-showing-to-jitter false
-                                     :from-disposing-to-jitter false})]
+         graph-state (atom nil)
+         action-ch (chan)]
+     (go-loop []
+       (let [action (<! action-ch)]
+         (case @graph-state
+           :updating
+           (when (= action :ready)
+             (reset! graph-state :ready))
+           (reset! graph-state action))
+         (recur)))
      [:div
       {:width "100%" :height "100%"
-       :on-mousedown (fn [_] (transition! graph-state :jitter))}
+       :on-mousedown (fn [_] (put! action-ch :jitter))}
       [:svg/svg
        {:width   "100%" :height "100%"
         :style   {:position "absolute" :left 0 :top "20px"}
@@ -125,16 +133,15 @@
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
                {:node-attached (fn [x cb]
-                           (transition! graph-state :showing)
                            (animation/start-easing! ease-x 0.0 1.0 1000
                                                     animation/quad-in nil)
                            (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out
-                                                    (fn [] (transition! graph-state :ready))))
+                                                    (fn [] (put! action-ch :ready))))
                 :on-jitter (fn [x cb]
                              (jitter ease-x nil)
-                             (jitter ease-y (fn [] (transition! graph-state :ready))))
-                :node-detaching (fn [x cb]
-                           (transition! graph-state :disposing)
+                             (jitter ease-y (fn []
+                                              (put! action-ch :ready))))
+                :node-detaching (fn [x cb] (put! action-ch :updating)
                            (animation/start-easing! ease-x 1.0 0.0 1000
                                                     animation/quad-out nil)
                            (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))})))]])])
@@ -142,4 +149,3 @@
 (dom/mount! (.getElementById js/document "root") (view))
 
 (fw/watch-and-reload)
-
