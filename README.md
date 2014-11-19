@@ -12,7 +12,7 @@ freactive is a high-performance, pure [Clojurescript](https://github.com/clojure
 * Allow for cursors based on paths as well as **lenses**
 * Provide a generic [items view component](#items-view) for **efficient viewing of large data sets**
 * **Minimize unnecessary triggering of update events**
-* Allow for binding of any DOM tag including Polymer elements
+* Allow for binding of **any DOM tag including Polymer elements**
 * Coordinate all updates via **requestAnimationFrame** wherever possible
 * Be easy to [debug](#debugging-reactive-expressions)
 * Be written in **pure Clojurescript**
