@@ -261,7 +261,7 @@
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
   (let [setter (fn [v]
-                 (println "setting style" element attr-name v)
+                 ;(println "setting style" element attr-name v)
                  (set-style-prop! element attr-name v))]
     (if (satisfies? cljs.core/IDeref attr-value)
       (bind-attr* setter element "style" attr-name attr-value node-state)
@@ -331,9 +331,11 @@
     (fn [attr-value]
       (.setAttribute
         element attr-name
-        (if (.-substring attr-value)
-          attr-value
-          (.toString attr-value))))))
+        (if attr-value
+          (if (.-substring attr-value)
+            attr-value
+            (.toString attr-value))
+          "")))))
 
 (defn- bind-attr! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)]
@@ -541,7 +543,8 @@
 
 (defn- try-diff [parent vdom cur-dom-node top-level]
   (let [cur-vdom (get-virtual-dom cur-dom-node)
-        vdom (normalize-virtual-element vdom)]
+        ;;vdom (normalize-virtual-element vdom)
+        ]
     (if (keyword-identical? (first vdom) (first cur-vdom))
       (let [old-attrs? (second cur-vdom)
             new-attrs? (second vdom)
@@ -643,12 +646,12 @@
 
 ;; Reactive Element Handling
 
-;(def ^:private auto-reactive-id 0)
-;
-;(defn- new-reactive-id []
-;  (let [id auto-reactive-id]
-;    (set! auto-reactive-id (inc auto-reactive-id))
-;    (str "-r." id)))
+(def ^:private auto-reactive-id 0)
+
+(defn- new-reactive-id []
+  (let [id auto-reactive-id]
+    (set! auto-reactive-id (inc auto-reactive-id))
+    (str "-r." id)))
 
 (deftype ReactiveElement [id parent cur-element dirty updating disposed animate invalidate]
   IRemove
@@ -659,9 +662,10 @@
     (when-let [parent-state (get-element-state parent)]
       (unregister-from-parent-state parent-state id))))
 
-(defn- bind-child [parent child-ref before]
+(defn- bind-child* [parent child-ref before insert-child* replace-child* remove*]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
-    (let [state (ReactiveElement. nil parent nil false false false nil  nil)
+    (let [id (new-reactive-id)
+          state (ReactiveElement. id parent nil false false false nil  nil)
 
           get-new-elem (fn []
                          (set! (.-dirty state) false)
@@ -671,8 +675,8 @@
           show-new-elem (fn [new-elem cur]
                           (let [new-node
                                 (if cur
-                                  (replace-child parent new-elem cur true)
-                                  (append-or-insert-child parent new-elem before))]
+                                  (replace-child* parent new-elem cur true)
+                                  (insert-child* parent new-elem before))]
                             (set! (.-cur-element state) new-node)
                             (set! (.-updating state) false)
                             (when (.-dirty state)
@@ -694,7 +698,7 @@
                                 (fn []
                                   (if (.-disposed state)
                                     (do
-                                      (remove-dom-node cur)
+                                      (remove* cur)
                                       (set! (.-updating cur) false))
                                     (let [new-elem (if (.-dirty state)
                                                      (get-new-elem)
@@ -718,20 +722,17 @@
       (when-let [binding-disposed (get (meta child-ref) :binding-disposed)]
         (set! (.-disposed-callback state) binding-disposed))
       (when-let [parent-state (get-element-state parent)]
-        (register-with-parent-state parent-state "-reactive" state))
+        (register-with-parent-state parent-state (str "-reactive" id) state))
       (when-let [binding-initialized (get (meta child-ref)
                                           :binding-initialized)]
         (binding-initialized))
       (set! (.-updating state) false)
-      ;(let [new-node (append-or-insert-child parent (get-new-elem) before)]
-      ;  (set! (.-cur-element state) new-node)
-      ;  (when-let [node-mounted (get-transition new-node :node-attached)]
-      ;    (node-mounted new-node))
-      ;  (when (.-dirty state)
-      ;    (queue-animation (.-animate state))))
       (show-new-elem (get-new-elem) nil)
       state)
     (mount-element parent @child-ref before)))
+
+(defn bind-child [parent child before]
+  (bind-child* parent child before append-or-insert-child replace-child remove-dom-node))
 
 ;; Building Elements
 
@@ -756,7 +757,7 @@
 
 (defn build-element [elem-spec]
   (let [virtual-dom (get-virtual-dom elem-spec)]
-    (println virtual-dom)
+    ;(println virtual-dom)
     (cond
       (string? virtual-dom)
       (.createTextNode js/document virtual-dom)
