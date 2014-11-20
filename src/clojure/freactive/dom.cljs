@@ -70,7 +70,7 @@
         state (ElementState. node-id false element-spec nil)]
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
-    (when-let [m (-meta element-spec)]
+    (when-let [m (meta element-spec)]
       (when-let [on-disposed (get m :node-disposed)]
         (set! (.-disposed-callback state) on-disposed)))
     (aset element-state-lookup node-id state)
@@ -78,13 +78,11 @@
     state))
 
 (defn- register-with-parent-state [parent-state child-key state]
-  ;;(set! (.-child-states parent-state) (assoc (.-child-states parent-state) child state))
   (let [child-states (or (.-child-states parent-state)
                         (set! (.-child-states parent-state) #js {}))]
     (aset child-states child-key state)))
 
 (defn- unregister-from-parent-state [parent-state child-key]
-  ;;(set! (.-child-states parent-state) (dissoc (.-child-states parent-state) child))
   (when-let [child-states (.-child-states parent-state)]
     (js-delete child-states child-key)))
 
@@ -508,7 +506,9 @@
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
-    (when-let [parent-state (get-element-state parent)]
+    (let [parent-state (get-element-state parent)
+          parent-state (or parent-state
+                           (init-element-state! parent nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state (get-node-id new-elem) state)))))
@@ -776,7 +776,7 @@
           (bind-attr! node k v state))
         (when children
           (append-children! node children))
-        (when-let [m (-meta virtual-dom)]
+        (when-let [m (meta virtual-dom)]
           (when-let [node-created (get m :node-created)]
             (node-created node)))
         node))))
