@@ -71,4 +71,5 @@
   (-cur-value [_] #js [x y]))
 
 (defn svg-translate
-
+  ([x] (SVGTranslateX. x))
+  ([x y] (SVGTranslate. x y)))
