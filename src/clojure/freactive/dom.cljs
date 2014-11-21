@@ -116,13 +116,13 @@
                               (dispose-node child-key state)))))))
 
 (defn- remove-dom-node [dom-node]
-  (time
-    (let [state (aget element-state-lookup dom-node)]
-      (dispose-node dom-node state)
-      (when-let [parent (.-parentNode dom-node)]
-        (.removeChild parent dom-node)
-        (when state
-          (js-delete (.-parent-state state) state))))))
+  ;(println "removing dom node")
+  (let [state (aget element-state-lookup dom-node)]
+    (dispose-node dom-node state)
+    (when-let [parent (.-parentNode dom-node)]
+      (.removeChild parent dom-node)
+      (when state
+        (js-delete (.-parent-state state) state)))))
 
 (defn remove! [x]
   (if (dom-node? x)
@@ -240,26 +240,26 @@
   (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
     (let [attr-state #js {:disposed false}
           key [element attr-name]
-          f (fn on-value-ref-invalidated
-              ([]
-               (on-value-ref-invalidated key ref))
-              ([key ref _ _]
-               (on-value-ref-invalidated key ref))
-              ([key ref]
-               (remove-watch* ref key)
-               (queue-animation
-                 (fn [_]
-                   (when-not (.-disposed attr-state)
-                     (add-watch* ref key on-value-ref-invalidated)
-                     (set-fn (non-reactively @ref)))))))]
+          invalidate
+          (fn on-value-ref-invalidated
+            ([]
+             (on-value-ref-invalidated key ref))
+            ([key ref _ _]
+             (on-value-ref-invalidated key ref))
+            ([key ref]
+             (remove-watch* ref key)
+             (queue-animation
+               (fn [_]
+                 (when-not (.-disposed attr-state)
+                   (add-watch* ref key on-value-ref-invalidated)
+                   (set-fn (non-reactively @ref)))))))]
       (register-with-parent-state node-state
                                   (str "-" state-prefix "." attr-name) attr-state)
-      (add-watch* ref key f)))
+      (add-watch* ref key invalidate)))
   (set-fn @ref))
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
   (let [setter (fn [v]
-                 ;(println "setting style" element attr-name v)
                  (set-style-prop! element attr-name v))]
     (if (satisfies? cljs.core/IDeref attr-value)
       (bind-attr* setter element "style" attr-name attr-value node-state)
@@ -513,8 +513,13 @@
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state (get-node-id new-elem) state)))))
 
-(defn- replace-node-completly [parent new-elem-spec cur-dom-node]
-  (let [new-elem (build-element new-elem-spec)]
+(defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
+  (let [new-elem
+        (if top-level
+          (do
+            ;(println "build")
+            (build-element new-elem-spec))
+          (build-element new-elem-spec))]
     (register-element-with-parent parent new-elem)
     (.replaceChild parent new-elem cur-dom-node)
     (dispose-node cur-dom-node)
@@ -546,24 +551,28 @@
         ;;vdom (normalize-virtual-element vdom)
         ]
     (if (keyword-identical? (first vdom) (first cur-vdom))
-      (let [old-attrs? (second cur-vdom)
-            new-attrs? (second vdom)
-            new-attrs (when (map? new-attrs?) new-attrs?)]
-        (replace-attrs! cur-dom-node
-                        (when (map? old-attrs?) old-attrs?)
-                        new-attrs)
-        (when-not top-level
-          (dispose-child-state (get-element-state cur-dom-node) "-reactive"))
-        (reset-element-spec! cur-dom-node vdom)
-        (let [new-children (if new-attrs (nnext vdom) (next vdom))
-              dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
-          (loop [cur-child dangling-child]
-            (when cur-child
-              (let [next-sib (.-nextSibling cur-child)]
-                (.removeChild cur-dom-node cur-child)
-                (recur next-sib)))))
-        cur-dom-node)
-      (replace-node-completly parent vdom cur-dom-node))))
+      (do
+        ;(println "diff hit" (first vdom))
+        (let [old-attrs? (second cur-vdom)
+              new-attrs? (second vdom)
+              new-attrs (when (map? new-attrs?) new-attrs?)]
+          (replace-attrs! cur-dom-node
+                          (when (map? old-attrs?) old-attrs?)
+                          new-attrs)
+          (when-not top-level
+            (dispose-child-state (get-element-state cur-dom-node) "-reactive"))
+          (reset-element-spec! cur-dom-node vdom)
+          (let [new-children (if new-attrs (nnext vdom) (next vdom))
+                dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
+            (loop [cur-child dangling-child]
+              (when cur-child
+                (let [next-sib (.-nextSibling cur-child)]
+                  (.removeChild cur-dom-node cur-child)
+                  (recur next-sib)))))
+          cur-dom-node))
+      (do
+        ;(println "build hit" (first vdom) (first cur-vdom))
+        (replace-node-completely parent vdom cur-dom-node top-level)))))
 
 (defn- replace-child [parent new-elem-spec cur-dom-node top-level]
   (let [new-virtual-dom (get-virtual-dom new-elem-spec)]
@@ -582,12 +591,7 @@
               (try-diff parent new-virtual-dom cur-dom-node top-level)))
           (try-diff parent new-virtual-dom cur-dom-node top-level))
 
-        (if top-level
-          (do
-            (println "starting full replace")
-            (time
-              (replace-node-completly parent new-elem-spec cur-dom-node))))
-        (replace-node-completly parent new-elem-spec cur-dom-node)))))
+        (replace-node-completely parent new-elem-spec cur-dom-node top-level)))))
 
 (defn- insert-child [parent vdom before]
   (let [new-elem (build-element vdom)]
@@ -667,6 +671,8 @@
     (let [id (new-reactive-id)
           state (ReactiveElement. id parent nil false false false nil  nil)
 
+          ref-meta (meta ref)
+
           get-new-elem (fn []
                          (set! (.-dirty state) false)
                          (add-watch* child-ref state (.-invalidate state))
@@ -716,13 +722,23 @@
                (set! (.-dirty state) true)
                (when-not (.-updating state)
                  (set! (.-updating state) true)
-                 (queue-animation animate)))))]
+                 (queue-animation animate)))))
+
+          binding-invalidated (:binding-invalidated ref-meta)
+
+          invalidate (if binding-invalidated
+                       (fn binding-invalidated-wrapper
+                         ([key child-ref _ _] (binding-invalidated-wrapper key child-ref))
+                         ([key child-ref]
+                          (when (binding-invalidated (.-cur-element state) child-ref)
+                            (invalidate key child-ref))))
+                       invalidate)]
       (set! (.-animate state) animate)
       (set! (.-invalidate state) invalidate)
       (when-let [binding-disposed (get (meta child-ref) :binding-disposed)]
         (set! (.-disposed-callback state) binding-disposed))
       (when-let [parent-state (get-element-state parent)]
-        (register-with-parent-state parent-state (str "-reactive" id) state))
+        (register-with-parent-state parent-state id state))
       (when-let [binding-initialized (get (meta child-ref)
                                           :binding-initialized)]
         (binding-initialized))
