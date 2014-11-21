@@ -73,7 +73,7 @@
   IReset
   (-reset! [a new-value]
     (let [old-value (.-state a)]
-        (when (not= old-value new-value)
+        (when-not (identical? old-value new-value)
           (let [validate (.-validator a)]
             (when-not (nil? validate)
               (assert (validate new-value) "Validator rejected reference state")))
@@ -180,7 +180,7 @@
                             *trace-capture* (when trace-captures
                                               (trace-captures)
                                               trace-captures)] (f))]
-      (when (not= old-val new-val)
+      (when-not (identical? old-val new-val)
         (set! state new-val)
         (-notify-watches this old-val new-val)
         new-val)))
@@ -279,7 +279,7 @@
     (add-watch-fn)
     (let [new-value ((.-getter cursor) @ref)
           old-value (.-state cursor)]
-      (when (not= old-value new-value)
+      (when-not (identical? old-value new-value)
         (set! (.-state cursor) new-value)
         (when-not (empty? (.-watches cursor))
           (-notify-watches cursor old-value new-value))
