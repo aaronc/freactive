@@ -14,6 +14,7 @@ freactive is a high-performance, pure [Clojurescript](https://github.com/clojure
 * **Minimize unnecessary triggering of update events**
 * Allow for binding of **any DOM tag including Polymer elements**
 * Coordinate all updates via **requestAnimationFrame** wherever possible
+* Use generic algorithms wherever possible for pluggable extension points including custom polyfills, event delegation, etc.
 * Be easy to [debug](#debugging-reactive-expressions)
 * Be written in **pure Clojurescript**
 * Provide support for older browsers via polyfills (not yet implemented)
