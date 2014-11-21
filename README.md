@@ -197,9 +197,9 @@ It should be noted that the `items-view` will be orthogonal to the other functio
 
 Reactive expressions can be hard to debug - sometimes we notice that something should be getting invalidated that isn't or it seems like something is getting updated too often.
 
-The `rx-debug` macro can be placed around the initialization of any `rx`:
+The `debug-rx` macro can be placed around the initialization of any `rx`:
 ```clojure
- (rx-debug (rx (str @n)))
+ (debug-rx (rx (str @n)))
 ```
 
 and you should seeing verbose debug statements corresponding to:
