@@ -171,8 +171,6 @@
 
 ;; ## Polyfills
 
-(def ^:private raf-start-time (.getTime (js/Date.)))
-
 (def request-animation-frame
   (or
    (.-requestAnimationFrame js/window)
@@ -180,10 +178,11 @@
    (.-mozRequestAnimationFrame js/window)
    (.-msRequestAnimationFrame js/window)
    (.-oRequestAnimationFrame js/window)
-   (fn [f]
-     (js/setTimeout
-      #(f (- (.getTime (js/Date.)) raf-start-time))
-      16.66666))))
+   (let [t0 (.getTime (js/Date.))]
+     (fn [f]
+       (js/setTimeout
+        #(f (- (.getTime (js/Date.)) t0))
+        16.66666)))))
 
 ;; Render Loop
 
