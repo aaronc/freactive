@@ -171,8 +171,18 @@
 
 ;; ## Polyfills
 
-(defn request-animation-frame [f]
-  (.requestAnimationFrame js/window f))
+(def request-animation-frame
+  (or
+   (.-requestAnimationFrame js/window)
+   (.-webkitRequestAnimationFrame js/window)
+   (.-mozRequestAnimationFrame js/window)
+   (.-msRequestAnimationFrame js/window)
+   (.-oRequestAnimationFrame js/window)
+   (let [t0 (.getTime (js/Date.))]
+     (fn [f]
+       (js/setTimeout
+        #(f (- (.getTime (js/Date.)) t0))
+        16.66666)))))
 
 ;; Render Loop
 
