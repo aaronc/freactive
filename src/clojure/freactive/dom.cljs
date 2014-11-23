@@ -671,7 +671,7 @@
     (let [id (new-reactive-id)
           state (ReactiveElement. id parent nil false false false nil  nil)
 
-          ref-meta (meta ref)
+          ref-meta (meta child-ref)
 
           get-new-elem (fn []
                          (set! (.-dirty state) false)
