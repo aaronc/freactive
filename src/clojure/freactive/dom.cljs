@@ -17,7 +17,7 @@
 ;  (-get-virtual-dom [x] spec))
 
 (defn- dom-node? [x]
-  (> (.-nodeType x) 0))
+  (and x (> (.-nodeType x) 0)))
 
 (defn- get-attr [dom-node attr-name]
   (when (.-getAttribute dom-node)
