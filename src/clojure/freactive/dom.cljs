@@ -5,6 +5,9 @@
 
 ;; ## Core Defintions
 
+(def ^:dynamic *listen!* #(.addEventListener %1 %2 %3))
+(def ^:dynamic *unlisten!* #(.removeEventListener %1 %2 %3))
+
 (defonce ^:private auto-node-id 0)
 
 (defonce ^:private element-state-lookup #js {})
@@ -276,10 +279,10 @@
       (setter attr-value))))
 
 (defn listen! [element evt-name handler]
-  (.addEventListener element evt-name handler))
+  (*listen!* element evt-name handler))
 
 (defn remove-event-listener! [element evt-name handler]
-  (.removeEventListener element evt-name handler))
+  (*unlisten!* element evt-name handler))
 
 (defn- do-set-data-state! [element state]
   (set-attr! element "data-state" state))
