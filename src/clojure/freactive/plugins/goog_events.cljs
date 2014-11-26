@@ -2,6 +2,6 @@
   (:require [goog.events :as events]
     [freactive.dom :as dom]))
 
-(defn plug-in! []
-  (set! dom/*listen!* events/listen)
-  (set! dom/*unlisten!* events/unlisten))
+(defn use-goog-events! []
+  (set! dom/listen! events/listen)
+  (set! dom/unlisten! events/unlisten))

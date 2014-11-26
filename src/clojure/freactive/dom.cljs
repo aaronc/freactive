@@ -5,9 +5,6 @@
 
 ;; ## Core Defintions
 
-(def ^:dynamic *listen!* #(.addEventListener %1 %2 %3))
-(def ^:dynamic *unlisten!* #(.removeEventListener %1 %2 %3))
-
 (defonce ^:private auto-node-id 0)
 
 (defonce ^:private element-state-lookup #js {})
@@ -278,11 +275,15 @@
       (bind-attr* setter element "style" attr-name attr-value node-state)
       (setter attr-value))))
 
-(defn listen! [element evt-name handler]
-  (*listen!* element evt-name handler))
+(defn add-event-handler! [element evt-name handler]
+  (.addEventListener element evt-name handler))
 
-(defn remove-event-listener! [element evt-name handler]
-  (*unlisten!* element evt-name handler))
+(defn remove-event-handler! [element evt-name handler]
+  (.removeEventListener  element evt-name handler))
+
+(def ^:dynamic listen! add-event-handler!)
+
+(def ^:dynamic unlisten! remove-event-handler!)
 
 (defn- do-set-data-state! [element state]
   (set-attr! element "data-state" state))
@@ -313,7 +314,7 @@
 
 (defn- bind-event-listener! [element event-name handler node-state]
   (let [attr-state #js {:disposed false :handler handler
-                        :disposed-callback (fn [] (remove-event-listener!
+                        :disposed-callback (fn [] (unlisten!
                                                     element event-name
                                                     handler))}]
       (register-with-parent-state node-state (str "-" "event" "." event-name) attr-state)
