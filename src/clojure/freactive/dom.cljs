@@ -586,33 +586,35 @@
           nil))
       cur-child)))
 
-(defn- try-diff [parent vdom cur-dom-node top-level]
+(defn- try-diff [parent spec vdom cur-dom-node top-level]
   (let [cur-state (get-element-state cur-dom-node)
         cur-tag (.-tag cur-state)
         new-tag (first vdom)]
-    (if (keyword-identical? new-tag cur-tag)
-      (do
-        ;(println "diff hit" (first vdom))
-        (let [old-attrs (.-attrs cur-state)
-              new-attrs? (second vdom)
-              new-attrs (when (map? new-attrs?) new-attrs?)]
-          (reset-element-spec! cur-state vdom new-tag new-attrs)
-          (replace-attrs! cur-dom-node
-                          cur-state
-                          old-attrs
-                          new-attrs)
-          (let [new-children (if new-attrs (nnext vdom) (next vdom))
-                dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
-            (loop [cur-child dangling-child]
-              (when cur-child
-                (let [next-sib (.-nextSibling cur-child)]
-                  (remove-dom-node cur-child)
-                  (recur next-sib)))))
-          (on-attached cur-state cur-dom-node)
-          cur-dom-node))
-      (do
-        ;(println "build hit" (first vdom) (first cur-vdom))
-        (replace-node-completely parent vdom cur-dom-node top-level)))))
+    (if (identical? spec (.-element-spec cur-state))
+      cur-dom-node
+      (if (keyword-identical? new-tag cur-tag)
+        (do
+          ;(println "diff hit" (first vdom))
+          (let [old-attrs (.-attrs cur-state)
+                new-attrs? (second vdom)
+                new-attrs (when (map? new-attrs?) new-attrs?)]
+            (reset-element-spec! cur-state vdom new-tag new-attrs)
+            (replace-attrs! cur-dom-node
+                            cur-state
+                            old-attrs
+                            new-attrs)
+            (let [new-children (if new-attrs (nnext vdom) (next vdom))
+                  dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
+              (loop [cur-child dangling-child]
+                (when cur-child
+                  (let [next-sib (.-nextSibling cur-child)]
+                    (remove-dom-node cur-child)
+                    (recur next-sib)))))
+            (on-attached cur-state cur-dom-node)
+            cur-dom-node))
+        (do
+          ;(println "build hit" (first vdom) (first cur-vdom))
+          (replace-node-completely parent vdom cur-dom-node top-level))))))
 
 (declare bind-child)
 
@@ -633,8 +635,8 @@
         (if top-level
           (do
             ;(println "starting diff replace")
-            (try-diff parent new-virtual-dom cur-dom-node top-level))
-          (try-diff parent new-virtual-dom cur-dom-node top-level))
+            (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
+          (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
 
         (replace-node-completely
           parent new-elem-spec cur-dom-node top-level)))))
