@@ -102,7 +102,10 @@
    ;(println "disposing" dom-node)
    (let [node-id (get-node-id dom-node)
          state (aget element-state-lookup node-id)]
-     (dispose-node node-id state)))
+     (dispose-node node-id state)
+     (when-let [parent-state (.-parent-state state)]
+       (when-let [child-states (.-child-states parent-state)]
+         (js-delete child-states node-id)))))
   ([child-key state]
    (when state
      (set! (.-disposed state) true)
