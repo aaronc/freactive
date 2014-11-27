@@ -357,26 +357,41 @@
             (.toString attr-value))
           "")))))
 
+(defn- bind-lifecycle-callback! [element cb-name cb-value node-state]
+  (case cb-name
+    "attached"
+    (set! (.-node-attached node-state) cb-value)
+
+    "disposed"
+    (set! (.-disposed-callback node-state) cb-value)
+    nil))
+
 (defn- bind-attr! [element attr-name attr-value node-state]
-  (let [attr-name (name attr-name)]
-    (cond
-      (identical? "style" attr-name)
-      (bind-style! element attr-value node-state)
+  (let [attr-ns (namespace attr-name)
+        attr-name (name attr-name)]
+    (if attr-ns
+      (case attr-ns
+        "node"
+        (bind-lifecycle-callback! element attr-name attr-value node-state)
+        nil)
+      (cond
+        (identical? "style" attr-name)
+        (bind-style! element attr-value node-state)
 
-      (identical? 0 (.indexOf attr-name "on-"))
-      (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+        (identical? 0 (.indexOf attr-name "on-"))
+        (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
 
-      :default
-      (bind-prop-attr! (get-attr-setter element attr-name)
-                       element attr-name attr-value node-state))))
+        :default
+        (bind-prop-attr! (get-attr-setter element attr-name)
+                         element attr-name attr-value node-state))))
 
-(defn- dispose-child-state [node-state child-key]
-  (when-let [child-states (.-child-states node-state)]
+  (defn- dispose-child-state [node-state child-key]
+    (when-let [child-states (.-child-states node-state)]
       (when-let [state (aget child-states child-key)]
         (set! (.-disposed state) true)
         (when-let [disposed-callback (.-disposed-callback state)]
           (disposed-callback))
-        (js-delete child-states child-key))))
+        (js-delete child-states child-key)))))
 
 (defn- unbind-attr!* [node-state prefix attr-name]
   (let [attr-key (str "-" prefix "." attr-name)]
@@ -422,14 +437,13 @@
 
 (defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
   (let [hit #js {}]
-    (doseq [[k new-val] new-attrs]
-      (let [attr-name (name k)]
-        (rebinder node attr-name new-val node-state)
-        (when (get old-attrs k)
-          (aset hit attr-name true))))
-    (doseq [[k _] old-attrs]
-      (let [attr-name (name k)]
-        (when-not (aget hit attr-name)
+    (doseq [[attr-name new-val] new-attrs]
+      (rebinder node attr-name new-val node-state)
+      (when (get old-attrs attr-name)
+          (aset hit (str attr-name) true)))
+    (doseq [[attr-name _] old-attrs]
+      (let [attr-str (str attr-name)]
+        (when-not (aget hit attr-str)
           (rebinder node attr-name nil node-state))))))
 
 ;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
@@ -522,21 +536,6 @@
 
 (def enable-diffing true)
 
-(defn- can-diff-element [parent new-elem-spec cur-elem])
-
-(defn- normalize-virtual-element [dom-vec]
-  (let [tag (first dom-vec)
-        tag-ns (namespace tag)
-        [_ tag id class] (re-matches re-tag (name tag))
-        class (when class (.replace class "." " "))
-        attrs? (second dom-vec)
-        attrs (when (map? attrs?) attrs?)
-        children (if attrs (nnext dom-vec) (next dom-vec))]
-    (if (or id class)
-      (into [(keyword tag-ns tag) (merge attrs {:id id :class class})]
-            children)
-      dom-vec)))
-
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
     (let [parent-state (get-element-state parent)
@@ -544,7 +543,13 @@
                            (init-element-state! parent nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
-        (register-with-parent-state parent-state (get-node-id new-elem) state)))))
+        (register-with-parent-state parent-state (get-node-id new-elem) state)
+        state))))
+
+(defn- on-attached [state node]
+  (when state
+    (when-let [node-attached (.-node-attached state)]
+      (node-attached node))))
 
 (defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
   (let [new-elem
@@ -553,9 +558,10 @@
             ;(println "build")
             (build-element new-elem-spec))
           (build-element new-elem-spec))]
-    (register-element-with-parent parent new-elem)
-    (.replaceChild parent new-elem cur-dom-node)
     (dispose-node cur-dom-node)
+    (let [state (register-element-with-parent parent new-elem)]
+      (.replaceChild parent new-elem cur-dom-node)
+      (on-attached state new-elem))
     new-elem))
 
 (declare replace-child)
@@ -581,9 +587,7 @@
 
 (defn- try-diff [parent vdom cur-dom-node top-level]
   (let [cur-state (get-element-state cur-dom-node)
-        cur-vdom (get-virtual-dom (.-element-spec cur-state))
-        ;;vdom (normalize-virtual-element vdom)
-        ]
+        cur-vdom (get-virtual-dom (.-element-spec cur-state))]
     (if (keyword-identical? (first vdom) (first cur-vdom))
       (do
         ;(println "diff hit" (first vdom))
@@ -602,7 +606,7 @@
                 (let [next-sib (.-nextSibling cur-child)]
                   (remove-dom-node cur-child)
                   (recur next-sib)))))
-          ()
+          (on-attached cur-state cur-dom-node)
           cur-dom-node))
       (do
         ;(println "build hit" (first vdom) (first cur-vdom))
@@ -630,26 +634,19 @@
             (try-diff parent new-virtual-dom cur-dom-node top-level))
           (try-diff parent new-virtual-dom cur-dom-node top-level))
 
-        (replace-node-completely parent new-elem-spec cur-dom-node top-level)))))
+        (replace-node-completely
+          parent new-elem-spec cur-dom-node top-level)))))
 
-(defn- insert-child [parent vdom before]
-  (let [new-elem (build-element vdom)]
-    (register-element-with-parent parent new-elem)
-    (.insertBefore parent new-elem before)
-    new-elem))
-
-(defn- append-child [parent new-elem]
-  (let [new-elem (build-element new-elem)]
-    (register-element-with-parent parent new-elem)
-    (.appendChild parent new-elem)
-    new-elem))
-
-(defn- append-or-insert-child [parent new-elem before]
-  (if (satisfies? IDeref new-elem)
-    (bind-child parent new-elem before nil)
-    (if before
-      (insert-child parent new-elem before)
-      (append-child parent new-elem))))
+(defn- append-or-insert-child [parent vdom before]
+  (if (satisfies? IDeref vdom)
+    (bind-child parent vdom before nil)
+    (let [new-elem (build-element vdom)]
+      (let [state (register-element-with-parent parent new-elem)]
+        (if before
+          (.insertBefore parent new-elem before)
+          (.appendChild parent new-elem))
+        (on-attached state new-elem))
+      new-elem)))
 
 ;(defn- do-show-element [parent new-elem nil]
 ;  (when new-elem
@@ -837,8 +834,7 @@
       virtual-dom
 
       :default
-      (let [  ;;virtual-dom (normalize-virtual-element virtual-dom)
-            node (create-dom-node (first virtual-dom))
+      (let [node (create-dom-node (first virtual-dom))
             state (init-element-state! node elem-spec)
             attrs? (second virtual-dom)
             attrs (when (map? attrs?) attrs?)
