@@ -67,14 +67,25 @@
 
 (declare get-transition)
 
+(defn- init-element-meta! [state element-spec]
+  (let [m (meta element-spec)]
+    (set! (.-meta state) m)
+    (when-let [on-disposed (get m :node-disposed)]
+      (set! (.-disposed-callback state) on-disposed))))
+
+(defn- reset-element-spec! [state spec]
+  (when-let [on-disposed (.-disposed-callback state)]
+    (on-disposed)
+    (set! (.-disposed-callback state) nil))
+  (set! (.-element-spec state) spec)
+  (init-element-meta! state spec))
+
 (defn- init-element-state! [dom-node element-spec]
   (let [node-id (str auto-node-id)
         state (ElementState. node-id false element-spec nil)]
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
-    (when-let [m (meta element-spec)]
-      (when-let [on-disposed (get m :node-disposed)]
-        (set! (.-disposed-callback state) on-disposed)))
+    (init-element-meta! state element-spec)
     (aset element-state-lookup node-id state)
     ;;(set! element-state-lookup (assoc element-state-lookup dom-node state))
     state))
@@ -87,9 +98,6 @@
 (defn- unregister-from-parent-state [parent-state child-key]
   (when-let [child-states (.-child-states parent-state)]
     (js-delete child-states child-key)))
-
-(defn- reset-element-spec! [dom-node spec]
-  (set! (.-element-spec (get-element-state dom-node)) spec))
 
 (defprotocol IRemove
   (-remove! [x]))
@@ -456,9 +464,8 @@
     (doseq [child-key to-remove]
       (js-delete child-states child-key))))
 
-(defn- replace-attrs! [node old-attrs new-attrs]
-  (let [node-state (get-element-state node)
-        old-style (:style old-attrs)
+(defn- replace-attrs! [node node-state old-attrs new-attrs]
+  (let [old-style (:style old-attrs)
         new-style (:style new-attrs)]
     (dispose-attrs node-state)
     (replace-attrs!* node node-state
@@ -573,7 +580,8 @@
       cur-child)))
 
 (defn- try-diff [parent vdom cur-dom-node top-level]
-  (let [cur-vdom (get-virtual-dom cur-dom-node)
+  (let [cur-state (get-element-state cur-dom-node)
+        cur-vdom (get-virtual-dom (.-element-spec cur-state))
         ;;vdom (normalize-virtual-element vdom)
         ]
     (if (keyword-identical? (first vdom) (first cur-vdom))
@@ -582,10 +590,11 @@
         (let [old-attrs? (second cur-vdom)
               new-attrs? (second vdom)
               new-attrs (when (map? new-attrs?) new-attrs?)]
+          (reset-element-spec! cur-state vdom)
           (replace-attrs! cur-dom-node
+                          cur-state
                           (when (map? old-attrs?) old-attrs?)
                           new-attrs)
-          (reset-element-spec! cur-dom-node vdom)
           (let [new-children (if new-attrs (nnext vdom) (next vdom))
                 dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
             (loop [cur-child dangling-child]
@@ -593,6 +602,7 @@
                 (let [next-sib (.-nextSibling cur-child)]
                   (remove-dom-node cur-child)
                   (recur next-sib)))))
+          ()
           cur-dom-node))
       (do
         ;(println "build hit" (first vdom) (first cur-vdom))
@@ -837,9 +847,9 @@
           (bind-attr! node k v state))
         (when children
           (append-children! node children))
-        (when-let [m (meta virtual-dom)]
-          (when-let [node-created (get m :node-created)]
-            (node-created node)))
+        ;(when-let [m (.-meta state)]
+        ;  (when-let [node-created (get m :node-created)]
+        ;    (node-created node)))
         node))))
 
 (defn mount! [element child]
