@@ -719,30 +719,29 @@
 
           ref-meta (meta child-ref)
 
-          get-new-elem (fn []
+          get-new-elem (fn get-new-elem-fn []
                          (set! (.-dirty state) false)
                          (add-watch* child-ref state (.-invalidate state))
                          (or (non-reactively @child-ref) ""))
 
-          show-new-elem (fn [new-elem cur]
+          show-new-elem (fn show-new-elem-fn [new-elem cur]
                           (let [cur
                                 (if (instance? ReactiveElement cur)
                                   (let [cur-elem (.-cur-element cur)]
                                     (set! (.-disposed cur) true)
                                     (set! (.-cur-element cur) nil)
                                     cur-elem)
-                                  cur)
-
-                                new-node
-                                (if cur
-                                  (replace-child* parent new-elem cur true)
-                                  (insert-child* parent new-elem before))]
-
-                            (set! (.-cur-element state) new-node)
-                            (set! (.-updating state) false)
-                            (when (.-dirty state)
-                              (queue-animation (.-animate state)))
-                            (show-node new-node)))
+                                  cur)]
+                            (if-let [parent parent]
+                              (let [new-node (if cur
+                                               (replace-child* parent new-elem cur true)
+                                               (insert-child* parent new-elem before))]
+                                (set! (.-cur-element state) new-node)
+                                (set! (.-updating state) false)
+                                (when (.-dirty state)
+                                  (queue-animation (.-animate state)))
+                                (show-node new-node))
+                              (set! (.-disposed state) true))))
 
           animate
           (fn animate [x]
