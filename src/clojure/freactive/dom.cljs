@@ -732,7 +732,7 @@
                                     (set! (.-cur-element cur) nil)
                                     cur-elem)
                                   cur)]
-                            (if-let [parent parent]
+                            (if-let [parent (or (when-not cur parent) (.-parentNode cur))]
                               (let [new-node (if cur
                                                (replace-child* parent new-elem cur true)
                                                (insert-child* parent new-elem before))]
