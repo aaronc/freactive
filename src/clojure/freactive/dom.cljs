@@ -54,6 +54,8 @@
 
       (number? x) (str x)
 
+      (satisfies? IDeref x) x
+
       :default (-get-virtual-dom x))
 
     ;; nil values treated as empty "placeholder" text nodes
@@ -100,12 +102,12 @@
 (defn- dispose-node
   ([dom-node]
    ;(println "disposing" dom-node)
-   (let [node-id (get-node-id dom-node)
-         state (aget element-state-lookup node-id)]
-     (dispose-node node-id state)
-     (when-let [parent-state (.-parent-state state)]
-       (when-let [child-states (.-child-states parent-state)]
-         (js-delete child-states node-id)))))
+   (when-let [node-id (get-node-id dom-node)]
+     (when-let [state (aget element-state-lookup node-id)]
+       (dispose-node node-id state)
+       (when-let [parent-state (.-parent-state state)]
+         (when-let [child-states (.-child-states parent-state)]
+           (js-delete child-states node-id))))))
   ([child-key state]
    (when state
      (set! (.-disposed state) true)
@@ -511,7 +513,7 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing false)
+(def enable-diffing true)
 
 (defn- can-diff-element [parent new-elem-spec cur-elem])
 
@@ -596,15 +598,21 @@
         ;(println "build hit" (first vdom) (first cur-vdom))
         (replace-node-completely parent vdom cur-dom-node top-level)))))
 
+(declare bind-child)
+
 (defn- replace-child [parent new-elem-spec cur-dom-node top-level]
   (let [new-virtual-dom (get-virtual-dom new-elem-spec)]
-    (if
+    (cond
       (and (string? new-virtual-dom)
            (text-node? cur-dom-node))
       (do
         (set! (.-textContent cur-dom-node) new-virtual-dom)
         cur-dom-node)
 
+      (satisfies? IDeref new-virtual-dom)
+      (bind-child parent new-virtual-dom nil cur-dom-node)
+
+      :default
       (if enable-diffing
         (if top-level
           (do
@@ -627,9 +635,11 @@
     new-elem))
 
 (defn- append-or-insert-child [parent new-elem before]
-  (if before
-    (insert-child parent new-elem before)
-    (append-child parent new-elem)))
+  (if (satisfies? IDeref new-elem)
+    (bind-child parent new-elem before nil)
+    (if before
+      (insert-child parent new-elem before)
+      (append-child parent new-elem))))
 
 ;(defn- do-show-element [parent new-elem nil]
 ;  (when new-elem
@@ -678,7 +688,10 @@
     (set! auto-reactive-id (inc auto-reactive-id))
     (str "-r." id)))
 
-(deftype ReactiveElement [id parent cur-element dirty updating disposed animate invalidate]
+(deftype ReactiveElement [id parent ref cur-element dirty updating disposed
+                          animate invalidate]
+  IElementSpec
+  (-get-virtual-dom [_] ref)
   IRemove
   (-remove! [this]
     (set! (.-disposed this) true)
@@ -687,10 +700,11 @@
     (when-let [parent-state (get-element-state parent)]
       (unregister-from-parent-state parent-state id))))
 
-(defn- bind-child* [parent child-ref before insert-child* replace-child* remove*]
+(defn- bind-child* [parent child-ref before cur insert-child* replace-child*  remove*]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
     (let [id (new-reactive-id)
-          state (ReactiveElement. id parent nil false false false nil  nil)
+          state (ReactiveElement. id parent child-ref nil false false false
+                                  nil nil)
 
           ref-meta (meta child-ref)
 
@@ -700,10 +714,19 @@
                          (or (non-reactively @child-ref) ""))
 
           show-new-elem (fn [new-elem cur]
-                          (let [new-node
+                          (let [cur
+                                (if (instance? ReactiveElement cur)
+                                  (let [cur-elem (.-cur-element cur)]
+                                    (set! (.-disposed cur) true)
+                                    (set! (.-cur-element cur) nil)
+                                    cur-elem)
+                                  cur)
+
+                                new-node
                                 (if cur
                                   (replace-child* parent new-elem cur true)
                                   (insert-child* parent new-elem before))]
+
                             (set! (.-cur-element state) new-node)
                             (set! (.-updating state) false)
                             (when (.-dirty state)
@@ -713,7 +736,8 @@
           animate
           (fn animate [x]
             (if (.-disposed state)
-              (remove! (.-cur-element state))
+              (when-let [cur (.-cur-element state)]
+                (remove! cur))
               (do
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)]
@@ -764,19 +788,19 @@
                                           :binding-initialized)]
         (binding-initialized))
       (set! (.-updating state) false)
-      (show-new-elem (get-new-elem) nil)
+      (show-new-elem (get-new-elem) cur)
       state)
     (mount-element parent @child-ref before)))
 
-(defn bind-child [parent child before]
-  (bind-child* parent child before append-or-insert-child replace-child remove-dom-node))
+(defn bind-child [parent child before cur]
+  (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node))
 
 ;; Building Elements
 
 (defn insert-child! [parent child before]
   (cond
     (satisfies? IDeref child)
-    (bind-child parent child before)
+    (bind-child parent child before nil)
 
     :default
     (mount-element parent child before)))
