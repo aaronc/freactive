@@ -120,12 +120,9 @@
 
 (defn- remove-dom-node [dom-node]
   ;(println "removing dom node")
-  (let [state (aget element-state-lookup dom-node)]
-    (dispose-node dom-node state)
-    (when-let [parent (.-parentNode dom-node)]
-      (.removeChild parent dom-node)
-      (when state
-        (js-delete (.-parent-state state) state)))))
+  (dispose-node dom-node)
+  (when-let [parent (.-parentNode dom-node)]
+    (.removeChild parent dom-node)))
 
 (defn remove! [x]
   (if (dom-node? x)
@@ -199,9 +196,9 @@
 
 (def ^:private last-instrumentation-time)
 
-(def fps (r/atom nil))
+(defonce fps (r/atom nil))
 
-(def frame-time (r/atom nil))
+(defonce frame-time (r/atom nil))
 
 (defonce
   render-loop
@@ -315,9 +312,9 @@
 
 (defn- bind-event-listener! [element event-name handler node-state]
   (let [attr-state #js {:disposed false :handler handler
-                        :disposed-callback (fn [] (unlisten!
-                                                    element event-name
-                                                    handler))}]
+                        :disposed-callback
+                        (let [unlisten!* unlisten!]
+                          (fn [] (unlisten!* element event-name handler)))}]
       (register-with-parent-state node-state (str "-" "event" "." event-name) attr-state)
       (listen! element event-name handler)))
 
@@ -413,48 +410,49 @@
       (let [k (name k)]
         (rebind-attr! node k v node-state)))))
 
+(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
+  (let [hit #js {}]
+    (doseq [[k new-val] new-attrs]
+      (let [attr-name (name k)]
+        (rebinder node attr-name new-val node-state)
+        (when (get old-attrs k)
+          (aset hit attr-name true))))
+    (doseq [[k _] old-attrs]
+      (let [attr-name (name k)]
+        (when-not (aget hit attr-name)
+          (rebinder node attr-name nil node-state))))))
+
 ;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
-;  (let [hit #js {}]
-;    (doseq [[k new-val] new-attrs]
+;  (loop [[[k new-val] & new-attrs] (seq new-attrs)
+;         old-attrs old-attrs]
+;    (if k
 ;      (let [attr-name (name k)]
 ;        (if-let [existing (get old-attrs k)]
 ;          (do
 ;            (when-not (identical? existing new-val)
 ;              (rebinder node attr-name new-val node-state))
-;            (aset hit attr-name true))
-;          (rebinder node attr-name new-val node-state))))
-;    (doseq [[k _] old-attrs]
-;      (let [attr-name (name k)]
-;        (when-not (aget hit attr-name)
-;          (rebinder node attr-name nil node-state))))))
-
-(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
-  (loop [[[k new-val] & new-attrs] (seq new-attrs)
-         old-attrs old-attrs]
-    (if k
-      (let [attr-name (name k)]
-        (if-let [existing (get old-attrs k)]
-          (do
-            (when-not (identical? existing new-val)
-              (rebinder node attr-name new-val node-state))
-            (recur new-attrs (dissoc old-attrs k)))
-          (do
-            (rebinder node attr-name new-val node-state)
-            (recur new-attrs old-attrs))))
-      (loop [[[k v] & old-attrs] (seq old-attrs)]
-        (when k
-          (rebinder node (name k) nil node-state)
-          (recur old-attrs))))))
+;            (recur new-attrs (dissoc old-attrs k)))
+;          (do
+;            (rebinder node attr-name new-val node-state)
+;            (recur new-attrs old-attrs))))
+;      (loop [[[k v] & old-attrs] (seq old-attrs)]
+;        (when k
+;          (rebinder node (name k) nil node-state)
+;          (recur old-attrs))))))
 
 (defn- dispose-attrs [state]
-  (goog.object/forEach
-    (.-child-states state)
-    (fn [child-state child-key _]
-      (when (identical? (aget child-key 0) "-")
-        (set! (.-disposed child-state) true)
-        (when-let [cb (.-disposed-callback child-state)]
-          (cb))
-        (js-delete state child-key)))))
+  (let [child-states (.-child-states state)
+        to-remove #js []]
+    (goog.object/forEach
+      child-states
+      (fn [child-state child-key _]
+        (when (identical? (aget child-key 0) "-")
+          (.push to-remove child-key)
+          (set! (.-disposed child-state) true)
+          (when-let [cb (.-disposed-callback child-state)]
+            (cb)))))
+    (doseq [child-key to-remove]
+      (js-delete child-states child-key))))
 
 (defn- replace-attrs! [node old-attrs new-attrs]
   (let [node-state (get-element-state node)
@@ -464,11 +462,11 @@
     (replace-attrs!* node node-state
                      (dissoc old-attrs :style)
                      (dissoc new-attrs :style)
-                     rebind-attr!)
+                     bind-attr!)
     (replace-attrs!* node node-state
                      old-style
                      new-style
-                     rebind-style-prop!)))
+                     bind-style-prop!)))
 
 ;; From hiccup.compiler:
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
@@ -495,16 +493,16 @@
     (when class (set! (.-className node) (.replace class "." " ")))
     node))
 
-(defn- create-dom-node-simple [tag]
-  (let [tag-ns (namespace tag)
-        node (if tag-ns
-               (let [resolved-ns
-                     (if (identical? tag-ns "svg")
-                       "http://www.w3.org/2000/svg"
-                       (get-xml-namespace tag-ns))]
-                 (.createElementNS js/document resolved-ns tag))
-               (.createElement js/document tag))]
-    node))
+;(defn- create-dom-node-simple [tag]
+;  (let [tag-ns (namespace tag)
+;        node (if tag-ns
+;               (let [resolved-ns
+;                     (if (identical? tag-ns "svg")
+;                       "http://www.w3.org/2000/svg"
+;                       (get-xml-namespace tag-ns))]
+;                 (.createElementNS js/document resolved-ns tag))
+;               (.createElement js/document tag))]
+;    node))
 
 ;; ## Core DOM Manipulation Methods
 
@@ -585,15 +583,13 @@
           (replace-attrs! cur-dom-node
                           (when (map? old-attrs?) old-attrs?)
                           new-attrs)
-          (when-not top-level
-            (dispose-child-state (get-element-state cur-dom-node) "-reactive"))
           (reset-element-spec! cur-dom-node vdom)
           (let [new-children (if new-attrs (nnext vdom) (next vdom))
                 dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
             (loop [cur-child dangling-child]
               (when cur-child
                 (let [next-sib (.-nextSibling cur-child)]
-                  (.removeChild cur-dom-node cur-child)
+                  (remove-dom-node cur-child)
                   (recur next-sib)))))
           cur-dom-node))
       (do
@@ -612,9 +608,8 @@
       (if enable-diffing
         (if top-level
           (do
-            (println "starting diff replace")
-            (time
-              (try-diff parent new-virtual-dom cur-dom-node top-level)))
+            ;(println "starting diff replace")
+            (try-diff parent new-virtual-dom cur-dom-node top-level))
           (try-diff parent new-virtual-dom cur-dom-node top-level))
 
         (replace-node-completely parent new-elem-spec cur-dom-node top-level)))))
