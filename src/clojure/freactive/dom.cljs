@@ -142,9 +142,7 @@
 ;    elem-spec))
 
 (defn with-transitions [elem-spec transitions]
-  (if (satisfies? IDeref elem-spec)
-    (alter-meta! elem-spec merge transitions)
-    (vary-meta elem-spec merge transitions)))
+  (vary-meta elem-spec merge transitions))
 
 (defn- exec-transition [node transition-name callback]
   (if-let [transition (get-transition node transition-name)]
@@ -448,10 +446,21 @@
           (rebinder node (name k) nil node-state)
           (recur old-attrs))))))
 
+(defn- dispose-attrs [state]
+  (goog.object/forEach
+    (.-child-states state)
+    (fn [child-state child-key _]
+      (when (identical? (aget child-key 0) "-")
+        (set! (.-disposed child-state) true)
+        (when-let [cb (.-disposed-callback child-state)]
+          (cb))
+        (js-delete state child-key)))))
+
 (defn- replace-attrs! [node old-attrs new-attrs]
   (let [node-state (get-element-state node)
         old-style (:style old-attrs)
         new-style (:style new-attrs)]
+    (dispose-attrs node-state)
     (replace-attrs!* node node-state
                      (dissoc old-attrs :style)
                      (dissoc new-attrs :style)
