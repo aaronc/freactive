@@ -578,11 +578,12 @@
         (if (and (sequential? new-child) (not (keyword? (first new-child))))
           (let [cur-child (try-diff-subseq parent cur-child new-child)]
             (recur cur-child (first more) (rest more)))
-          (do
+          (let [next-sib (.-nextSibling cur-child)]
             (replace-child parent new-child cur-child false)
-            (recur (.-nextSibling cur-child) (first more) (rest more))))
+            (recur next-sib (first more) (rest more))))
         (do
-          (append-children! parent new-children)
+          (append-child! parent new-child)
+          (append-children! parent more)
           nil))
       cur-child)))
 
@@ -594,7 +595,7 @@
       cur-dom-node
       (if (keyword-identical? new-tag cur-tag)
         (do
-          ;(println "diff hit" (first vdom))
+          ;(println "diff hit" (first vdom) (.-id cur-state))
           (let [old-attrs (.-attrs cur-state)
                 new-attrs? (second vdom)
                 new-attrs (when (map? new-attrs?) new-attrs?)]
