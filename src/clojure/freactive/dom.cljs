@@ -246,11 +246,14 @@
   (.removeAttribute elem attr-name))
 
 (defn- set-style-prop! [elem prop-name prop-value]
-  (aset (.-style elem)
-        prop-name
-        (if (.-substring prop-value)
-          prop-value
-          (.toString prop-value))))
+  ;(println "set-style-prop!" elem prop-name prop-value)
+  (if prop-value
+    (aset (.-style elem)
+          prop-name
+          (if (.-substring prop-value)
+            prop-value
+            (.toString prop-value)))
+    (js-delete (.-style elem) prop-name)))
 
 (defn- remove-style-prop! [elem prop-name]
   (js-delete (.-style elem) prop-name))
@@ -278,7 +281,8 @@
   (set-fn @ref))
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
-  (let [setter (fn [v]
+  (let [attr-name (name attr-name)
+        setter (fn [v]
                  (set-style-prop! element attr-name v))]
     (if (satisfies? cljs.core/IDeref attr-value)
       (bind-attr* setter element "style" attr-name attr-value node-state)
@@ -331,7 +335,7 @@
 
 (defn- bind-style! [element styles node-state]
   (doseq [[p v] styles]
-    (bind-style-prop! element (name p) v node-state)))
+    (bind-style-prop! element p v node-state)))
 
 (defn- get-attr-setter [element attr-name]
   (cond
@@ -406,7 +410,7 @@
 
 (defn- rebind-style! [element styles node-state]
   (doseq [[p v] styles]
-    (rebind-style-prop! element (name p) v node-state)))
+    (rebind-style-prop! element p v node-state)))
 
 (defn- rebind-event! [element event-name handler node-state]
   (unbind-attr!* node-state "event" event-name)
@@ -439,12 +443,14 @@
 (defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
   (let [hit #js {}]
     (doseq [[attr-name new-val] new-attrs]
+      ;(println "rebinding" attr-name new-val)
       (rebinder node attr-name new-val node-state)
       (when (get old-attrs attr-name)
           (aset hit (str attr-name) true)))
     (doseq [[attr-name _] old-attrs]
       (let [attr-str (str attr-name)]
         (when-not (aget hit attr-str)
+          ;(println "unbinding" attr-name)
           (rebinder node attr-name nil node-state))))))
 
 ;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
@@ -566,7 +572,7 @@
     new-elem))
 
 (declare replace-child)
-
+(declare append-child!)
 (declare append-children!)
 
 (defn- try-diff-subseq [parent cur-child new-children]
