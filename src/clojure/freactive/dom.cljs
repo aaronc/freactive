@@ -67,27 +67,28 @@
 
 (declare get-transition)
 
-(defn- init-element-meta! [state element-spec]
+(defn- init-element-meta! [state element-spec tag attrs]
   (let [m (meta element-spec)]
     (set! (.-meta state) m)
     (when-let [on-disposed (get m :node-disposed)]
-      (set! (.-disposed-callback state) on-disposed))))
+      (set! (.-disposed-callback state) on-disposed)))
+  (set! (.-tag state) tag)
+  (set! (.-attrs state) attrs))
 
-(defn- reset-element-spec! [state spec]
+(defn- reset-element-spec! [state spec tag attrs]
   (when-let [on-disposed (.-disposed-callback state)]
     (on-disposed)
     (set! (.-disposed-callback state) nil))
   (set! (.-element-spec state) spec)
-  (init-element-meta! state spec))
+  (init-element-meta! state spec tag attrs))
 
-(defn- init-element-state! [dom-node element-spec]
+(defn- init-element-state! [dom-node element-spec tag attrs]
   (let [node-id (str auto-node-id)
         state (ElementState. node-id false element-spec nil)]
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
-    (init-element-meta! state element-spec)
+    (init-element-meta! state element-spec tag attrs)
     (aset element-state-lookup node-id state)
-    ;;(set! element-state-lookup (assoc element-state-lookup dom-node state))
     state))
 
 (defn- register-with-parent-state [parent-state child-key state]
@@ -540,7 +541,7 @@
   (when-not (text-node? new-elem)
     (let [parent-state (get-element-state parent)
           parent-state (or parent-state
-                           (init-element-state! parent nil))]
+                           (init-element-state! parent nil nil nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state (get-node-id new-elem) state)
@@ -587,17 +588,18 @@
 
 (defn- try-diff [parent vdom cur-dom-node top-level]
   (let [cur-state (get-element-state cur-dom-node)
-        cur-vdom (get-virtual-dom (.-element-spec cur-state))]
-    (if (keyword-identical? (first vdom) (first cur-vdom))
+        cur-tag (.-tag cur-state)
+        new-tag (first vdom)]
+    (if (keyword-identical? new-tag cur-tag)
       (do
         ;(println "diff hit" (first vdom))
-        (let [old-attrs? (second cur-vdom)
+        (let [old-attrs (.-attrs cur-state)
               new-attrs? (second vdom)
               new-attrs (when (map? new-attrs?) new-attrs?)]
-          (reset-element-spec! cur-state vdom)
+          (reset-element-spec! cur-state vdom new-tag new-attrs)
           (replace-attrs! cur-dom-node
                           cur-state
-                          (when (map? old-attrs?) old-attrs?)
+                          old-attrs
                           new-attrs)
           (let [new-children (if new-attrs (nnext vdom) (next vdom))
                 dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
@@ -748,7 +750,7 @@
               (do
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)]
-                  (when (not= (get-virtual-dom cur) (get-virtual-dom new-elem))
+                  (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
                     (let [hide (get-transition cur :node-detaching)]
                       (if hide
                         (do
@@ -834,10 +836,11 @@
       virtual-dom
 
       :default
-      (let [node (create-dom-node (first virtual-dom))
-            state (init-element-state! node elem-spec)
+      (let [tag (first virtual-dom)
+            node (create-dom-node tag)
             attrs? (second virtual-dom)
             attrs (when (map? attrs?) attrs?)
+            state (init-element-state! node elem-spec tag attrs)
             children (if attrs (nnext virtual-dom) (next virtual-dom))]
         (doseq [[k v] attrs]
           (bind-attr! node k v state))
