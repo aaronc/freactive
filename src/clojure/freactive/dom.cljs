@@ -577,19 +577,17 @@
 
 (defn- try-diff-subseq [parent cur-child new-children]
   (loop [cur-child cur-child
-         new-child (first new-children)
-         more (rest new-children)]
+         [new-child & more :as new-children] new-children]
     (if new-child
       (if cur-child
         (if (and (sequential? new-child) (not (keyword? (first new-child))))
           (let [cur-child (try-diff-subseq parent cur-child new-child)]
-            (recur cur-child (first more) (rest more)))
+            (recur cur-child more))
           (let [next-sib (.-nextSibling cur-child)]
             (replace-child parent new-child cur-child false)
-            (recur next-sib (first more) (rest more))))
+            (recur next-sib more)))
         (do
-          (append-child! parent new-child)
-          (append-children! parent more)
+          (append-children! parent new-children)
           nil))
       cur-child)))
 
