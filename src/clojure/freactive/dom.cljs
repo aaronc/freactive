@@ -266,7 +266,7 @@
 (defn- bind-attr* [set-fn element state-prefix attr-name ref node-state]
   (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
     (let [attr-state #js {:disposed false}
-          key [element attr-name]
+          key (r/new-reactive-id)
           invalidate
           (fn on-value-ref-invalidated
             ([]
@@ -723,7 +723,7 @@
 
 (defn- bind-child* [parent child-ref before cur insert-child* replace-child*  remove*]
   (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
-    (let [id (new-reactive-id)
+    (let [id (r/new-reactive-id)
           state (ReactiveElement. id parent child-ref nil false false false
                                   nil nil)
 
@@ -731,7 +731,7 @@
 
           get-new-elem (fn get-new-elem-fn []
                          (set! (.-dirty state) false)
-                         (add-watch* child-ref state (.-invalidate state))
+                         (add-watch* child-ref id (.-invalidate state))
                          (or (non-reactively @child-ref) ""))
 
           show-new-elem (fn show-new-elem-fn [new-elem cur]

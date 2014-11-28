@@ -1,5 +1,6 @@
 (ns freactive.core
-  (:refer-clojure :exclude [atom]))
+  (:refer-clojure :exclude [atom])
+  (:require [goog.object]))
 
 ;;(def ^:dynamic *register-dep* nil)
 
@@ -10,6 +11,13 @@
 (def ^:dynamic *do-trace-captures* nil)
 
 (def ^:dynamic *trace-capture* nil)
+
+(def ^:private auto-reactive-id 0)
+
+(defn new-reactive-id []
+  (let [id auto-reactive-id]
+    (set! auto-reactive-id (inc auto-reactive-id))
+    (str "-r." id)))
 
 ;(defn register-dep [ref]
 ;  (when *register-dep* (*register-dep* ref)))
@@ -22,7 +30,11 @@
   (-add-invalidation-watch [this key f])
   (-remove-invalidation-watch [this key]))
 
-(defn add-invalidation-watch [this key f]
+(defn add-invalidation-watch
+  "Like add-watch except that key must be a string and f should be a function taking two arguments - key
+  and ref. Indicates that the ref has been invalidated and that its value will be recomputed when it is
+  deref'ed."
+  [this key f]
   (-add-invalidation-watch this key f))
 
 (defn remove-invalidation-watch [this key]
@@ -152,14 +164,14 @@
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
 
-(defn- register-rx-dep [rx default-laziness]
+(defn- register-rx-dep [rx id default-laziness]
   (when-let [invalidate *invalidate-rx*]
     (when *trace-capture* (*trace-capture* rx))
     (if (lazy? default-laziness)
-      (-add-invalidation-watch rx invalidate invalidate)
-      (-add-watch rx invalidate invalidate))))
+      (-add-invalidation-watch rx id invalidate)
+      (-add-watch rx id invalidate))))
 
-(deftype ReactiveExpression [^:mutable state ^:mutable dirty f ^:mutable deps meta
+(deftype ReactiveExpression [id ^:mutable state ^:mutable dirty f ^:mutable deps meta
                               ^:mutable watches ^:mutable invalidation-watches sully lazy
                              trace-captures]
   Object
@@ -190,7 +202,7 @@
 
   IDeref
   (-deref [this]
-    (register-rx-dep this lazy)
+    (register-rx-dep this id lazy)
     (when dirty (-compute this))
     state)
 
@@ -215,13 +227,20 @@
 
   IInvalidates
   (-notify-invalidation-watches [this]
-    (doseq [[key f] invalidation-watches]
-      (f key this)))
+    ;(doseq [[key f] invalidation-watches]
+    ;  (f key this))
+    (goog.object/forEach
+      invalidation-watches
+      (fn [f key _]
+        (f key this))))
   (-add-invalidation-watch [this key f]
-    (set! (.-invalidation-watches this) (assoc invalidation-watches key f))
+    ;(set! (.-invalidation-watches this) (assoc invalidation-watches key f))
+    (aset invalidation-watches key f)
     this)
   (-remove-invalidation-watch [this key]
-    (set! (.-invalidation-watches this) (dissoc invalidation-watches key)))
+    ;(set! (.-invalidation-watches this) (dissoc invalidation-watches key))
+    (js-delete invalidation-watches key)
+    this)
 
   IHash
   (-hash [this] (goog/getUid this)))
@@ -229,7 +248,8 @@
 (defn rx*
   ([f] (rx* f true))
   ([f lazy]
-   (let [reactive (ReactiveExpression. nil true f nil nil nil nil nil lazy
+   (let [id (new-reactive-id)
+         reactive (ReactiveExpression. id nil true f nil nil nil #js {} nil lazy
                                        (or *do-trace-captures* (fn [_])))]
      (set! (.-sully reactive) (make-sully-fn reactive))
      reactive)))
@@ -260,7 +280,7 @@
   (swap! ref (fn [cur] (setter cur (f (getter cur)))))
   (-raw-deref cursor))
 
-(deftype ReactiveCursor [ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
+(deftype ReactiveCursor [id ref getter setter dirty state meta watches invalidation-watches lazy sully add-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -292,7 +312,7 @@
 
   cljs.core/IDeref
   (-deref [this]
-    (register-rx-dep this lazy)
+    (register-rx-dep this id lazy)
     (when dirty (-compute this))
     state)
 
@@ -319,12 +339,17 @@
   IInvalidates
   (-notify-invalidation-watches [this]
     (doseq [[key f] invalidation-watches]
-      (f key this)))
+      (f key this))
+    )
   (-add-invalidation-watch [this key f]
     (set! (.-invalidation-watches this) (assoc invalidation-watches key f))
+    ;(aset invalidation-watches key f)
     this)
   (-remove-invalidation-watch [this key]
-    (set! (.-invalidation-watches this) (dissoc invalidation-watches key)))
+    (set! (.-invalidation-watches this) (dissoc invalidation-watches key))
+    ;(js-delete invalidation-watches key)
+    this
+    )
 
   IHash
   (-hash [this] (goog/getUid this))
@@ -341,7 +366,8 @@
   (-swap! [this f x y more] (cursor-swap! this ref getter setter #(apply f %  x y  more))))
 
 (defn cursor* [ref korks-or-getter setter lazy]
-  (let [ks (cond
+  (let [id (new-reactive-id)
+        ks (cond
             (keyword? korks-or-getter)
             [korks-or-getter]
 
@@ -353,11 +379,11 @@
                 (when ks
                   (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
-        cursor (ReactiveCursor. ref getter setter true nil nil nil nil lazy nil nil)
+        cursor (ReactiveCursor. id ref getter setter true nil nil nil nil lazy nil nil)
         sully  (make-sully-fn cursor)
         add-watch-fn
         (if-let [add-watch* (get-add-watch* ref)]
-          (fn [] (add-watch* ref cursor sully))
+          (fn [] (add-watch* ref id sully))
           (fn []))]
      (set! (.-sully cursor) sully)
      (set! (.-add-watch-fn cursor) add-watch-fn)
