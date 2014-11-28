@@ -354,13 +354,13 @@
 
     :default
     (fn [attr-value]
-      (.setAttribute
-        element attr-name
-        (if attr-value
+      ;(println "setting attr" element attr-name attr-value)
+      (if attr-value
+        (.setAttribute element attr-name
           (if (.-substring attr-value)
             attr-value
-            (.toString attr-value))
-          "")))))
+            (.toString attr-value)))
+        (.removeAttribute element attr-name)))))
 
 (defn- bind-lifecycle-callback! [element cb-name cb-value node-state]
   (case cb-name
