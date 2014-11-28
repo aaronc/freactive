@@ -28,8 +28,10 @@
 
 (defn- get-element-state [x]
   ;;(get element-state-lookup x)
-  (when-let [node-id (get-node-id x)]
-    (aget element-state-lookup node-id)))
+  ;(when-let [node-id (get-node-id x)]
+  ;  (aget element-state-lookup node-id))
+  (.-freactive-state x)
+  )
 
 (extend-protocol IElementSpec
   boolean
@@ -88,7 +90,8 @@
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
     (init-element-meta! state element-spec tag attrs)
-    (aset element-state-lookup node-id state)
+    ;(aset element-state-lookup node-id state)
+    (set! (.-freactive-state dom-node) state)
     state))
 
 (defn- register-with-parent-state [parent-state child-key state]
@@ -112,7 +115,9 @@
   ([dom-node]
    ;(println "disposing" dom-node)
    (when-let [node-id (get-node-id dom-node)]
-     (when-let [state (aget element-state-lookup node-id)]
+     (when-let [state                                       ;;(aget element-state-lookup node-id)
+                (.-freactive-state dom-node)
+                ]
        (dispose-node node-id state)
        (when-let [parent-state (.-parent-state state)]
          (when-let [child-states (.-child-states parent-state)]
@@ -124,7 +129,7 @@
      (when-let [disposed-callback (.-disposed-callback state)]
        (disposed-callback))
      (when-not (identical? (aget child-key 0) "-")
-       (js-delete element-state-lookup child-key)
+       ;(js-delete element-state-lookup child-key)
        (goog.object/forEach (.-child-states state)
                             (fn [state child-key _]
                               (dispose-node child-key state)))))))
