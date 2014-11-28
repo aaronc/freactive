@@ -205,7 +205,7 @@
 
   IDeref
   (-deref [this]
-    (register-rx-dep this id lazy)
+    (register-rx-dep this lazy)
     (when dirty (-compute this))
     state)
 
@@ -315,7 +315,7 @@
 
   cljs.core/IDeref
   (-deref [this]
-    (register-rx-dep this id lazy)
+    (register-rx-dep this lazy)
     (when dirty (-compute this))
     state)
 
@@ -367,6 +367,25 @@
   (-swap! [this f x] (cursor-swap! this ref getter setter #(f % x)))
   (-swap! [this f x y] (cursor-swap! this ref getter setter #(f % x y)))
   (-swap! [this f x y more] (cursor-swap! this ref getter setter #(apply f %  x y  more))))
+
+
+(def ^:private IInvalidates-mixin
+  {:-notify-invalidation-watches
+   (fn --notify-invalidation-watches [this]
+     (goog.object/forEach (.-invalidation-watches this)
+       (fn [f key _] (f key this))))
+
+   :-add-invalidation-watch
+   (fn --add-invalidation-watch
+     [this key f]
+     (aset invalidation-watches key f)
+     this)
+
+   :-remove-invalidation-watch
+   (fn -remove-invalidation-watch
+     [this key]
+     (js-delete invalidation-watches key)
+     this)})
 
 (defn cursor* [ref korks-or-getter setter lazy]
   (let [id (new-reactive-id)
