@@ -28,9 +28,9 @@
 
 (defn- get-element-state [x]
   ;;(get element-state-lookup x)
-  ;(when-let [node-id (get-node-id x)]
-  ;  (aget element-state-lookup node-id))
-  (.-freactive-state x)
+  (when-let [node-id (get-node-id x)]
+    (aget element-state-lookup node-id))
+  ;(.-freactive-state x)
   )
 
 (extend-protocol IElementSpec
@@ -90,7 +90,7 @@
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
     (init-element-meta! state element-spec tag attrs)
-    ;(aset element-state-lookup node-id state)
+    (aset element-state-lookup node-id state)
     (set! (.-freactive-state dom-node) state)
     state))
 
@@ -129,7 +129,7 @@
      (when-let [disposed-callback (.-disposed-callback state)]
        (disposed-callback))
      (when-not (identical? (aget child-key 0) "-")
-       ;(js-delete element-state-lookup child-key)
+       (js-delete element-state-lookup child-key)
        (goog.object/forEach (.-child-states state)
                             (fn [state child-key _]
                               (dispose-node child-key state)))))))
@@ -546,7 +546,7 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing true)
+(def enable-diffing false)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
@@ -555,7 +555,8 @@
                            (init-element-state! parent nil nil nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
-        (register-with-parent-state parent-state (get-node-id new-elem) state)
+        (register-with-parent-state parent-state
+                                    (get-node-id new-elem) state)
         state))))
 
 (defn- on-attached [state node]
@@ -644,8 +645,9 @@
       (if enable-diffing
         (if top-level
           (do
-            ;(println "starting diff replace")
-            (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
+            (println "starting diff replace")
+            (time
+              (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level)))
           (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
 
         (replace-node-completely
@@ -702,12 +704,8 @@
 
 ;; Reactive Element Handling
 
-(def ^:private auto-reactive-id 0)
-
-(defn- new-reactive-id []
-  (let [id auto-reactive-id]
-    (set! auto-reactive-id (inc auto-reactive-id))
-    (str "-r." id)))
+(defprotocol INodeContainer
+  (-replace [container new-elem-spec]))
 
 (deftype ReactiveElement [id parent ref cur-element dirty updating disposed
                           animate invalidate]
@@ -742,6 +740,13 @@
                                     (set! (.-cur-element cur) nil)
                                     cur-elem)
                                   cur)]
+                            ;(if cur
+                            ;  (if (satisfies? INodeContainer cur)
+                            ;    (-replace cur new-elem)
+                            ;    (if-let [parent (.-parentNode cur)]
+                            ;      (replace-child* parent new-elem cur true)
+                            ;      (set! (.-disposed state) true)))
+                            ;  (insert-child* parent new-elem before))
                             (if-let [parent (or (when-not cur parent) (.-parentNode cur))]
                               (let [new-node (if cur
                                                (replace-child* parent new-elem cur true)
@@ -781,8 +786,8 @@
           (fn on-child-ref-invalidated
             ([key child-ref _ _]
              (on-child-ref-invalidated key child-ref))
-            ([cur-elem child-ref]
-             (remove-watch* child-ref cur-elem)
+            ([key child-ref]
+             (remove-watch* child-ref key)
              (when-not (.-disposed state)
                (set! (.-dirty state) true)
                (when-not (.-updating state)
@@ -813,7 +818,9 @@
     (mount-element parent @child-ref before)))
 
 (defn bind-child [parent child before cur]
-  (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node))
+  (if-let [binder (:binder (meta child))]
+    (binder parent child before cur append-or-insert-child replace-child remove-dom-node)
+    (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node)))
 
 ;; Building Elements
 

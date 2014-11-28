@@ -122,23 +122,26 @@
   (-invalidate [this])
   (-compute [this]))
 
-(defn- make-sully-fn [reactive]
-  (fn sully
-    ([]
-     (when-not (.-dirty reactive)
-       (set! (.-dirty reactive) true)
-       (if-not (empty? (.-watches reactive))
-         ;; updates state and notifies watches
-         (when (-compute reactive)
-           (-notify-invalidation-watches reactive))
-         ;; updates only invalidation watches
-         (-notify-invalidation-watches reactive))))
-    ([key ref]
-     (-remove-invalidation-watch ref key)
-     (sully))
-    ([key ref _ _]
-     (-remove-watch ref key)
-     (sully))))
+(defn- make-sully-fn [reactive id]
+  (let [sully-fn
+        (fn sully
+          ([]
+           (when-not (.-dirty reactive)
+             (set! (.-dirty reactive) true)
+             (if-not (empty? (.-watches reactive))
+               ;; updates state and notifies watches
+               (when (-compute reactive)
+                 (-notify-invalidation-watches reactive))
+               ;; updates only invalidation watches
+               (-notify-invalidation-watches reactive))))
+          ([key ref]
+           (-remove-invalidation-watch ref key)
+           (sully))
+          ([key ref _ _]
+           (-remove-watch ref key)
+           (sully)))]
+    (set! (.-id sully-fn) id)
+    sully-fn))
 
 (defn get-add-watch* [ref]
   (cond
@@ -164,12 +167,12 @@
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
 
-(defn- register-rx-dep [rx id default-laziness]
+(defn- register-rx-dep [rx default-laziness]
   (when-let [invalidate *invalidate-rx*]
     (when *trace-capture* (*trace-capture* rx))
     (if (lazy? default-laziness)
-      (-add-invalidation-watch rx id invalidate)
-      (-add-watch rx id invalidate))))
+      (-add-invalidation-watch rx (.-id invalidate) invalidate)
+      (-add-watch rx (.-id invalidate) invalidate))))
 
 (deftype ReactiveExpression [id ^:mutable state ^:mutable dirty f ^:mutable deps meta
                               ^:mutable watches ^:mutable invalidation-watches sully lazy
@@ -234,8 +237,8 @@
       (fn [f key _]
         (f key this))))
   (-add-invalidation-watch [this key f]
-    ;(set! (.-invalidation-watches this) (assoc invalidation-watches key f))
     (aset invalidation-watches key f)
+    ;(set! (.-invalidation-watches this) (assoc invalidation-watches key f))
     this)
   (-remove-invalidation-watch [this key]
     ;(set! (.-invalidation-watches this) (dissoc invalidation-watches key))
@@ -251,7 +254,7 @@
    (let [id (new-reactive-id)
          reactive (ReactiveExpression. id nil true f nil nil nil #js {} nil lazy
                                        (or *do-trace-captures* (fn [_])))]
-     (set! (.-sully reactive) (make-sully-fn reactive))
+     (set! (.-sully reactive) (make-sully-fn reactive id))
      reactive)))
 
 ;(declare update-cursor-state)
@@ -380,7 +383,7 @@
                   (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
         cursor (ReactiveCursor. id ref getter setter true nil nil nil nil lazy nil nil)
-        sully  (make-sully-fn cursor)
+        sully  (make-sully-fn cursor id)
         add-watch-fn
         (if-let [add-watch* (get-add-watch* ref)]
           (fn [] (add-watch* ref id sully))

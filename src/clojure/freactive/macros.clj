@@ -23,8 +23,11 @@
   `(binding [freactive.core/*invalidate-rx* nil]
      ~@body))
 
+(def ^:private auto-id (atom 0))
+
 (defmacro debug-rx [rx]
-  (let [dbg-str (str "rx-debug" (pr-str rx))]
+  (let [dbg-str (str "rx-debug" (pr-str rx))
+        id (str "debug-rx-" (swap! auto-id inc))]
     `(let [dbg-str# ~dbg-str
            res#
            (binding [freactive.core/*do-trace-captures*
@@ -35,10 +38,10 @@
            invalidation-cb#
            (fn [k# r#] (println dbg-str#
                                "notifiying invalidation watches:"
-                               (cljs.core/keys (.-invalidation-watches res#))
+                               (cljs.core/js-keys (.-invalidation-watches res#))
                                "& watches:"
                                (cljs.core/keys (.-watches res#))))]
-       (freactive.core/add-invalidation-watch res# dbg-str# invalidation-cb#)
+       (freactive.core/add-invalidation-watch res# ~id invalidation-cb#)
        res#)))
 
 
