@@ -69,27 +69,25 @@
 
 (declare get-transition)
 
-(defn- init-element-meta! [state element-spec tag attrs]
+(defn- init-element-meta! [state element-spec tag ]
   (let [m (meta element-spec)]
     (set! (.-meta state) m)
     (when-let [on-disposed (get m :node-disposed)]
       (set! (.-disposed-callback state) on-disposed)))
-  (set! (.-tag state) tag)
-  (set! (.-attrs state) attrs))
+  (set! (.-tag state) tag))
 
-(defn- reset-element-spec! [state spec tag attrs]
+(defn- reset-element-spec! [state spec tag]
   (when-let [on-disposed (.-disposed-callback state)]
     (on-disposed)
     (set! (.-disposed-callback state) nil))
-  (set! (.-element-spec state) spec)
-  (init-element-meta! state spec tag attrs))
+  (set! (.-element-spec state) spec))
 
-(defn- init-element-state! [dom-node element-spec tag attrs]
+(defn- init-element-state! [dom-node element-spec tag]
   (let [node-id (str auto-node-id)
         state (ElementState. node-id false element-spec nil)]
     (set! auto-node-id (inc auto-node-id))
     (set-attr! dom-node "data-freactive-id" node-id)
-    (init-element-meta! state element-spec tag attrs)
+    (init-element-meta! state element-spec tag)
     (aset element-state-lookup node-id state)
     (set! (.-freactive-state dom-node) state)
     state))
@@ -399,15 +397,29 @@
 
         :default
         (bind-prop-attr! (get-attr-setter element attr-name)
-                         element attr-name attr-value node-state))))
+                         element attr-name attr-value node-state)))))
 
-  (defn- dispose-child-state [node-state child-key]
-    (when-let [child-states (.-child-states node-state)]
-      (when-let [state (aget child-states child-key)]
-        (set! (.-disposed state) true)
-        (when-let [disposed-callback (.-disposed-callback state)]
-          (disposed-callback))
-        (js-delete child-states child-key)))))
+(defn- bind-attrs!* [node attrs node-state binder]
+  (let [js-attrs #js {}]
+    (doseq [[k v] attrs]
+      (binder node k v node-state)
+      (aset js-attrs (str k) v))
+    js-attrs))
+
+(defn- bind-attrs! [node attrs node-state]
+  (let [style (:style attrs)
+        js-attrs (bind-attrs!* node (dissoc attrs :style) node-state bind-attr!)
+        js-style (bind-attrs!* node style node-state bind-style-prop!)]
+    (set! (.-attrs node-state) js-attrs)
+    (set! (.-style node-state) js-style)))
+
+(defn- dispose-child-state [node-state child-key]
+  (when-let [child-states (.-child-states node-state)]
+    (when-let [state (aget child-states child-key)]
+      (set! (.-disposed state) true)
+      (when-let [disposed-callback (.-disposed-callback state)]
+        (disposed-callback))
+      (js-delete child-states child-key))))
 
 (defn- unbind-attr!* [node-state prefix attr-name]
   (let [attr-key (str "-" prefix "." attr-name)]
@@ -451,18 +463,32 @@
       (let [k (name k)]
         (rebind-attr! node k v node-state)))))
 
+;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
+;  (let [hit #js {}]
+;    (doseq [[attr-name new-val] new-attrs]
+;      ;(println "rebinding" attr-name new-val)
+;      (rebinder node attr-name new-val node-state)
+;      (when (get old-attrs attr-name)
+;          (aset hit (str attr-name) true)))
+;    (doseq [[attr-name _] old-attrs]
+;      (let [attr-str (str attr-name)]
+;        (when-not (aget hit attr-str)
+;          ;(println "unbinding" attr-name)
+;          (rebinder node attr-name nil node-state))))))
+
 (defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
-  (let [hit #js {}]
+  (let [new-attrs-js #js {}]
     (doseq [[attr-name new-val] new-attrs]
-      ;(println "rebinding" attr-name new-val)
-      (rebinder node attr-name new-val node-state)
-      (when (get old-attrs attr-name)
-          (aset hit (str attr-name) true)))
-    (doseq [[attr-name _] old-attrs]
-      (let [attr-str (str attr-name)]
-        (when-not (aget hit attr-str)
-          ;(println "unbinding" attr-name)
-          (rebinder node attr-name nil node-state))))))
+      (let [attr-str (if-let [attr-ns (namespace attr-name)]
+                       (str attr-ns "/" (name attr-name))
+                       (name attr-name))]
+        (rebinder node attr-name new-val node-state)
+        (js-delete old-attrs attr-str)
+        (aset new-attrs-js attr-str new-val)))
+    (goog.object/forEach old-attrs
+      (fn [_ attr-str _]
+        (rebinder node (keyword attr-str) nil node-state)))
+    new-attrs-js))
 
 ;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
 ;  (loop [[[k new-val] & new-attrs] (seq new-attrs)
@@ -496,18 +522,21 @@
     (doseq [child-key to-remove]
       (js-delete child-states child-key))))
 
-(defn- replace-attrs! [node node-state old-attrs new-attrs]
-  (let [old-style (:style old-attrs)
+(defn- replace-attrs! [node node-state new-attrs]
+  (let [old-attrs (.-attrs node-state)
+        old-style (.-style node-state)
         new-style (:style new-attrs)]
     (dispose-attrs node-state)
-    (replace-attrs!* node node-state
-                     (dissoc old-attrs :style)
-                     (dissoc new-attrs :style)
-                     bind-attr!)
-    (replace-attrs!* node node-state
-                     old-style
-                     new-style
-                     bind-style-prop!)))
+    (set! (.-attrs node-state)
+          (replace-attrs!* node node-state
+                           old-attrs
+                           (dissoc new-attrs :style)
+                           bind-attr!))
+    (set! (.-style node-state)
+          (replace-attrs!* node node-state
+                           old-style
+                           new-style
+                           bind-style-prop!))))
 
 ;; From hiccup.compiler:
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
@@ -552,7 +581,7 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing false)
+(def enable-diffing true)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
@@ -612,13 +641,12 @@
       (if (keyword-identical? new-tag cur-tag)
         (do
           ;(println "diff hit" (first vdom) (.-id cur-state))
-          (let [old-attrs (.-attrs cur-state)
+          (let [                                            ;;old-attrs (.-attrs cur-state)
                 new-attrs? (second vdom)
                 new-attrs (when (map? new-attrs?) new-attrs?)]
-            (reset-element-spec! cur-state vdom new-tag new-attrs)
+            (reset-element-spec! cur-state vdom new-tag)
             (replace-attrs! cur-dom-node
                             cur-state
-                            old-attrs
                             new-attrs)
             (let [new-children (if new-attrs (nnext vdom) (next vdom))
                   dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
@@ -864,10 +892,11 @@
             node (create-dom-node tag)
             attrs? (second virtual-dom)
             attrs (when (map? attrs?) attrs?)
-            state (init-element-state! node elem-spec tag attrs)
+            state (init-element-state! node elem-spec tag)
             children (if attrs (nnext virtual-dom) (next virtual-dom))]
-        (doseq [[k v] attrs]
-          (bind-attr! node k v state))
+        ;(doseq [[k v] attrs]
+        ;  (bind-attr! node k v state))
+        (bind-attrs! node attrs state)
         (when children
           (append-children! node children))
         ;(when-let [m (.-meta state)]
