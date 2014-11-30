@@ -587,7 +587,7 @@
   (when-not (text-node? new-elem)
     (let [parent-state (get-element-state parent)
           parent-state (or parent-state
-                           (init-element-state! parent nil nil nil))]
+                           (init-element-state! parent nil nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state
