@@ -49,14 +49,22 @@
   (removeSwatch [this key]
     (js-delete (.-swatches this) key))
   (notifySwatches [this oldVal newVal]
-    ;(doseq [[key f] invalidation-watches]
-    ;  (f key this))
     (goog.object/forEach
       (.-swatches this)
       (fn [f key _]
         (f key this oldVal newVal)))
     (doseq [[key f] watches]
       (f key this oldVal newVal)))
+  (rawDeref [_] state)
+  (fastDeref [this]
+    (when-let [invalidate *invalidate-rx*]
+      ;(-add-watch this (.-id invalidate) invalidate)
+      (.addSwatch this (.-id invalidate)
+                  (fn [key ref _ _]
+                    (.removeSwatch ref key)
+                    (invalidate)))
+      (when *trace-capture* (*trace-capture* this)))
+    state)
 
   cljs.core/IAtom
 
@@ -67,15 +75,7 @@
   (-equiv [o other] (identical? o other))
 
   cljs.core/IDeref
-  (-deref [this]
-    (when-let [invalidate *invalidate-rx*]
-      ;(-add-watch this (.-id invalidate) invalidate)
-      (.addSwatch this (.-id invalidate)
-                  (fn [key ref _ _]
-                    (.removeSwatch ref key)
-                    (invalidate)))
-      (when *trace-capture* (*trace-capture* this)))
-    state)
+  (-deref [this] (.fastDeref this))
 
   IMeta
   (-meta [_] meta)
@@ -145,7 +145,7 @@
              (set! (.-dirty reactive) true)
              (if-not (empty? (.-watches reactive))
                ;; updates state and notifies watches
-               (when (-compute reactive)
+               (when (.compute reactive)
                  ( .notifyInvalidationWatches reactive))
                ;; updates only invalidation watches
                (.notifyInvalidationWatches reactive))))
@@ -178,6 +178,11 @@
     ;[add-invalidation-watch remove-invalidation-watch]
     [(fn [ref key f] (.addInvalidationWatch ref key f))
     (fn [ref key] (.removeInvalidationWatch ref key))]
+
+    (and (.-addSwatch ref) (.-removeSwatch ref))
+    [(fn [ref key f] (.addSwatch ref key f))
+     (fn [ref key] (.removeSwatch ref key))]
+
     (satisfies? IWatchable ref)
     [add-watch remove-watch]))
 
@@ -212,15 +217,7 @@
     ;(set! (.-invalidation-watches this) (dissoc invalidation-watches key))
     (js-delete invalidation-watches key)
     this)
-
-  IReactive
-  (-raw-deref [this]
-    (when dirty (-compute this))
-    state)
-
-  IReactiveExpression
-  (-invalidate [_] (sully))
-  (-compute [this]
+  (compute [this]
     (set! dirty false)
     (let [old-val state
           new-val (binding [*invalidate-rx* sully
@@ -231,15 +228,26 @@
         (set! state new-val)
         (-notify-watches this old-val new-val)
         new-val)))
+  (rawDeref [this]
+    (when dirty (-compute this))
+    state)
+  (fastDeref [this]
+    (register-rx-dep this lazy)
+    (when dirty (.compute this))
+    state)
+
+  IReactive
+  (-raw-deref [this] (.rawDeref this))
+
+  IReactiveExpression
+  (-invalidate [_] (sully))
+  (-compute [this] (.compute this))
 
   IEquiv
   (-equiv [o other] (identical? o other))
 
   IDeref
-  (-deref [this]
-    (register-rx-dep this lazy)
-    (when dirty (-compute this))
-    state)
+  (-deref [this] (.fastDeref this))
 
   IMeta
   (-meta [_] meta)

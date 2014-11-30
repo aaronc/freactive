@@ -263,6 +263,12 @@
 (defn- remove-style-prop! [elem prop-name]
   (js-delete (.-style elem) prop-name))
 
+(let [core-deref cljs.core/deref]
+  (set! cljs.core/deref (fn [x]
+                          (if (.-fastDeref x)
+                            (.fastDeref x)
+                            (core-deref x)))))
+
 (defn- bind-attr* [set-fn element state-prefix attr-name ref node-state]
   (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
     (let [attr-state #js {:disposed false}

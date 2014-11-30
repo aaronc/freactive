@@ -1,14 +1,34 @@
 (ns freactive.animation
   (:require
     [freactive.core :as r]
-    [freactive.dom :as dom]))
+    [freactive.dom :as dom]
+    [goog.object]))
 
-(deftype AnimationEaser [state easing-fn animating on-complete
-                         watches invalidation-watches]
+(deftype AnimationEaser [id state easing-fn animating on-complete
+                         watches swatches]
+  Object
+  (addSwatch [this key f]
+    (aset (.-swatches this) key f))
+  (removeSwatch [this key]
+    (js-delete (.-swatches this) key))
+  (notifySwatches [this oldVal newVal]
+    (goog.object/forEach
+      (.-swatches this)
+      (fn [f key _]
+        (f key this oldVal newVal)))
+    (doseq [[key f] watches]
+      (f key this oldVal newVal)))
+  (fastDeref [this]
+    (if-let [invalidate r/*invalidate-rx*]
+      (.addSwatch this (.-id invalidate)
+                  (fn [key ref _ _]
+                    (.removeSwatch ref key)
+                    (invalidate))))
+    state)
+
   IWatchable
   (-notify-watches [this oldval newval]
-    (doseq [[key f] watches]
-      (f key this oldval newval)))
+    (.notifySwatches this oldval newval))
   (-add-watch [this key f]
     (set! (.-watches this) (assoc watches key f))
     this)
@@ -17,13 +37,10 @@
     this)
 
   IDeref
-  (-deref [this]
-    (if r/*invalidate-rx*
-      (add-watch this r/*invalidate-rx* r/*invalidate-rx*))
-    state))
+  (-deref [this] (.fastDeref this)))
 
 (defn easer [init-state]
-  (AnimationEaser. init-state nil false nil nil nil))
+  (AnimationEaser. (r/new-reactive-id) init-state nil false nil nil #js {}))
 
 (defn start-easing!
   ([easer from to duration easing-fn when-complete]
@@ -32,7 +49,7 @@
          duration (* ratio duration)]
      (start-easing! easer to duration easing-fn when-complete)))
   ([easer to duration easing-fn when-complete]
-   (let [start-ms (r/-raw-deref dom/frame-time)
+   (let [start-ms (.rawDeref dom/frame-time)
          from (.-state easer)
          total-change (- to from)
          scaled-easing-fn
@@ -58,9 +75,9 @@
                       (let [cur-state (.-state easer)
                             new-state ((.-easing-fn easer) new-ms)]
                         (set! (.-state easer) new-state)
-                        (-notify-watches easer cur-state new-state))
+                        (.notifySwatches easer cur-state new-state))
                       (do
-                        (remove-watch dom/frame-time easer)
+                        (.removeSwatch dom/frame-time (.-id easer))
                         (when-let [cb (.-on-complete easer)]
                           (set! (.-on-complete easer) nil)
                           (cb)))))))
