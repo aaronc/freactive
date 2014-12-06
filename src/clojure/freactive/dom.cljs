@@ -520,7 +520,7 @@
                  (.createElementNS js/document resolved-ns tag))
                (.createElement js/document tag))]
     (when id (set! (.-id node) id))
-    (when class (set! (.-className node) (.replace class "." " ")))
+    (when class (set! (.-className node) (clojure.string/replace class "." " ")))
     node))
 
 ;(defn- create-dom-node-simple [tag]
