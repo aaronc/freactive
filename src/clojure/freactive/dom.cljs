@@ -363,13 +363,13 @@
 
     :default
     (fn [attr-value]
-      (.setAttribute
-        element attr-name
-        (if attr-value
+      ;(println "setting attr" element attr-name attr-value)
+      (if attr-value
+        (.setAttribute element attr-name
           (if (.-substring attr-value)
             attr-value
-            (.toString attr-value))
-          "")))))
+            (.toString attr-value)))
+        (.removeAttribute element attr-name)))))
 
 (defn- bind-lifecycle-callback! [element cb-name cb-value node-state]
   (case cb-name
@@ -549,6 +549,8 @@
   (let [xmlns (get *xml-namespaces* kw-ns)]
     (assert xmlns (str "Don't know how to handle namespace " kw-ns))))
 
+(def ^:private re-dot (js/RegExp. "\\." "g"))
+
 (defn- create-dom-node [kw]
   (let [tag-ns (namespace kw)
         [_ tag id class] (re-matches re-tag (name kw))
@@ -560,7 +562,7 @@
                  (.createElementNS js/document resolved-ns tag))
                (.createElement js/document tag))]
     (when id (set! (.-id node) id))
-    (when class (set! (.-className node) (.replace class "." " ")))
+    (when class (set! (.-className node) (.replace class re-dot " ")))
     node))
 
 ;(defn- create-dom-node-simple [tag]
