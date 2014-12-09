@@ -509,6 +509,8 @@
   (let [xmlns (get *xml-namespaces* kw-ns)]
     (assert xmlns (str "Don't know how to handle namespace " kw-ns))))
 
+(def ^:private re-dot (js/RegExp. "\\." "g"))
+
 (defn- create-dom-node [kw]
   (let [tag-ns (namespace kw)
         [_ tag id class] (re-matches re-tag (name kw))
@@ -520,7 +522,7 @@
                  (.createElementNS js/document resolved-ns tag))
                (.createElement js/document tag))]
     (when id (set! (.-id node) id))
-    (when class (set! (.-className node) (clojure.string/replace class "." " ")))
+    (when class (set! (.-className node) (.replace class re-dot " ")))
     node))
 
 ;(defn- create-dom-node-simple [tag]
