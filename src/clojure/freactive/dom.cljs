@@ -261,33 +261,31 @@
 (defn- remove-style-prop! [elem prop-name]
   (js-delete (.-style elem) prop-name))
 
-(let [core-deref cljs.core/deref]
-  (set! cljs.core/deref (fn [x]
-                          (if (.-fastDeref x)
-                            (.fastDeref x)
-                            (core-deref x)))))
-
 (defn- bind-attr* [set-fn element state-prefix attr-name ref node-state]
-  (when-let [[add-watch* remove-watch*] (r/get-add-remove-watch* ref)]
-    (let [attr-state #js {:disposed false}
-          key (r/new-reactive-id)
-          invalidate
-          (fn on-value-ref-invalidated
-            ([]
-             (on-value-ref-invalidated key ref))
-            ([key ref _ _]
-             (on-value-ref-invalidated key ref))
-            ([key ref]
-             (remove-watch* ref key)
-             (queue-animation
-               (fn [_]
-                 (when-not (.-disposed attr-state)
-                   (add-watch* ref key on-value-ref-invalidated)
-                   (set-fn (non-reactively @ref)))))))]
-      (register-with-parent-state node-state
-                                  (str "-" state-prefix "." attr-name) attr-state)
-      (add-watch* ref key invalidate)))
-  (set-fn @ref))
+  (let [binding-fns (r/get-binding-fns ref)
+        deref* (.-deref binding-fns)
+        add-watch* (.-add-watch binding-fns)
+        remove-watch* (.-remove-watch binding-fns)]
+    (if (and add-watch* remove-watch*)
+      (let [attr-state #js {:disposed false}
+            key (r/new-reactive-id)
+            invalidate
+            (fn on-value-ref-invalidated
+              ([]
+               (on-value-ref-invalidated key ref))
+              ([key ref _ _]
+               (on-value-ref-invalidated key ref))
+              ([key ref]
+               (remove-watch* ref key)
+               (queue-animation
+                (fn [_]
+                  (when-not (.-disposed attr-state)
+                    (add-watch* ref key on-value-ref-invalidated)
+                    (set-fn (non-reactively (deref* ref))))))))]
+        (register-with-parent-state node-state
+                                    (str "-" state-prefix "." attr-name) attr-state)
+        (add-watch* ref key invalidate))
+      (set-fn (deref* ref)))))
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)
@@ -583,7 +581,7 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing true)
+(def enable-diffing false)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
@@ -751,107 +749,104 @@
   (-remove! [this]
     (set! (.-disposed this) true)
     (when-not updating
-      (remove! @cur-element))
+      (remove! cur-element))
     (when-let [parent-state (get-element-state parent)]
       (unregister-from-parent-state parent-state id))))
 
 (defn- bind-child* [parent child-ref before cur insert-child* replace-child*  remove*]
-  (if-let [[add-watch* remove-watch*] (r/get-add-remove-watch* child-ref)]
-    (let [id (r/new-reactive-id)
-          state (ReactiveElement. id parent child-ref nil false false false
-                                  nil nil)
+  (let [binding-fns (r/get-binding-fns child-ref)
+        deref* (.-deref binding-fns)
+        add-watch* (.-add-watch binding-fns)
+        remove-watch* (.-remove-watch binding-fns)]
+    (if (and add-watch* remove-watch*)
+      (let [id (r/new-reactive-id)
 
-          ref-meta (meta child-ref)
+            state (ReactiveElement. id parent child-ref nil false false false nil nil)
 
-          get-new-elem (fn get-new-elem-fn []
-                         (set! (.-dirty state) false)
-                         (add-watch* child-ref id (.-invalidate state))
-                         (or (non-reactively @child-ref) ""))
+            ref-meta (meta child-ref)
 
-          show-new-elem (fn show-new-elem-fn [new-elem cur]
-                          (let [cur
-                                (if (instance? ReactiveElement cur)
-                                  (let [cur-elem (.-cur-element cur)]
-                                    (set! (.-disposed cur) true)
-                                    (set! (.-cur-element cur) nil)
-                                    cur-elem)
-                                  cur)]
-                            ;(if cur
-                            ;  (if (satisfies? INodeContainer cur)
-                            ;    (-replace cur new-elem)
-                            ;    (if-let [parent (.-parentNode cur)]
-                            ;      (replace-child* parent new-elem cur true)
-                            ;      (set! (.-disposed state) true)))
-                            ;  (insert-child* parent new-elem before))
-                            (if-let [parent (or (when-not cur parent) (.-parentNode cur))]
-                              (let [new-node (if cur
-                                               (replace-child* parent new-elem cur true)
-                                               (insert-child* parent new-elem before))]
-                                (set! (.-cur-element state) new-node)
-                                (set! (.-updating state) false)
-                                (when (.-dirty state)
-                                  (queue-animation (.-animate state)))
-                                (show-node new-node))
-                              (set! (.-disposed state) true))))
+            get-new-elem (fn get-new-elem-fn []
+                           (set! (.-dirty state) false)
+                           (add-watch* child-ref id (.-invalidate state))
+                           (or (non-reactively (deref* child-ref)) ""))
 
-          animate
-          (fn animate [x]
-            (if (.-disposed state)
-              (when-let [cur (.-cur-element state)]
-                (remove! cur))
-              (do
-                (let [new-elem (get-new-elem)
-                      cur (.-cur-element state)]
-                  (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
-                    (let [hide (get-transition cur :node-detaching)]
-                      (if hide
-                        (do
-                          (hide cur
-                                (fn []
-                                  (if (.-disposed state)
-                                    (do
-                                      (remove* cur)
-                                      (set! (.-updating cur) false))
-                                    (let [new-elem (if (.-dirty state)
-                                                     (get-new-elem)
-                                                     new-elem)]
-                                      (show-new-elem new-elem cur))))))
-                        (show-new-elem new-elem cur))))))))
+            show-new-elem (fn show-new-elem-fn [new-elem cur]
+                            (let [cur
+                                  (if (instance? ReactiveElement cur)
+                                    (let [cur-elem (.-cur-element cur)]
+                                      (set! (.-disposed cur) true)
+                                      (set! (.-cur-element cur) nil)
+                                      cur-elem)
+                                    cur)]
+                              (if-let [parent (or (when-not cur parent) (.-parentNode cur))]
+                                (let [new-node (if cur
+                                                 (replace-child* parent new-elem cur true)
+                                                 (insert-child* parent new-elem before))]
+                                  (set! (.-cur-element state) new-node)
+                                  (set! (.-updating state) false)
+                                  (when (.-dirty state)
+                                    (queue-animation (.-animate state)))
+                                  (show-node new-node))
+                                (set! (.-disposed state) true))))
 
-          invalidate
-          (fn on-child-ref-invalidated
-            ([key child-ref _ _]
-             (on-child-ref-invalidated key child-ref))
-            ([key child-ref]
-             (remove-watch* child-ref key)
-             (when-not (.-disposed state)
-               (set! (.-dirty state) true)
-               (when-not (.-updating state)
-                 (set! (.-updating state) true)
-                 (queue-animation animate)))))
+            animate
+            (fn animate [x]
+              (if (.-disposed state)
+                (when-let [cur (.-cur-element state)]
+                  (remove! cur))
+                (do
+                  (let [new-elem (get-new-elem)
+                        cur (.-cur-element state)]
+                    (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
+                      (let [hide (get-transition cur :node-detaching)]
+                        (if hide
+                          (do
+                            (hide cur
+                                  (fn []
+                                    (if (.-disposed state)
+                                      (do
+                                        (remove* cur)
+                                        (set! (.-updating cur) false))
+                                      (let [new-elem (if (.-dirty state)
+                                                       (get-new-elem)
+                                                       new-elem)]
+                                        (show-new-elem new-elem cur))))))
+                          (show-new-elem new-elem cur))))))))
 
-          binding-invalidated (:binding-invalidated ref-meta)
+            invalidate
+            (fn on-child-ref-invalidated
+              ([key child-ref _ _]
+               (on-child-ref-invalidated key child-ref))
+              ([key child-ref]
+               (remove-watch* child-ref key)
+               (when-not (.-disposed state)
+                 (set! (.-dirty state) true)
+                 (when-not (.-updating state)
+                   (set! (.-updating state) true)
+                   (queue-animation animate)))))
 
-          invalidate (if binding-invalidated
-                       (fn binding-invalidated-wrapper
-                         ([key child-ref _ _] (binding-invalidated-wrapper key child-ref))
-                         ([key child-ref]
-                          (when (binding-invalidated (.-cur-element state) child-ref)
-                            (invalidate key child-ref))))
-                       invalidate)]
-      (set! (.-animate state) animate)
-      (set! (.-invalidate state) invalidate)
-      (when-let [binding-disposed (get (meta child-ref) :binding-disposed)]
-        (set! (.-disposed-callback state) binding-disposed))
-      (when-let [parent-state (get-element-state parent)]
-        (register-with-parent-state parent-state id state))
-      (when-let [binding-initialized (get (meta child-ref)
-                                          :binding-initialized)]
-        (binding-initialized))
-      (set! (.-updating state) false)
-      (show-new-elem (get-new-elem) cur)
-      state)
-    (mount-element parent @child-ref before)))
+            binding-invalidated (:binding-invalidated ref-meta)
+
+            invalidate (if binding-invalidated
+                         (fn binding-invalidated-wrapper
+                           ([key child-ref _ _] (binding-invalidated-wrapper key child-ref))
+                           ([key child-ref]
+                            (when (binding-invalidated (.-cur-element state) child-ref)
+                              (invalidate key child-ref))))
+                         invalidate)]
+        (set! (.-animate state) animate)
+        (set! (.-invalidate state) invalidate)
+        (when-let [binding-disposed (get (meta child-ref) :binding-disposed)]
+          (set! (.-disposed-callback state) binding-disposed))
+        (when-let [parent-state (get-element-state parent)]
+          (register-with-parent-state parent-state id state))
+        (when-let [binding-initialized (get (meta child-ref) :binding-initialized)]
+          (binding-initialized))
+        (set! (.-updating state) false)
+        (show-new-elem (get-new-elem) cur)
+        state)
+      (do
+        (mount-element parent (deref* child-ref) before)))))
 
 (defn bind-child [parent child before cur]
   (if-let [binder (:binder (meta child))]

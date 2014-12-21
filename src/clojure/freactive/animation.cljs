@@ -5,30 +5,37 @@
     [goog.object]))
 
 (deftype AnimationEaser [id state easing-fn animating on-complete
-                         watches swatches]
+                         watches fwatches]
   Object
-  (addSwatch [this key f]
-    (aset (.-swatches this) key f))
-  (removeSwatch [this key]
-    (js-delete (.-swatches this) key))
-  (notifySwatches [this oldVal newVal]
-    (goog.object/forEach
-      (.-swatches this)
-      (fn [f key _]
-        (f key this oldVal newVal)))
-    (doseq [[key f] watches]
-      (f key this oldVal newVal)))
+  ;; (addSwatch [this key f]
+  ;;   (aset (.-fwatches this) key f))
+  ;; (removeSwatch [this key]
+  ;;   (js-delete (.-fwatches this) key))
+  ;; (notifyFwatches [this oldVal newVal]
+  ;;   (goog.object/forEach
+  ;;     (.-fwatches this)
+  ;;     (fn [f key _]
+  ;;       (f key this oldVal newVal)))
+  ;;   (doseq [[key f] watches]
+  ;;     (f key this oldVal newVal)))
   (fastDeref [this]
     (if-let [invalidate r/*invalidate-rx*]
-      (.addSwatch this (.-id invalidate)
+      (.addFWatch this (.-id invalidate)
                   (fn [key ref _ _]
-                    (.removeSwatch ref key)
+                    (.removeFWatch ref key)
                     (invalidate))))
     state)
 
+  r/IReactive
+  (-get-binding-fns [this]
+    #js
+    {:deref #(.fastDeref %)
+     :add-watch #(.addFWatch % %2 %3)
+     :remove-watch #(.removeFWatch % %2)})
+
   IWatchable
   (-notify-watches [this oldval newval]
-    (.notifySwatches this oldval newval))
+    (.notifyFWatches this oldval newval))
   (-add-watch [this key f]
     (set! (.-watches this) (assoc watches key f))
     this)
@@ -38,6 +45,8 @@
 
   IDeref
   (-deref [this] (.fastDeref this)))
+
+(r/apply-js-mixin AnimationEaser r/fwatch-mixin)
 
 (defn easer [init-state]
   (AnimationEaser. (r/new-reactive-id) init-state nil false nil nil #js {}))
@@ -69,15 +78,15 @@
      (when-not (.-animating easer)
        ;;(println "starting animation loop")
        (set! (.-animating easer) true)
-       (add-watch dom/frame-time easer
+       (.addFWatch dom/frame-time (.-id easer)
                   (fn [_ _ _ new-ms]
                     (if (.-animating easer)
                       (let [cur-state (.-state easer)
                             new-state ((.-easing-fn easer) new-ms)]
                         (set! (.-state easer) new-state)
-                        (.notifySwatches easer cur-state new-state))
+                        (.notifyFWatches easer cur-state new-state))
                       (do
-                        (.removeSwatch dom/frame-time (.-id easer))
+                        (.removeFWatch dom/frame-time (.-id easer))
                         (when-let [cb (.-on-complete easer)]
                           (set! (.-on-complete easer) nil)
                           (cb)))))))
