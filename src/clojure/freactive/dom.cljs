@@ -823,7 +823,7 @@
               ([key child-ref _ _]
                (on-child-ref-invalidated key child-ref))
               ([key child-ref]
-               (remove-watch* child-ref key)
+               (remove-watch* child-ref id)
                (when-not (.-disposed state)
                  (set! (.-dirty state) true)
                  (when-not (.-updating state)
