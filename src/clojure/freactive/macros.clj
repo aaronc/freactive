@@ -3,9 +3,10 @@
 (defmacro rx [& body]
   `(freactive.core/rx*
      (fn []
-       ~@body)))
+       ~@body)
+     true))
 
-(defmacro rx [& body]
+(defmacro eager-rx [& body]
   `(freactive.core/rx*
      (fn []
        ~@body)

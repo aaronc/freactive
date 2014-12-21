@@ -294,8 +294,8 @@
   (-get-binding-fns [this]
     #js
     {:deref #(.fastDeref %)
-     :add_watch (if lazy #(.addInvalidationWatch % %2 %3) -add-watch)
-     :remove_watch (if lazy #(.removeInvalidationWatch % %2) -remove-watch)})
+     :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
+     :remove_watch (if lazy #(.removeInvalidationWatch % %2) #(.removeFWatch % %2))})
 
   IEquiv
   (-equiv [o other] (identical? o other))
