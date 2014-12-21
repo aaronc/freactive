@@ -123,7 +123,6 @@
   ([child-key state]
    (when state
      (set! (.-disposed state) true)
-     ;(println "disposing")
      (when-let [disposed-callback (.-disposed-callback state)]
        (disposed-callback))
      (when-not (identical? (aget child-key 0) "-")
@@ -266,13 +265,14 @@
         deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
+        clean (or (.-clean binding-fns) remove-watch*)
         ref-meta (meta ref)]
     (when (and add-watch* remove-watch*)
       (let [key (r/new-reactive-id)
             attr-state #js {:disposed false
-                            :disposed-callback
+                            :disposed_callback
                             (fn []
-                              (remove-watch* ref key)
+                              (clean ref key)
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
                                 (binding-disposed)))}
             invalidate
@@ -758,11 +758,12 @@
     (when-let [parent-state (get-element-state parent)]
       (unregister-from-parent-state parent-state id))))
 
-(defn- bind-child* [parent child-ref before cur insert-child* replace-child*  remove*]
+(defn- bind-child* [parent child-ref before cur insert-child* replace-child* remove*]
   (let [binding-fns (r/get-binding-fns child-ref)
         deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
-        remove-watch* (.-remove-watch binding-fns)]
+        remove-watch* (.-remove-watch binding-fns)
+        clean (or (.-clean binding-fns) remove-watch*)]
     (if (and add-watch* remove-watch*)
       (let [id (r/new-reactive-id)
 
@@ -843,7 +844,8 @@
         (set! (.-invalidate state) invalidate)
         (set! (.-disposed-callback state)
               (fn []
-                (remove-watch* child-ref key)
+                (println "disposing child" id)
+                (clean child-ref id)
                 (when-let [binding-disposed (get ref-meta :binding-disposed)]
                   (binding-disposed))))
         (when-let [parent-state (get-element-state parent)]

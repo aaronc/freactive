@@ -31,13 +31,15 @@
 
 (defn- -addFWatch [key f]
   (this-as this
-           (set! (.-watchers this) (inc (.-watchers this)))
-           (aset (.-fwatches this) key f)))
+           (when-not (aget (.-fwatches this) key)
+             (set! (.-watchers this) (inc (.-watchers this)))
+             (aset (.-fwatches this) key f))))
 
 (defn- -removeFWatch [ key]
   (this-as this
-           (set! (.-watchers this) (dec (.-watchers this)))
-           (js-delete (.-fwatches this) key)))
+           (when (aget (.-fwatches this) key)
+             (set! (.-watchers this) (dec (.-watchers this)))
+             (js-delete (.-fwatches this) key))))
 
 (defn- -notifyFWatches [oldVal newVal]
   (this-as this
@@ -71,7 +73,7 @@
 ;;               (set! (.-watches this) (dissoc (.-watches this) key))))})
 
 
-(deftype ReactiveAtom [state meta validator watches fwatches watchers]
+(deftype ReactiveAtom [id state meta validator watches fwatches watchers]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -82,8 +84,17 @@
                   (fn [key ref _ _]
                     (.removeFWatch ref key)
                     (invalidate)))
+      (aset (.-deps invalidate) id this)
       (when *trace-capture* (*trace-capture* this)))
     state)
+  (clean [this key]
+    (.removeFWatch this key))
+  (getBindingFns [this]
+    #js
+    {:deref #(.fastDeref %)
+     :add_watch #(.addFWatch % %2 %3)
+     :remove_watch #(.removeFWatch % %2)
+     :clean #(.clean % %2)})
 
   cljs.core/IAtom
 
@@ -92,7 +103,8 @@
     #js
     {:deref #(.fastDeref %)
      :add_watch #(.addFWatch % %2 %3)
-     :remove_watch #(.removeFWatch % %2)})
+     :remove_watch #(.removeFWatch % %2)
+     :clean #(.clean % %2)})
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -160,8 +172,8 @@
   change. If the new state is unacceptable, the validate-fn should
   return false or throw an Error. If either of these error conditions
   occur, then the value of the atom will not change."
-  ([x] (ReactiveAtom. x nil nil nil #js {} 0))
-  ([x & {:keys [meta validator]}] (ReactiveAtom. x meta validator nil #js {} 0)))
+  ([x] (ReactiveAtom. (new-reactive-id )x nil nil nil #js {} 0))
+  ([x & {:keys [meta validator]}] (ReactiveAtom. (new-reactive-id) x meta validator nil #js {} 0)))
 
 (defn- make-sully-fn [reactive id]
   (let [sully-fn
@@ -182,6 +194,7 @@
            (-remove-watch ref key)
            (sully)))]
     (set! (.-id sully-fn) id)
+    (set! (.-deps sully-fn) #js {})
     sully-fn))
 
 ;; (defn get-add-watch* [ref]
@@ -229,12 +242,13 @@
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
 
-(defn- register-rx-dep [rx default-laziness]
+(defn- register-rx-dep [id rx default-laziness]
   (when-let [invalidate *invalidate-rx*]
     (when *trace-capture* (*trace-capture* rx))
+    (aset (.-deps invalidate) id rx)
     (if (lazy? default-laziness)
       (.addInvalidationWatch rx (.-id invalidate) invalidate)
-      (-add-watch rx (.-id invalidate) invalidate))))
+      (.addFWatch rx (.-id invalidate) invalidate))))
 
 (defn- -notifyInvalidationWatches []
   (this-as this
@@ -242,23 +256,40 @@
             (.-invalidation-watches this)
             (fn [f key _]
               (f key this)))))
+
 (defn- -addInvalidationWatch [key f]
   (this-as this
-           (aset (.-invalidation-watches this) key f)
+           (when-not (aget (.-invalidation-watches this) key)
+             (set! (.-iwatchers this) (inc (.-iwatchers this)))
+             (aset (.-invalidation-watches this) key f))
            this))
 
 (defn- -removeInvalidationWatch [this key]
   (this-as this
-           (js-delete (.-invalidation-watches this) key)
+           (when-not (aget (.-invalidation-watches this) key)
+             (set! (.-iwatchers this) (inc (.-iwatchers this)))
+             (js-delete (.-invalidation-watches this) key))
            this))
 
 (def invalidates-mixin
   #js {:notifyInvalidationWatches -notifyInvalidationWatches
        :addInvalidationWatch -addInvalidationWatch
-       :removeInvalidationWatch -removeInvalidationWatch})
+       :removeInvalidationWatch -removeInvalidationWatch
+       :clean
+       (fn -clean [key]
+         (this-as this
+                  (.removeFWatch this key)
+                  (.removeInvalidationWatch this key)
+                  (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
+                        ;; (println "cleaning" (.-id this) key)
+                        (goog.object/forEach (.-deps (.-sully this))
+                                             (fn [val key obj]
+                                               (when (.-clean val)
+                                                 (.clean val (.-id this)))
+                                               (js-delete obj key))))))})
 
 (deftype ReactiveExpression [id ^:mutable state ^:mutable dirty f ^:mutable deps meta
-                              ^:mutable watches fwatches watchers ^:mutable invalidation-watches sully lazy
+                              ^:mutable watches fwatches watchers ^:mutable invalidation-watches iwatches sully lazy
                              trace-captures]
   Object
   (equiv [this other]
@@ -278,16 +309,17 @@
     (when dirty (.compute this))
     state)
   (fastDeref [this]
-    (register-rx-dep this lazy)
+    (register-rx-dep id this lazy)
     (when dirty (.compute this))
     state)
-
+  
   IReactive
   (-get-binding-fns [this]
     #js
     {:deref #(.fastDeref %)
      :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
-     :remove_watch (if lazy #(.removeInvalidationWatch % %2) #(.removeFWatch % %2))})
+     :remove_watch (if lazy #(.removeInvalidationWatch % %2) #(.removeFWatch % %2))
+     :clean #(.clean % %2)})
 
   IEquiv
   (-equiv [o other] (identical? o other))
@@ -308,12 +340,14 @@
   (-notify-watches [this oldval newval]
     (.notifyFWatches this oldval newval))
   (-add-watch [this key f]
-    (set! (.-watchers this) (inc watchers))
-    (set! (.-watches this) (assoc watches key f))
+    (when-not (contains? watches key)
+      (set! (.-watchers this) (inc watchers))
+      (set! (.-watches this) (assoc watches key f)))
     this)
   (-remove-watch [this key]
-    (set! (.-watchers this) (dec watchers))
-    (set! (.-watches this) (dissoc watches key))
+    (when (contains? watchers key)
+      (set! (.-watchers this) (dec watchers))
+      (set! (.-watches this) (dissoc watches key)))
     this)
 
   IHash
@@ -326,7 +360,7 @@
   ([f] (rx* f true))
   ([f lazy]
    (let [id (new-reactive-id)
-         reactive (ReactiveExpression. id nil true f nil nil nil #js {} 0 #js {} nil lazy
+         reactive (ReactiveExpression. id nil true f nil nil nil #js {} 0 #js {} 0 nil lazy
                                        (or *do-trace-captures* (fn [_])))]
      (set! (.-sully reactive) (make-sully-fn reactive id))
      reactive)))
@@ -357,7 +391,7 @@
   (swap! ref (fn [cur] (setter cur (f (getter cur)))))
   (.rawDeref cursor))
 
-(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches lazy sully add-watch-fn]
+(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches iwatchers lazy sully add-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -374,7 +408,7 @@
           (.notifyInvalidationWatches cursor))
         new-value)))
   (fastDeref [this]
-    (register-rx-dep this lazy)
+    (register-rx-dep id this lazy)
     (when dirty (.compute this))
     state)
   (rawDeref [this]
@@ -388,7 +422,8 @@
     #js
     {:deref #(.fastDeref %)
      :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
-     :remove_watch (if lazy #(.removeInvalidationWatch %2) #(.removeFWatch % %2))})
+     :remove_watch (if lazy #(.removeInvalidationWatch %2) #(.removeFWatch % %2))
+     :clean #(.clean % %2)})
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -408,13 +443,16 @@
   IWatchable
   (-notify-watches [this oldval newval]
     (.notifyFWatches this oldval newval))
+
   (-add-watch [this key f]
-    (set! (.-watchers this) (inc watchers))
-    (set! (.-watches this) (assoc watches key f))
+    (when-not (contains? watches key)
+      (set! (.-watchers this) (inc watchers))
+      (set! (.-watches this) (assoc watches key f)))
     this)
   (-remove-watch [this key]
-    (set! (.-watchers this) (dec watchers))
-    (set! (.-watches this) (dissoc watches key))
+    (when (contains? watches key)
+      (set! (.-watchers this) (dec watchers))
+      (set! (.-watches this) (dissoc watches key)))
     this)
 
   IHash
@@ -466,7 +504,7 @@
                 (when ks
                   (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
-        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} lazy nil nil)
+        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} 0 lazy nil nil)
         sully  (make-sully-fn cursor id)
         add-watch-fn
         (if-let [add-watch* (.-add-watch (get-binding-fns ref))]
