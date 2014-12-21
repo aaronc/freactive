@@ -19,7 +19,7 @@
   ;;   (doseq [[key f] watches]
   ;;     (f key this oldVal newVal)))
   (fastDeref [this]
-    (if-let [invalidate r/*invalidate-rx*]
+    (when-let [invalidate r/*invalidate-rx*]
       (.addFWatch this (.-id invalidate)
                   (fn [key ref _ _]
                     (.removeFWatch ref key)

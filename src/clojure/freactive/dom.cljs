@@ -266,7 +266,7 @@
         deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)]
-    (if (and add-watch* remove-watch*)
+    (when (and add-watch* remove-watch*)
       (let [attr-state #js {:disposed false}
             key (r/new-reactive-id)
             invalidate
@@ -284,8 +284,8 @@
                     (set-fn (non-reactively (deref* ref))))))))]
         (register-with-parent-state node-state
                                     (str "-" state-prefix "." attr-name) attr-state)
-        (add-watch* ref key invalidate))
-      (set-fn (deref* ref)))))
+        (add-watch* ref key invalidate)))
+    (set-fn (deref* ref))))
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)
