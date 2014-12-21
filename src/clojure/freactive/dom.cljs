@@ -265,10 +265,16 @@
   (let [binding-fns (r/get-binding-fns ref)
         deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
-        remove-watch* (.-remove-watch binding-fns)]
+        remove-watch* (.-remove-watch binding-fns)
+        ref-meta (meta ref)]
     (when (and add-watch* remove-watch*)
-      (let [attr-state #js {:disposed false}
-            key (r/new-reactive-id)
+      (let [key (r/new-reactive-id)
+            attr-state #js {:disposed false
+                            :disposed-callback
+                            (fn []
+                              (remove-watch* ref key)
+                              (when-let [binding-disposed (get ref-meta :binding-disposed)]
+                                (binding-disposed)))}
             invalidate
             (fn on-value-ref-invalidated
               ([]
@@ -282,8 +288,7 @@
                   (when-not (.-disposed attr-state)
                     (add-watch* ref key on-value-ref-invalidated)
                     (set-fn (non-reactively (deref* ref))))))))]
-        (register-with-parent-state node-state
-                                    (str "-" state-prefix "." attr-name) attr-state)
+        (register-with-parent-state node-state (str "-" state-prefix "." attr-name) attr-state)
         (add-watch* ref key invalidate)))
     (set-fn (deref* ref))))
 
@@ -581,7 +586,7 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing false)
+(def enable-diffing true)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
@@ -836,11 +841,14 @@
                          invalidate)]
         (set! (.-animate state) animate)
         (set! (.-invalidate state) invalidate)
-        (when-let [binding-disposed (get (meta child-ref) :binding-disposed)]
-          (set! (.-disposed-callback state) binding-disposed))
+        (set! (.-disposed-callback state)
+              (fn []
+                (remove-watch* child-ref key)
+                (when-let [binding-disposed (get ref-meta :binding-disposed)]
+                  (binding-disposed))))
         (when-let [parent-state (get-element-state parent)]
           (register-with-parent-state parent-state id state))
-        (when-let [binding-initialized (get (meta child-ref) :binding-initialized)]
+        (when-let [binding-initialized (get ref-meta :binding-initialized)]
           (binding-initialized))
         (set! (.-updating state) false)
         (show-new-elem (get-new-elem) cur)
