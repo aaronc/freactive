@@ -72,6 +72,11 @@
 ;;      (this-as this
 ;;               (set! (.-watches this) (dissoc (.-watches this) key))))})
 
+(let [core-deref cljs.core/deref]
+  (set! cljs.core/deref (fn [x]
+                          (if (.-fastDeref x)
+                            (.fastDeref x)
+                            (core-deref x)))))
 
 (deftype ReactiveAtom [id state meta validator watches fwatches watchers]
   Object
@@ -104,7 +109,9 @@
     {:deref #(.fastDeref %)
      :add_watch #(.addFWatch % %2 %3)
      :remove_watch #(.removeFWatch % %2)
-     :clean #(.clean % %2)})
+     :clean #(.clean % %2)
+     :raw_deref #(.rawDeref %)
+     })
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -266,8 +273,8 @@
 
 (defn- -removeInvalidationWatch [this key]
   (this-as this
-           (when-not (aget (.-invalidation-watches this) key)
-             (set! (.-iwatchers this) (inc (.-iwatchers this)))
+           (when (aget (.-invalidation-watches this) key)
+             (set! (.-iwatchers this) (dec (.-iwatchers this)))
              (js-delete (.-invalidation-watches this) key))
            this))
 
@@ -286,7 +293,8 @@
                                              (fn [val key obj]
                                                (when (.-clean val)
                                                  (.clean val (.-id this)))
-                                               (js-delete obj key))))))})
+                                               (js-delete obj key)))
+                        (set! (.-dirty this) true))))})
 
 (deftype ReactiveExpression [id ^:mutable state ^:mutable dirty f ^:mutable deps meta
                               ^:mutable watches fwatches watchers ^:mutable invalidation-watches iwatches sully lazy
@@ -319,7 +327,9 @@
     {:deref #(.fastDeref %)
      :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
      :remove_watch (if lazy #(.removeInvalidationWatch % %2) #(.removeFWatch % %2))
-     :clean #(.clean % %2)})
+     :clean #(.clean % %2)
+     :raw_deref #(.rawDeref %)
+     })
 
   IEquiv
   (-equiv [o other] (identical? o other))
@@ -423,7 +433,9 @@
     {:deref #(.fastDeref %)
      :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
      :remove_watch (if lazy #(.removeInvalidationWatch %2) #(.removeFWatch % %2))
-     :clean #(.clean % %2)})
+     :clean #(.clean % %2)
+     :raw_deref #(.rawDeref %)
+     })
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))

@@ -219,9 +219,9 @@
     (fn render[frame-ms]
       (reset! frame-time frame-ms)
       (when enable-fps-instrumentation
-        (if (identical? instrumentation-i 4)
+        (if (identical? instrumentation-i 14)
           (do
-            (reset! fps (* 1000 (/ 5 (- frame-ms last-instrumentation-time))))
+            (reset! fps (* 1000 (/ 15 (- frame-ms last-instrumentation-time))))
             (set! instrumentation-i 0))
           (set! instrumentation-i (inc instrumentation-i)))
         (when (identical? 0 instrumentation-i)
@@ -266,6 +266,7 @@
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
         clean (or (.-clean binding-fns) remove-watch*)
+        raw-deref* (.-raw-deref binding-fns)
         ref-meta (meta ref)]
     (when (and add-watch* remove-watch*)
       (let [key (r/new-reactive-id)
@@ -287,7 +288,8 @@
                 (fn [_]
                   (when-not (.-disposed attr-state)
                     (add-watch* ref key on-value-ref-invalidated)
-                    (set-fn (non-reactively (deref* ref))))))))]
+                    ;; (set-fn (non-reactively (deref* ref)))
+                    (set-fn (raw-deref* ref)))))))]
         (register-with-parent-state node-state (str "-" state-prefix "." attr-name) attr-state)
         (add-watch* ref key invalidate)))
     (set-fn (deref* ref))))
