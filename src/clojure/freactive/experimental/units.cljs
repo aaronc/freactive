@@ -1,4 +1,4 @@
-(ns freactive.units)
+(ns freactive.experimental.units)
 
 (defprotocol IUnit
   (-read-value [this cur-value-str])

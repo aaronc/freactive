@@ -19,16 +19,8 @@
     (set! auto-reactive-id (inc auto-reactive-id))
     (str "-r." id)))
 
-;(defn register-dep [ref]
-;  (when *register-dep* (*register-dep* ref)))
-
 (defprotocol IReactive
   (-get-binding-fns [this]))
-
-;; (defprotocol IInvalidates
-;;   (-notify-invalidation-watches [this])
-;;   (-add-invalidation-watch [this key f])
-;;   (-remove-invalidation-watch [this key]))
 
 (defn apply-js-mixin [the-type mixin]
   (let [ptype (.-prototype the-type)]
@@ -177,7 +169,7 @@
           ([]
            (when-not (.-dirty reactive)
              (set! (.-dirty reactive) true)
-             (if (> (.-watchers reactive))
+             (if (> (.-watchers reactive) 0)
                ;; updates state and notifies watches
                (when (.compute reactive)
                  (.notifyInvalidationWatches reactive))
