@@ -331,22 +331,15 @@
   (doseq [[p v] styles]
     (bind-style-prop! element p v node-state)))
 
+(def ^:private attr-setters
+  #js
+  {:data-state (fn [element state] (set-data-state! element state))
+   :class (fn [element cls] (set! (.-className element) cls))
+   :id (fn [element id] (set! (.-id element) id))})
+
 (defn- get-attr-setter [element attr-name]
-  (cond
-    (identical? "data-state" attr-name)
-    (fn [state] (set-data-state! element state))
-
-    (and (identical? (. element -type) "checkbox") (identical? attr-name "checked"))
-    (fn [attr-value]
-      (set! (. element -checked) (true? attr-value)))
-
-    (identical? "id" attr-name)
-    (fn [id] (set! (.-id element) id))
-
-    (identical? "class" attr-name)
-    (fn [cls] (set! (.-className element) cls))
-
-    :default
+  (if-let [setter (aget attr-setters attr-name)]
+    (fn [attr-value] (setter element attr-value))
     (fn [attr-value]
       ;(println "setting attr" element attr-name attr-value)
       (if attr-value
