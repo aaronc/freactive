@@ -534,3 +534,4 @@
 (defn lazy-cursor
   ([ref korks-or-getter] (cursor* ref korks-or-getter nil true ))
   ([ref getter setter] (cursor* ref getter setter true)))
+

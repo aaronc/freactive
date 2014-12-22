@@ -686,9 +686,8 @@
       (if enable-diffing
         (if top-level
           (do
-            (println "starting diff replace")
-            (time
-              (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level)))
+            ;; (println "starting diff replace")
+            (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
           (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
 
         (replace-node-completely
