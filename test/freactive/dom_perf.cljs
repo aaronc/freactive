@@ -95,8 +95,8 @@
        ", mouse at "
        (rx (str @mouse-x ", " @mouse-y))
       ". "]])]
-   (let [ease-x (animation/easer 1.0)
-         ease-y (animation/easer 1.0)
+   (let [ease-x (animation/easer 0.0)
+         ease-y (animation/easer 0.0)
          graph-state (atom nil)
          action-ch (chan)]
      (go-loop []
@@ -122,7 +122,6 @@
                  rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @ease-x))))))
                  tops (vec (for [y offsets] (rx (* y @mouse-y @ease-y))))
                  bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @ease-y))))))]
-             @dom/frame-time
              (dom/with-transitions
                [:svg/g {:data-state graph-state}
                 (for [i (range n*)] (circle (nth lefts i) mouse-y))
@@ -134,21 +133,19 @@
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
                 (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
                {:node-attached (fn [x cb]
-                           ;; (animation/start-easing! ease-x 0.0 1.0 1000
-                           ;;                          animation/quad-in nil)
-                           ;; (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out
-                           ;;                          (fn [] (put! action-ch :ready)))
-                           )
+                                 (animation/start-easing! ease-x 0.0 1.0 1000
+                                                          animation/quad-in nil)
+                                 (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out
+                                                          (fn [] (put! action-ch :ready))))
                 :on-jitter (fn [x cb]
                              (jitter ease-x nil)
                              (jitter ease-y (fn []
                                               (put! action-ch :ready))))
-                :node-detaching (fn [x cb] (put! action-ch :updating)
-                           ;; (animation/start-easing! ease-x 1.0 0.0 1000
-                           ;;                          animation/quad-out nil)
-                           ;; (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb)
-                                  (cb)
-                           )})))]])])
+                :node-detaching (fn [x cb]
+                                  (put! action-ch :updating)
+                                  (animation/start-easing! ease-x 1.0 0.0 1000
+                                                           animation/quad-out nil)
+                                  (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))})))]])])
 
 (dom/mount! (.getElementById js/document "root") (view))
 

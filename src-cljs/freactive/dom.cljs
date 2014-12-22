@@ -341,9 +341,10 @@
 
 (defn- bind-event-listener! [element event-name handler node-state]
   (let [attr-state #js {:disposed false :handler handler
-                        :disposed-callback
+                        :disposed_callback
                         (let [unlisten!* unlisten!]
-                          (fn [] (unlisten!* element event-name handler)))}]
+                          (fn []
+                            (unlisten!* element event-name handler)))}]
       (register-with-parent-state node-state (str "-" "event" "." event-name) attr-state)
       (listen! element event-name handler)))
 
@@ -845,7 +846,6 @@
         (set! (.-invalidate state) invalidate)
         (set! (.-disposed-callback state)
               (fn []
-                (println "disposing child" id)
                 (clean child-ref id)
                 (when-let [binding-disposed (get ref-meta :binding-disposed)]
                   (binding-disposed))))
