@@ -89,7 +89,7 @@
          (rx (let [n* @n n* (+ 1 (* 2 n*))] (* n* n*)))]
      [:span
       [:strong [:em [:a {:href "https://github.com/aaronc/freactive"} "freactive"]
-                " pure diffing performance test. "]
+                " pure diffing performance test."]
        "N = " (str @n) " "
        [:button {:on-click (fn [_] (swap! n dec))} "-"]
        [:button {:on-click (fn [_] (swap! n inc))} "+"]
