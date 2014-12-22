@@ -158,27 +158,6 @@
   (if-let [transition (get-transition node transition-name)]
     (transition node callback)
     (when callback (callback))))
-;
-;(defn- chain-transition [elem-spec transition-name transition-fn chain-fn]
-;  (if (satisfies? IDeref elem-spec)
-;    (rx (chain-transition @elem-spec transition-name transition-fn chain-fn))
-;    (let [cur-transition-fn (get-transition elem-spec transition-name)
-;          transition-fn (if cur-transition-fn
-;                          (chain-fn cur-transition-fn transition-fn)
-;                          transition-fn)]
-;      (with-transitions elem-spec {transition-name transition-fn}))))
-;
-;(defn prepend-transition [elem-spec transition-name transition-fn]
-;  (chain-transition elem-spec transition-name transition-fn
-;                    (fn [cur-tx new-tx]
-;                      (fn [elem on-complete]
-;                        (new-tx elem (fn [elem _] (cur-tx elem on-complete)))))) )
-;
-;(defn append-transition [elem-spec transition-name transition-fn]
-;  (chain-transition elem-spec transition-name transition-fn
-;                    (fn [cur-tx new-tx]
-;                      (fn [elem on-complete]
-;                        (cur-tx elem (fn [elem _] (new-tx elem on-complete)))))) )
 
 ;; ## Polyfills
 
@@ -648,7 +627,7 @@
       cur-dom-node
       (if (keyword-identical? new-tag cur-tag)
         (do
-          ;(println "diff hit" (first vdom) (.-id cur-state))
+          ;; (println "diff hit" (first vdom) (.-id cur-state))
           (let [                                            ;;old-attrs (.-attrs cur-state)
                 new-attrs? (second vdom)
                 new-attrs (when (map? new-attrs?) new-attrs?)]
@@ -666,7 +645,7 @@
             (on-attached cur-state cur-dom-node)
             cur-dom-node))
         (do
-          ;(println "build hit" (first vdom) (first cur-vdom))
+          ;; (println "build hit" (first vdom) (first cur-vdom))
           (replace-node-completely parent vdom cur-dom-node top-level))))))
 
 (declare bind-child)
@@ -681,7 +660,8 @@
         cur-dom-node)
 
       (satisfies? IDeref new-virtual-dom)
-      (bind-child parent new-virtual-dom nil cur-dom-node)
+      (do
+        (bind-child parent new-virtual-dom nil cur-dom-node))
 
       :default
       (if enable-diffing
@@ -723,15 +703,15 @@
        new-elem)
      new-elem)))
 
-(defn- clear-children! [parent]
-  (let [dom-node parent
-  ;(get-dom-node parent)
-        ]
-    (loop []
-      (let [last-child (.-lastChild dom-node)]
-        (when last-child
-          (.removeChild dom-node last-child)
-          (recur))))))
+;; (defn- clear-children! [parent]
+;;   (let [dom-node parent
+;;   ;(get-dom-node parent)
+;;         ]
+;;     (loop []
+;;       (let [last-child (.-lastChild dom-node)]
+;;         (when last-child
+;;           (.removeChild dom-node last-child)
+;;           (recur))))))
 
 (defn- hide-node [node callback]
   (exec-transition node :node-detaching callback))
@@ -765,6 +745,7 @@
         deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
+        raw-deref* (.-raw-deref binding-fns)
         clean (or (.-clean binding-fns) remove-watch*)]
     (if (and add-watch* remove-watch*)
       (let [id (r/new-reactive-id)
@@ -776,17 +757,18 @@
             get-new-elem (fn get-new-elem-fn []
                            (set! (.-dirty state) false)
                            (add-watch* child-ref id (.-invalidate state))
-                           (or (non-reactively (deref* child-ref)) ""))
+                           (or (raw-deref* child-ref) ""))
 
             show-new-elem (fn show-new-elem-fn [new-elem cur]
                             (let [cur
-                                  (if (instance? ReactiveElement cur)
-                                    (let [cur-elem (.-cur-element cur)]
-                                      (set! (.-disposed cur) true)
-                                      (set! (.-cur-element cur) nil)
-                                      cur-elem)
-                                    cur)]
-                              (if-let [parent (or (when-not cur parent) (.-parentNode cur))]
+                                  (loop [cur cur]
+                                    (if (instance? ReactiveElement cur)
+                                      (let [cur-elem (.-cur-element cur)]
+                                        (set! (.-disposed cur) true)
+                                        (set! (.-cur-element cur) nil)
+                                        (recur cur-elem))
+                                      cur))]
+                              (if-let [parent (if cur (.-parentNode cur) parent)]
                                 (let [new-node (if cur
                                                  (replace-child* parent new-elem cur true)
                                                  (insert-child* parent new-elem before))]
@@ -795,31 +777,29 @@
                                   (when (.-dirty state)
                                     (queue-animation (.-animate state)))
                                   (show-node new-node))
-                                (set! (.-disposed state) true))))
+                                (do
+                                  (set! (.-disposed state) true)))))
 
             animate
             (fn animate [x]
-              (if (.-disposed state)
-                (when-let [cur (.-cur-element state)]
-                  (remove! cur))
-                (do
-                  (let [new-elem (get-new-elem)
-                        cur (.-cur-element state)]
-                    (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
-                      (let [hide (get-transition cur :node-detaching)]
-                        (if hide
-                          (do
-                            (hide cur
-                                  (fn []
-                                    (if (.-disposed state)
-                                      (do
-                                        (remove* cur)
-                                        (set! (.-updating cur) false))
-                                      (let [new-elem (if (.-dirty state)
-                                                       (get-new-elem)
-                                                       new-elem)]
-                                        (show-new-elem new-elem cur))))))
-                          (show-new-elem new-elem cur))))))))
+              (when-not (.-disposed state)
+                (let [new-elem (get-new-elem)
+                      cur (.-cur-element state)]
+                  (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
+                    (let [hide (get-transition cur :node-detaching)]
+                      (if hide
+                        (do
+                          (hide cur
+                                (fn []
+                                  (if (.-disposed state)
+                                    (do
+                                      (remove* cur)
+                                      (set! (.-updating cur) false))
+                                    (let [new-elem (if (.-dirty state)
+                                                     (get-new-elem)
+                                                     new-elem)]
+                                      (show-new-elem new-elem cur))))))
+                        (show-new-elem new-elem cur)))))))
 
             invalidate
             (fn on-child-ref-invalidated

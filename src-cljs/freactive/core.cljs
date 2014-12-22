@@ -412,9 +412,9 @@
           old-value (.-state cursor)]
       (when-not (identical? old-value new-value)
         (set! (.-state cursor) new-value)
-        (when-not (empty? (.-watches cursor))
+        (when (> watchers 0)
           (.notifyFWatches cursor old-value new-value))
-        (when-not (empty? (.-invalidation-watches cursor))
+        (when-not (> iwatchers 0)
           (.notifyInvalidationWatches cursor))
         new-value)))
   (fastDeref [this]
