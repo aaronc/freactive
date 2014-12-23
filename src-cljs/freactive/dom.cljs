@@ -292,17 +292,18 @@
 (defn get-data-state [element]
   (.getAttribute element "data-state"))
 
-(defn- enter-data-state! [element state old-state]
-  (when-let [enter-transition (get-transition element (keyword (str "on-" state)))]
-    (enter-transition element old-state)))
+(defn- enter-data-state! [element node-state state old-state]
+  )
 
 (defn set-data-state!
   ([element state]
     (let [cur-state (get-data-state element)
+          node-state (get-element-state element)
           state (when state (name state))]
       (when-not (identical? cur-state state)
         (do-set-data-state! element state)
-        (enter-data-state! element state cur-state)))))
+        (when-let [enter-transition (get-state-attr node-state (str "state/on-" state))]
+          (enter-transition element old-state state))))))
 
 (defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
@@ -343,13 +344,16 @@
         (.removeAttribute element attr-name)))))
 
 (defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
-  (if (identical? cb-name "disposed")
+  (when (identical? cb-name "disposed")
     (set! (.-disposed-callback node-state) cb-value)
-    (aset node-state (str "node-" cb-name) cb-value)))
+    ;; other callbacks automatically included in attr map
+    ))
 
 (def ^:private attr-ns-lookup
   #js
-  {:node bind-lifecycle-callback!})
+  {:node bind-lifecycle-callback!
+   :state (fn []) ;; automatically handled in attr map
+   })
 
 (defn register-attr-prefix! [prefix xml-ns-or-handler]
   (aset attr-ns-lookup prefix xml-ns-or-handler))
@@ -594,10 +598,13 @@
                                     (get-node-id new-elem) state)
         state))))
 
+(defn- get-state-attr [state attr-str]
+  (when-let [attrs (when state (.-attrs state))]
+    (aget attrs attr-str)))
+
 (defn- on-attached [state node]
-  (when state
-    (when-let [node-attached (aget state "node-on-attached")]
-      (node-attached node))))
+  (when-let [node-attached (get-state-attr state "node/on-attached")]
+    (node-attached node)))
 
 (defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
   (let [new-elem
@@ -789,10 +796,9 @@
               (when-not (.-disposed state)
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)
-                      cur-state (get-element-state cur)]
+                      node-state (get-element-state cur)]
                   (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
-                    (if-let [hide (when cur-state
-                                    (aget cur-state "node-on-detaching"))]
+                    (if-let [hide (get-state-attr node-state "node/on-detaching")]
                       (hide cur
                             (fn []
                               (if (.-disposed state)
