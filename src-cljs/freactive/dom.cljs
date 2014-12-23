@@ -63,18 +63,18 @@
     ;; nil values treated as empty "placeholder" text nodes
     ""))
 
-(deftype ElementState [id disposed element-spec child-states])
+;; (deftype ElementState [id disposed element-spec child-states])
 
 (declare set-attr!)
 
 (declare get-transition)
 
-(defn- init-element-meta! [state element-spec tag ]
-  (let [m (meta element-spec)]
-    (set! (.-meta state) m)
-    (when-let [on-disposed (get m :node-disposed)]
-      (set! (.-disposed-callback state) on-disposed)))
-  (set! (.-tag state) tag))
+;; (defn- init-element-meta! [state element-spec tag ]
+;;   (let [m (meta element-spec)]
+;;     (set! (.-meta state) m)
+;;     (when-let [on-disposed (get m :node-disposed)]
+;;       (set! (.-disposed-callback state) on-disposed)))
+;;   (set! (.-tag state) tag))
 
 (defn- reset-element-spec! [state spec tag]
   (when-let [on-disposed (.-disposed-callback state)]
@@ -84,10 +84,13 @@
 
 (defn- init-element-state! [dom-node element-spec tag]
   (let [node-id (str auto-node-id)
-        state (ElementState. node-id false element-spec nil)]
+        state ;;(ElementState. node-id false element-spec nil)
+        #js
+        {:id node-id :disposed false :tag tag
+         :element_spec element-spec}]
     (set! auto-node-id (inc auto-node-id))
     ;; (set-attr! dom-node "data-freactive-id" node-id)
-    (init-element-meta! state element-spec tag)
+    ;; (init-element-meta! state element-spec tag)
     ;; (aset element-state-lookup node-id state)
     (set! (.-freactive-state dom-node) state)
     state))
@@ -265,7 +268,7 @@
         (add-watch* ref key invalidate)))
     (set-fn (raw-deref* ref))))
 
-(defn- bind-style-prop! [element attr-name attr-value node-state]
+(defn- bind-style-prop! [element attr-ns attr-name attr-value node-state]
   (let [attr-name (name attr-name)
         setter (fn [v]
                  (set-style-prop! element attr-name v))]
@@ -321,7 +324,7 @@
 
 (defn- bind-style! [element styles node-state]
   (doseq [[p v] styles]
-    (bind-style-prop! element p v node-state)))
+    (bind-style-prop! element nil p v node-state)))
 
 (def ^:private attr-setters
   #js
@@ -364,38 +367,38 @@
             (.toString attr-value)))
         (.removeAttributeNS element attr-ns attr-name))))
 
-(defn- bind-attr! [element attr-name attr-value node-state]
-  (let [attr-ns (namespace attr-name)
-        attr-name (name attr-name)]
-    (if attr-ns
-      (if-let [attr-handler (aget attr-ns-lookup attr-ns)]
-        (cond
-         (string? attr-handler)
-         (bind-prop-attr! (ns-attr-setter element attr-ns attr-name)
-                          element attr-name attr-value node-state)
-
-         (fn? attr-handler)
-         (attr-handler element node-state attr-name attr-value)
-
-         :default
-         (throw (js/Error. (str "Invalid ns attr handler " attr-handler))))
-        (throw (js/Error. (str "Undefined ns attr prefix " attr-ns))))
+(defn- bind-attr! [element attr-ns attr-name attr-value node-state]
+  (if attr-ns
+    (if-let [attr-handler (aget attr-ns-lookup attr-ns)]
       (cond
-       (identical? "style" attr-name)
-       (bind-style! element attr-value node-state)
+       (string? attr-handler)
+       (bind-prop-attr! (ns-attr-setter element attr-ns attr-name)
+                        element attr-name attr-value node-state)
 
-       (identical? 0 (.indexOf attr-name "on-"))
-       (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+       (fn? attr-handler)
+       (attr-handler element node-state attr-name attr-value)
 
        :default
-       (bind-prop-attr! (get-attr-setter element attr-name)
-                        element attr-name attr-value node-state)))))
+       (throw (js/Error. (str "Invalid ns attr handler " attr-handler))))
+      (throw (js/Error. (str "Undefined ns attr prefix " attr-ns))))
+    (cond
+     (identical? "style" attr-name)
+     (bind-style! element attr-value node-state)
+
+     (identical? 0 (.indexOf attr-name "on-"))
+     (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+
+     :default
+     (bind-prop-attr! (get-attr-setter element attr-name)
+                      element attr-name attr-value node-state))))
 
 (defn- bind-attrs!* [node attrs node-state binder]
   (let [js-attrs #js {}]
     (doseq [[k v] attrs]
-      (binder node k v node-state)
-      (aset js-attrs (str k) v))
+      (let [attr-ns (namespace k)
+            attr-name (name k)]
+        (binder node attr-ns attr-name v node-state)
+        (aset js-attrs (if attr-ns (str attr-ns "/" attr-name) attr-name) v)))
     js-attrs))
 
 (defn- bind-attrs! [node attrs node-state]
@@ -420,7 +423,7 @@
 (defn- rebind-style-prop! [element style-name style-value node-state]
   (unbind-attr!* node-state "style" style-name)
   (if style-value
-    (bind-style-prop! element style-name style-value node-state)
+    (bind-style-prop! element nil style-name style-value node-state)
     (remove-style-prop! element style-name)))
 
 (defn- rebind-style! [element styles node-state]
@@ -455,31 +458,35 @@
       (let [k (name k)]
         (rebind-attr! node k v node-state)))))
 
-;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
-;  (let [hit #js {}]
-;    (doseq [[attr-name new-val] new-attrs]
-;      ;(println "rebinding" attr-name new-val)
-;      (rebinder node attr-name new-val node-state)
-;      (when (get old-attrs attr-name)
-;          (aset hit (str attr-name) true)))
-;    (doseq [[attr-name _] old-attrs]
-;      (let [attr-str (str attr-name)]
-;        (when-not (aget hit attr-str)
-;          ;(println "unbinding" attr-name)
-;          (rebinder node attr-name nil node-state))))))
+;; (defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
+;;  (let [hit #js {}]
+;;    (doseq [[attr-name new-val] new-attrs]
+;;      ;(println "rebinding" attr-name new-val)
+;;      (rebinder node attr-name new-val node-state)
+;;      (when (get old-attrs attr-name)
+;;          (aset hit (str attr-name) true)))
+;;    (doseq [[attr-name _] old-attrs]
+;;      (let [attr-str (str attr-name)]
+;;        (when-not (aget hit attr-str)
+;;          ;(println "unbinding" attr-name)
+;;          (rebinder node attr-name nil node-state))))))
 
 (defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
   (let [new-attrs-js #js {}]
-    (doseq [[attr-name new-val] new-attrs]
-      (let [attr-str (if-let [attr-ns (namespace attr-name)]
-                       (str attr-ns "/" (name attr-name))
-                       (name attr-name))]
-        (rebinder node attr-name new-val node-state)
+    (doseq [[k new-val] new-attrs]
+      (let [attr-ns (namespace k)
+            attr-name (name k)
+            attr-str (if attr-ns (str attr-ns "/" attr-name) attr-name)]
+        (rebinder node attr-ns attr-name new-val node-state)
         (js-delete old-attrs attr-str)
         (aset new-attrs-js attr-str new-val)))
     (goog.object/forEach old-attrs
       (fn [_ attr-str _]
-        (rebinder node (keyword attr-str) nil node-state)))
+        (let [parts (.split attr-str "/")
+              attr-ns (when (identical? (.-length parts) 2)
+                        (aget parts 0))
+              attr-name (if attr-ns (aget parts 1) attr-str)]
+          (rebinder node attr-ns attr-name nil node-state))))
     new-attrs-js))
 
 ;(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
@@ -592,7 +599,7 @@
 
 (defn- on-attached [state node]
   (when state
-    (when-let [node-attached (.-node-attached state)]
+    (when-let [node-attached (aget state "node-attached")]
       (node-attached node))))
 
 (defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
@@ -725,13 +732,6 @@
 (defn- hide-node [node callback]
   (exec-transition node :node-detaching callback))
 
-(defn- show-node [new-elem]
-  (let [show (get-transition new-elem :node-attached) ]
-      (when show
-        (show new-elem)
-        new-elem)
-      new-elem))
-
 ;; Reactive Element Handling
 
 (defprotocol INodeContainer
@@ -783,8 +783,7 @@
                                   (set! (.-cur-element state) new-node)
                                   (set! (.-updating state) false)
                                   (when (.-dirty state)
-                                    (queue-animation (.-animate state)))
-                                  (show-node new-node))
+                                    (queue-animation (.-animate state))))
                                 (do
                                   (set! (.-disposed state) true)))))
 
@@ -792,22 +791,22 @@
             (fn animate [x]
               (when-not (.-disposed state)
                 (let [new-elem (get-new-elem)
-                      cur (.-cur-element state)]
+                      cur (.-cur-element state)
+                      cur-state (get-element-state cur)]
                   (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
-                    (let [hide (get-transition cur :node-detaching)]
-                      (if hide
-                        (do
-                          (hide cur
-                                (fn []
-                                  (if (.-disposed state)
-                                    (do
-                                      (remove* cur)
-                                      (set! (.-updating cur) false))
-                                    (let [new-elem (if (.-dirty state)
-                                                     (get-new-elem)
-                                                     new-elem)]
-                                      (show-new-elem new-elem cur))))))
-                        (show-new-elem new-elem cur)))))))
+                    (if-let [hide (when cur-state
+                                    (aget cur-state "node-detaching"))]
+                      (hide cur
+                            (fn []
+                              (if (.-disposed state)
+                                (do
+                                  ;;(remove* cur)
+                                  (set! (.-updating cur) false))
+                                (let [new-elem (if (.-dirty state)
+                                                 (get-new-elem)
+                                                 new-elem)]
+                                  (show-new-elem new-elem cur)))))
+                      (show-new-elem new-elem cur))))))
 
             invalidate
             (fn on-child-ref-invalidated []
@@ -821,11 +820,9 @@
             binding-invalidated (:binding-invalidated ref-meta)
 
             invalidate (if binding-invalidated
-                         (fn binding-invalidated-wrapper
-                           ([key child-ref _ _] (binding-invalidated-wrapper key child-ref))
-                           ([key child-ref]
-                            (when (binding-invalidated (.-cur-element state) child-ref)
-                              (invalidate key child-ref))))
+                         (fn []
+                           (when-not (keyword-identical? :cancel (binding-invalidated (.-cur-element state) child-ref))
+                             (invalidate)))
                          invalidate)]
         (set! (.-animate state) animate)
         (set! (.-invalidate state) invalidate)
