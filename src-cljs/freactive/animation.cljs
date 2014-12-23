@@ -7,17 +7,6 @@
 (deftype AnimationEaser [id state easing-fn animating on-complete
                          watches fwatches]
   Object
-  ;; (addSwatch [this key f]
-  ;;   (aset (.-fwatches this) key f))
-  ;; (removeSwatch [this key]
-  ;;   (js-delete (.-fwatches this) key))
-  ;; (notifyFwatches [this oldVal newVal]
-  ;;   (goog.object/forEach
-  ;;     (.-fwatches this)
-  ;;     (fn [f key _]
-  ;;       (f key this oldVal newVal)))
-  ;;   (doseq [[key f] watches]
-  ;;     (f key this oldVal newVal)))
   (fastDeref [this]
     (when-let [invalidate r/*invalidate-rx*]
       (.addFWatch this (.-id invalidate)
@@ -29,7 +18,7 @@
   r/IReactive
   (-get-binding-fns [this]
     #js
-    {:deref #(.fastDeref %)
+    {:raw-deref #(.fastDeref %)
      :add-watch #(.addFWatch % %2 %3)
      :remove-watch #(.removeFWatch % %2)})
 

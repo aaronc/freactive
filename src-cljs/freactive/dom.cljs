@@ -7,7 +7,7 @@
 
 (defonce ^:private auto-node-id 0)
 
-(defonce ^:private element-state-lookup #js {})
+;; (defonce ^:private element-state-lookup #js {})
 
 (defprotocol IElementSpec
   (-get-virtual-dom [x]))
@@ -28,13 +28,15 @@
 
 (defn- get-element-state [x]
   ;;(get element-state-lookup x)
-  (when-let [node-id (get-node-id x)]
-    (aget element-state-lookup node-id))
-  ;(.-freactive-state x)
-  )
+  ;; (when-let [node-id (get-node-id x)]
+  ;;   (aget element-state-lookup node-id))
+  (.-freactive-state x))
 
 (extend-protocol IElementSpec
   boolean
+  (-get-virtual-dom [x] (str x))
+
+  number
   (-get-virtual-dom [x] (str x)))
 
 (defn- get-element-spec [x]
@@ -53,8 +55,6 @@
       (string? x) x
 
       (vector? x) x
-
-      (number? x) (str x)
 
       (satisfies? IDeref x) x
 
@@ -86,9 +86,9 @@
   (let [node-id (str auto-node-id)
         state (ElementState. node-id false element-spec nil)]
     (set! auto-node-id (inc auto-node-id))
-    (set-attr! dom-node "data-freactive-id" node-id)
+    ;; (set-attr! dom-node "data-freactive-id" node-id)
     (init-element-meta! state element-spec tag)
-    (aset element-state-lookup node-id state)
+    ;; (aset element-state-lookup node-id state)
     (set! (.-freactive-state dom-node) state)
     state))
 
@@ -114,8 +114,7 @@
    ;(println "disposing" dom-node)
    (when-let [node-id (get-node-id dom-node)]
      (when-let [state                                       ;;(aget element-state-lookup node-id)
-                (.-freactive-state dom-node)
-                ]
+                (get-element-state dom-node)]
        (dispose-node node-id state)
        (when-let [parent-state (.-parent-state state)]
          (when-let [child-states (.-child-states parent-state)]
@@ -126,7 +125,7 @@
      (when-let [disposed-callback (.-disposed-callback state)]
        (disposed-callback))
      (when-not (identical? (aget child-key 0) "-")
-       (js-delete element-state-lookup child-key)
+       ;; (js-delete element-state-lookup child-key)
        (goog.object/forEach (.-child-states state)
                             (fn [state child-key _]
                               (dispose-node child-key state)))))))
@@ -344,23 +343,44 @@
             (.toString attr-value)))
         (.removeAttribute element attr-name)))))
 
-(defn- bind-lifecycle-callback! [element cb-name cb-value node-state]
-  (case cb-name
-    "attached"
-    (set! (.-node-attached node-state) cb-value)
-
-    "disposed"
+(defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
+  (if (identical? cb-name "disposed")
     (set! (.-disposed-callback node-state) cb-value)
-    nil))
+    (aset node-state (str "node-" cb-name) cb-value)))
+
+(def ^:private attr-ns-lookup
+  #js
+  {:node bind-lifecycle-callback!})
+
+(defn register-attr-prefix! [prefix xml-ns-or-handler]
+  (aset attr-ns-lookup prefix xml-ns-or-handler))
+
+(defn- ns-attr-setter [element attr-ns attr-name]
+  (fn [attr-value]
+      ;(println "setting attr" element attr-name attr-value)
+      (if attr-value
+        (.setAttributeNS element attr-ns attr-name
+          (if (.-substring attr-value)
+            attr-value
+            (.toString attr-value)))
+        (.removeAttributeNS element attr-ns attr-name))))
 
 (defn- bind-attr! [element attr-name attr-value node-state]
   (let [attr-ns (namespace attr-name)
         attr-name (name attr-name)]
     (if attr-ns
-      (case attr-ns
-        "node"
-        (bind-lifecycle-callback! element attr-name attr-value node-state)
-        nil)
+      (if-let [attr-handler (aget attr-ns-lookup attr-ns)]
+        (cond
+         (string? attr-handler)
+         (bind-prop-attr! (ns-attr-setter element attr-ns attr-name)
+                          element attr-name attr-value node-state)
+
+         (fn? attr-handler)
+         (attr-handler element node-state attr-name attr-value)
+
+         :default
+         (throw (js/Error. (str "Invalid ns attr handler " attr-handler))))
+        (throw (js/Error. (str "Undefined ns attr prefix " attr-ns)))))
       (cond
         (identical? "style" attr-name)
         (bind-style! element attr-value node-state)
@@ -370,7 +390,7 @@
 
         :default
         (bind-prop-attr! (get-attr-setter element attr-name)
-                         element attr-name attr-value node-state)))))
+                         element attr-name attr-value node-state))))
 
 (defn- bind-attrs!* [node attrs node-state binder]
   (let [js-attrs #js {}]
@@ -516,6 +536,13 @@
        :private true}
      re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
 
+(def ^:private node-ns-lookup
+  #js
+  {:svg "http://www.w3.org/2000/svg"})
+
+(defn register-node-prefix! [prefix xml-ns-or-handler]
+  (aset node-ns-lookup prefix xml-ns-or-handler))
+
 (def ^:dynamic *xml-namespaces* nil)
 
 (defn- get-xml-namespace [kw-ns]
@@ -524,15 +551,10 @@
 
 (def ^:private re-dot (js/RegExp. "\\." "g"))
 
-(defn- create-dom-node [kw]
-  (let [tag-ns (namespace kw)
-        [_ tag id class] (re-matches re-tag (name kw))
-        node (if tag-ns
-               (let [resolved-ns
-                     (if (identical? tag-ns "svg")
-                       "http://www.w3.org/2000/svg"
-                       (get-xml-namespace tag-ns))]
-                 (.createElementNS js/document resolved-ns tag))
+(defn- create-dom-node [xmlns tag-name]
+  (let [[_ tag id class] (re-matches re-tag tag-name)
+        node (if xmlns
+               (.createElementNS js/document xmlns tag)
                (.createElement js/document tag))]
     (when id (set! (.-id node) id))
     (when class (set! (.-className node) (.replace class re-dot " ")))
@@ -849,9 +871,19 @@
         (append-children! elem ch))
       (append-child! elem ch))))
 
+(defn- build-dom-element [xmlns tag-name tail]
+  (let [node (create-dom-node xmlns tag-name)
+        attrs? (first tail)
+        attrs (when (map? attrs?) attrs?)
+        state (init-element-state! node elem-spec tag)
+        children (if attrs (rest tail) tail)]
+    (bind-attrs! node attrs state)
+    (when children
+      (append-children! node children))
+    node))
+
 (defn build-element [elem-spec]
   (let [virtual-dom (get-virtual-dom elem-spec)]
-    ;(println virtual-dom)
     (cond
       (string? virtual-dom)
       (.createTextNode js/document virtual-dom)
@@ -861,24 +893,24 @@
 
       :default
       (let [tag (first virtual-dom)
-            node (create-dom-node tag)
-            attrs? (second virtual-dom)
-            attrs (when (map? attrs?) attrs?)
-            state (init-element-state! node elem-spec tag)
-            children (if attrs (nnext virtual-dom) (next virtual-dom))]
-        ;(doseq [[k v] attrs]
-        ;  (bind-attr! node k v state))
-        (bind-attrs! node attrs state)
-        (when children
-          (append-children! node children))
-        ;(when-let [m (.-meta state)]
-        ;  (when-let [node-created (get m :node-created)]
-        ;    (node-created node)))
-        node))))
+            tag-ns (namespace tag)
+            tag-name (name tag)
+            tail (rest virtual-dom)]
+        (if tag-ns
+          (if-let [tag-handler (aget node-ns-lookup tag-ns)]
+            (cond
+             (string? tag-handler)
+             (build-dom-element tag-handler tag-name tail)
+
+             (fn? attr-handler)
+             (tag-handler tag-name tail)
+
+             :default
+             (throw (js/Error. (str "Invalid ns node handler " tag-handler))))
+            (throw (js/Error. (str "Undefined ns node prefix " tag-ns))))
+          (build-dom-element nil tag-name tail))))))
 
 (defn mount! [element child]
-  (when-let [last-child (.-lastChild element
-                        ;; (get-dom-node element)
-                          )]
+  (when-let [last-child (.-lastChild element)]
     (remove! last-child))
   (append-child! element child))

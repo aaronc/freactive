@@ -2,8 +2,6 @@
   (:refer-clojure :exclude [atom])
   (:require [goog.object]))
 
-;;(def ^:dynamic *register-dep* nil)
-
 (def ^:dynamic *invalidate-rx* nil)
 
 (def ^:dynamic *lazy* nil)
@@ -172,34 +170,6 @@
     (set! (.-deps sully-fn) #js {})
     sully-fn))
 
-;; (defn get-add-watch* [ref]
-;;   (cond
-;;     (satisfies? IInvalidates ref)
-;;     add-invalidation-watch
-;;     (satisfies? IWatchable ref)
-;;     add-watch))
-
-;; (defn get-remove-watch* [ref]
-;;   (cond
-;;     (satisfies? IInvalidates ref)
-;;     remove-invalidation-watch
-;;     (satisfies? IWatchable ref)
-;;     remove-watch))
-
-;; (defn get-add-remove-watch* [ref]
-;;   (cond
-;;     (satisfies? IInvalidates ref)
-;;     ;[add-invalidation-watch remove-invalidation-watch]
-;;     [(fn [ref key f] (.addInvalidationWatch ref key f))
-;;     (fn [ref key] (.removeInvalidationWatch ref key))]
-
-;;     (and (.-addFWatch ref) (.-removeFWatch ref))
-;;     [(fn [ref key f] (.addFWatch ref key f))
-;;      (fn [ref key] (.removeFWatch ref key))]
-
-;;     (satisfies? IWatchable ref)
-;;     [add-watch remove-watch]))
-
 (def ^:private iwatchable-binding-fns
   #js {:deref -deref
        :add_watch -add-watch
@@ -364,28 +334,6 @@
      (set! (.-sully reactive) (make-sully-fn reactive id))
      reactive)))
 
-;(declare update-cursor-state)
-
-;(defn- add-cursor-watch [cursor ref]
-;  ((get-add-watch* ref)
-;   ref cursor
-;   (fn sully-cursor
-;     ([]
-;      (set! (.-dirty cursor) true)
-;      (if-not (empty? (.-watches cursor))
-;        (binding [*invalidate* nil]
-;          @cursor
-;          (-notify-invalidation-watches cursor))))
-;     ([_ _]
-;      (remove-invalidation-watch ref cursor)
-;      (sully-cursor))
-;     ([_ _ old-value new-value]
-;      (remove-watch ref cursor)
-;      (sully-cursor)))))
-
-;(defn- update-cursor-state [cursor ref]
-;  )
-
 (defn- cursor-swap! [cursor ref getter setter f]
   (swap! ref (fn [cur] (setter cur (f (getter cur)))))
   (.rawDeref cursor))
@@ -466,24 +414,6 @@
 (apply-js-mixin ReactiveCursor fwatch-mixin)
 (apply-js-mixin ReactiveCursor invalidates-mixin)
 (apply-js-mixin ReactiveExpression rx-mixin)
-
-;; (def ^:private IInvalidates-mixin
-;;   {:-notify-invalidation-watches
-;;    (fn --notify-invalidation-watches [this]
-;;      (goog.object/forEach (.-invalidation-watches this)
-;;        (fn [f key _] (f key this))))
-
-;;    :-add-invalidation-watch
-;;    (fn --add-invalidation-watch
-;;      [this key f]
-;;      (aset (.-invalidation-watches this) key f)
-;;      this)
-
-;;    :-remove-invalidation-watch
-;;    (fn -remove-invalidation-watch
-;;      [this key]
-;;      (js-delete (.-invalidation-watches this) key)
-;;      this)})
 
 (defn cursor* [ref korks-or-getter setter lazy]
   (let [id (new-reactive-id)
