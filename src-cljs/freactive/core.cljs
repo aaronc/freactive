@@ -55,28 +55,17 @@
        :removeFWatch -removeFWatch
        :notifyFWatches -notifyFWatches})
 
-;; (def IWatchable-extension
-;;   {:-notify-watches
-;;    (fn -notify-watches
-;;      [oldval newval]
-;;      (this-as this
-;;               (.notifyFWatches this oldval newval)))
-;;    :-add-watch
-;;    (fn -add-watch
-;;      [key f]
-;;      (this-as this
-;;               (set! (.-watches this) (assoc (.-watches this) key f))))
-;;    :-remove-watch
-;;    (fn -remove-watch
-;;      [key]
-;;      (this-as this
-;;               (set! (.-watches this) (dissoc (.-watches this) key))))})
-
 (let [core-deref cljs.core/deref]
   (set! cljs.core/deref (fn [x]
                           (if (.-fastDeref x)
                             (.fastDeref x)
                             (core-deref x)))))
+
+(def fwatch-binding-info
+  #js {:add_watch #(.addFWatch % %2 %3)
+       :remove_watch #(.removeFWatch % %2)
+       :clean #(.clean % %2)
+       :raw_deref #(.rawDeref %)})
 
 (deftype ReactiveAtom [id state meta validator watches fwatches watchers]
   Object
@@ -94,24 +83,10 @@
     state)
   (clean [this key]
     (.removeFWatch this key))
-  (getBindingFns [this]
-    #js
-    {:deref #(.fastDeref %)
-     :add_watch #(.addFWatch % %2 %3)
-     :remove_watch #(.removeFWatch % %2)
-     :clean #(.clean % %2)})
-
   cljs.core/IAtom
 
   IReactive
-  (-get-binding-fns [this]
-    #js
-    {:deref #(.fastDeref %)
-     :add_watch #(.addFWatch % %2 %3)
-     :remove_watch #(.removeFWatch % %2)
-     :clean #(.clean % %2)
-     :raw_deref #(.rawDeref %)
-     })
+  (-get-binding-fns [this] fwatch-binding-info)
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -184,22 +159,15 @@
 
 (defn- make-sully-fn [reactive id]
   (let [sully-fn
-        (fn sully
-          ([]
-           (when-not (.-dirty reactive)
-             (set! (.-dirty reactive) true)
-             (if (> (.-watchers reactive) 0)
-               ;; updates state and notifies watches
-               (when (.compute reactive)
-                 (.notifyInvalidationWatches reactive))
-               ;; updates only invalidation watches
-               (.notifyInvalidationWatches reactive))))
-          ([key ref]
-           (.removeInvalidationWatch ref key)
-           (sully))
-          ([key ref _ _]
-           (-remove-watch ref key)
-           (sully)))]
+        (fn sully []
+          (when-not (.-dirty reactive)
+            (set! (.-dirty reactive) true)
+            (if (> (.-watchers reactive) 0)
+              ;; updates state and notifies watches
+              (when (.compute reactive)
+                (.notifyInvalidationWatches reactive))
+              ;; updates only invalidation watches
+              (.notifyInvalidationWatches reactive))))]
     (set! (.-id sully-fn) id)
     (set! (.-deps sully-fn) #js {})
     sully-fn))
@@ -249,13 +217,27 @@
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
 
-(defn- register-rx-dep [id rx default-laziness]
+(defn- register-eager-rx-dep
+  [id rx]
   (when-let [invalidate *invalidate-rx*]
     (when *trace-capture* (*trace-capture* rx))
     (aset (.-deps invalidate) id rx)
-    (if (lazy? default-laziness)
-      (.addInvalidationWatch rx (.-id invalidate) invalidate)
-      (.addFWatch rx (.-id invalidate) invalidate))))
+    (.addFWatch
+     rx (.-id invalidate)
+     (fn [_ _ _ _]
+       (.removeFWatch rx id)
+       (invalidate)))))
+
+(defn- register-lazy-rx-dep
+  [id rx]
+  (when-let [invalidate *invalidate-rx*]
+    (when *trace-capture* (*trace-capture* rx))
+    (aset (.-deps invalidate) id rx)
+    (.addInvalidationWatch
+     rx (.-id invalidate)
+     (fn [_ _]
+       (.removeInvalidationWatch rx id)
+       (invalidate)))))
 
 (defn- -notifyInvalidationWatches []
   (this-as this
@@ -281,20 +263,28 @@
 (def invalidates-mixin
   #js {:notifyInvalidationWatches -notifyInvalidationWatches
        :addInvalidationWatch -addInvalidationWatch
-       :removeInvalidationWatch -removeInvalidationWatch
-       :clean
-       (fn -clean [key]
-         (this-as this
-                  (.removeFWatch this key)
-                  (.removeInvalidationWatch this key)
-                  (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
-                        ;; (println "cleaning" (.-id this) key)
-                        (goog.object/forEach (.-deps (.-sully this))
-                                             (fn [val key obj]
-                                               (when (.-clean val)
-                                                 (.clean val (.-id this)))
-                                               (js-delete obj key)))
-                        (set! (.-dirty this) true))))})
+       :removeInvalidationWatch -removeInvalidationWatch})
+
+(def invalidates-binding-info
+  #js
+  {:add_watch #(.addInvalidationWatch % %2 %3)
+   :remove_watch #(.removeInvalidationWatch % %2)
+   :clean #(.clean % %2)
+   :raw_deref #(.rawDeref %)})
+
+(def rx-mixin
+  #js
+  {:fastDeref (fn fastDeref []
+                (this-as this
+                         (if (lazy? (.-lazy this))
+                           (register-lazy-rx-dep (.-id this) this)
+                           (register-eager-rx-dep (.-id this) this))
+                         (when (.-dirty this) (.compute this))
+                         (.-state this)))
+   :rawDeref (fn rawDeref []
+               (this-as this
+                        (when (.-dirty this) (.compute this))
+                        (.-state this)))})
 
 (deftype ReactiveExpression [id ^:mutable state ^:mutable dirty f ^:mutable deps meta
                               ^:mutable watches fwatches watchers ^:mutable invalidation-watches iwatches sully lazy
@@ -313,23 +303,21 @@
         (set! state new-val)
         (.notifyFWatches this old-val new-val)
         new-val)))
-  (rawDeref [this]
-    (when dirty (.compute this))
-    state)
-  (fastDeref [this]
-    (register-rx-dep id this lazy)
-    (when dirty (.compute this))
-    state)
+  (clean [this key]
+    (.removeFWatch this key)
+    (.removeInvalidationWatch this key)
+    (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
+          ;; (println "cleaning" (.-id this) key)
+          (goog.object/forEach (.-deps (.-sully this))
+                               (fn [val key obj]
+                                 (when (.-clean val)
+                                   (.clean val (.-id this)))
+                                 (js-delete obj key)))
+          (set! (.-dirty this) true)))
   
   IReactive
   (-get-binding-fns [this]
-    #js
-    {:deref #(.fastDeref %)
-     :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
-     :remove_watch (if lazy #(.removeInvalidationWatch % %2) #(.removeFWatch % %2))
-     :clean #(.clean % %2)
-     :raw_deref #(.rawDeref %)
-     })
+    (if lazy invalidates-binding-info fwatch-binding-info))
 
   IEquiv
   (-equiv [o other] (identical? o other))
@@ -365,6 +353,7 @@
 
 (apply-js-mixin ReactiveExpression fwatch-mixin)
 (apply-js-mixin ReactiveExpression invalidates-mixin)
+(apply-js-mixin ReactiveExpression rx-mixin)
 
 (defn rx*
   ([f] (rx* f true))
@@ -401,7 +390,7 @@
   (swap! ref (fn [cur] (setter cur (f (getter cur)))))
   (.rawDeref cursor))
 
-(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches iwatchers lazy sully add-watch-fn]
+(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches iwatchers lazy sully add-watch-fn remove-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -417,25 +406,18 @@
         (when-not (> iwatchers 0)
           (.notifyInvalidationWatches cursor))
         new-value)))
-  (fastDeref [this]
-    (register-rx-dep id this lazy)
-    (when dirty (.compute this))
-    state)
-  (rawDeref [this]
-    (when dirty (.compute this))
-    state)
+  (clean [this key]
+    (.removeFWatch this key)
+    (.removeInvalidationWatch this key)
+    (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
+          (remove-watch-fn ref id)
+          (set! (.-dirty this) true)))
 
   cljs.core/IAtom
 
   IReactive
   (-get-binding-fns [this]
-    #js
-    {:deref #(.fastDeref %)
-     :add_watch (if lazy #(.addInvalidationWatch % %2 %3) #(.addFWatch % %2 %3))
-     :remove_watch (if lazy #(.removeInvalidationWatch %2) #(.removeFWatch % %2))
-     :clean #(.clean % %2)
-     :raw_deref #(.rawDeref %)
-     })
+    (if lazy invalidates-binding-info fwatch-binding-info))
 
   cljs.core/IEquiv
   (-equiv [o other] (identical? o other))
@@ -483,6 +465,7 @@
 
 (apply-js-mixin ReactiveCursor fwatch-mixin)
 (apply-js-mixin ReactiveCursor invalidates-mixin)
+(apply-js-mixin ReactiveExpression rx-mixin)
 
 ;; (def ^:private IInvalidates-mixin
 ;;   {:-notify-invalidation-watches
@@ -516,14 +499,20 @@
                 (when ks
                   (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
-        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} 0 lazy nil nil)
+        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} 0 lazy nil nil nil)
         sully  (make-sully-fn cursor id)
+        binding-fns (get-binding-fns ref)
         add-watch-fn
-        (if-let [add-watch* (.-add-watch (get-binding-fns ref))]
+        (if-let [add-watch* (.-add-watch binding-fns)]
           (fn [] (add-watch* ref id sully))
+          (fn []))
+        remove-watch-fn
+        (if-let [remove-watch* (.-remove-watch binding-fns)]
+          (fn [] (remove-watch* ref id))
           (fn []))]
      (set! (.-sully cursor) sully)
      (set! (.-add-watch-fn cursor) add-watch-fn)
+     (set! (.-remove-watch-fn cursor) add-watch-fn)
      (add-watch-fn)
      cursor))
 
@@ -532,6 +521,5 @@
   ([ref getter setter] (cursor* ref getter setter false)))
 
 (defn lazy-cursor
-  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true ))
+  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true))
   ([ref getter setter] (cursor* ref getter setter true)))
-

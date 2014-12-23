@@ -10,18 +10,16 @@
   {:dev
     {:plugins [[com.cemerick/austin "0.1.5"]
                [lein-cljsbuild "1.0.3"] 
-               [lein-figwheel "0.1.5-SNAPSHOT"]]
+               [lein-figwheel "0.2.0-SNAPSHOT"]]
      :dependencies
      [[com.cemerick/clojurescript.test "0.3.1"]
-      [figwheel "0.1.5-SNAPSHOT"]
+      [figwheel "0.2.0-SNAPSHOT"]
       [org.clojure/core.async "0.1.346.0-17112a-alpha"]
       [bardo "0.1.0" :exclusions [org.clojure/clojure]]]
 
-     :resource-paths ["example"]
-     :figwheel {}
      :cljsbuild {:builds
                  [{:id           "example"
-                   :source-paths ["src-cljs" "test"]
+                   :source-paths ["src-cljs" "example"]
                    :compiler     {:output-to     "resources/public/js/compiled/app.js"
                                   :output-dir    "resources/public/js/compiled/out"
                                   :optimizations :none

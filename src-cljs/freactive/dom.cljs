@@ -241,7 +241,6 @@
 
 (defn- bind-attr* [set-fn element state-prefix attr-name ref node-state]
   (let [binding-fns (r/get-binding-fns ref)
-        deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
         clean (or (.-clean binding-fns) remove-watch*)
@@ -256,22 +255,17 @@
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
                                 (binding-disposed)))}
             invalidate
-            (fn on-value-ref-invalidated
-              ([]
-               (on-value-ref-invalidated key ref))
-              ([key ref _ _]
-               (on-value-ref-invalidated key ref))
-              ([key ref]
+            (fn on-value-ref-invalidated []
                (remove-watch* ref key)
                (queue-animation
                 (fn [_]
                   (when-not (.-disposed attr-state)
                     (add-watch* ref key on-value-ref-invalidated)
                     ;; (set-fn (non-reactively (deref* ref)))
-                    (set-fn (raw-deref* ref)))))))]
+                    (set-fn (raw-deref* ref))))))]
         (register-with-parent-state node-state (str "-" state-prefix "." attr-name) attr-state)
         (add-watch* ref key invalidate)))
-    (set-fn (deref* ref))))
+    (set-fn (raw-deref* ref))))
 
 (defn- bind-style-prop! [element attr-name attr-value node-state]
   (let [attr-name (name attr-name)
@@ -335,7 +329,8 @@
   #js
   {:data-state (fn [element state] (set-data-state! element state))
    :class (fn [element cls] (set! (.-className element) cls))
-   :id (fn [element id] (set! (.-id element) id))})
+   ;; :id (fn [element id] (set! (.-id element) id))
+   })
 
 (defn- get-attr-setter [element attr-name]
   (if-let [setter (aget attr-setters attr-name)]
@@ -735,7 +730,6 @@
 
 (defn- bind-child* [parent child-ref before cur insert-child* replace-child* remove*]
   (let [binding-fns (r/get-binding-fns child-ref)
-        deref* (.-deref binding-fns)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
         raw-deref* (.-raw-deref binding-fns)
@@ -795,16 +789,13 @@
                         (show-new-elem new-elem cur)))))))
 
             invalidate
-            (fn on-child-ref-invalidated
-              ([key child-ref _ _]
-               (on-child-ref-invalidated key child-ref))
-              ([key child-ref]
-               (remove-watch* child-ref id)
-               (when-not (.-disposed state)
-                 (set! (.-dirty state) true)
-                 (when-not (.-updating state)
-                   (set! (.-updating state) true)
-                   (queue-animation animate)))))
+            (fn on-child-ref-invalidated []
+              (remove-watch* child-ref id)
+              (when-not (.-disposed state)
+                (set! (.-dirty state) true)
+                (when-not (.-updating state)
+                  (set! (.-updating state) true)
+                  (queue-animation animate))))
 
             binding-invalidated (:binding-invalidated ref-meta)
 
@@ -830,7 +821,7 @@
         (show-new-elem (get-new-elem) cur)
         state)
       (do
-        (mount-element parent (deref* child-ref) before)))))
+        (mount-element parent (raw-deref* child-ref) before)))))
 
 (defn bind-child [parent child before cur]
   (if-let [binder (:binder (meta child))]
