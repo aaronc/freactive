@@ -260,7 +260,6 @@
                 (fn [_]
                   (when-not (.-disposed attr-state)
                     (add-watch* ref key on-value-ref-invalidated)
-                    ;; (set-fn (non-reactively (deref* ref)))
                     (set-fn (raw-deref* ref))))))]
         (register-with-parent-state node-state (str "-" state-prefix "." attr-name) attr-state)
         (add-watch* ref key invalidate)))
@@ -338,7 +337,7 @@
       ;(println "setting attr" element attr-name attr-value)
       (if attr-value
         (.setAttribute element attr-name
-          (if (.-substring attr-value)
+          (if (.-substring attr-value) ;; tests if attr-value is a string
             attr-value
             (.toString attr-value)))
         (.removeAttribute element attr-name)))))
@@ -380,17 +379,17 @@
 
          :default
          (throw (js/Error. (str "Invalid ns attr handler " attr-handler))))
-        (throw (js/Error. (str "Undefined ns attr prefix " attr-ns)))))
+        (throw (js/Error. (str "Undefined ns attr prefix " attr-ns))))
       (cond
-        (identical? "style" attr-name)
-        (bind-style! element attr-value node-state)
+       (identical? "style" attr-name)
+       (bind-style! element attr-value node-state)
 
-        (identical? 0 (.indexOf attr-name "on-"))
-        (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+       (identical? 0 (.indexOf attr-name "on-"))
+       (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
 
-        :default
-        (bind-prop-attr! (get-attr-setter element attr-name)
-                         element attr-name attr-value node-state))))
+       :default
+       (bind-prop-attr! (get-attr-setter element attr-name)
+                        element attr-name attr-value node-state)))))
 
 (defn- bind-attrs!* [node attrs node-state binder]
   (let [js-attrs #js {}]

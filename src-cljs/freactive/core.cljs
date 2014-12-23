@@ -171,12 +171,12 @@
     sully-fn))
 
 (def ^:private iwatchable-binding-fns
-  #js {:deref -deref
+  #js {:raw_deref -deref
        :add_watch -add-watch
        :remove_watch -remove-watch})
 
 (def ^:private deref-only-binding-fns
-  #js {:deref -deref})
+  #js {:raw_deref -deref})
 
 (defn get-binding-fns [iref]
   (cond
