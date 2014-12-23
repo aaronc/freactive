@@ -153,13 +153,13 @@
 ;    (ElementSpec. elem-spec)
 ;    elem-spec))
 
-(defn with-transitions [elem-spec transitions]
-  (vary-meta elem-spec merge transitions))
+;; (defn with-transitions [elem-spec transitions]
+;;   (vary-meta elem-spec merge transitions))
 
-(defn- exec-transition [node transition-name callback]
-  (if-let [transition (get-transition node transition-name)]
-    (transition node callback)
-    (when callback (callback))))
+;; (defn- exec-transition [node transition-name callback]
+;;   (if-let [transition (get-transition node transition-name)]
+;;     (transition node callback)
+;;     (when callback (callback))))
 
 ;; ## Polyfills
 
@@ -302,10 +302,7 @@
           state (when state (name state))]
       (when-not (identical? cur-state state)
         (do-set-data-state! element state)
-        (let [leave-transition (get-transition element (keyword (str "after-" cur-state)))]
-          (if leave-transition
-            (leave-transition element (fn [] (enter-data-state! element state cur-state)) state)
-            (enter-data-state! element state cur-state)))))))
+        (enter-data-state! element state cur-state)))))
 
 (defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
@@ -379,8 +376,8 @@
        (attr-handler element node-state attr-name attr-value)
 
        :default
-       (throw (js/Error. (str "Invalid ns attr handler " attr-handler))))
-      (throw (js/Error. (str "Undefined ns attr prefix " attr-ns))))
+       (.warn js/console "Invalid ns attr handler" attr-handler))
+      (.warn js/console "Undefined ns attr prefix" attr-ns))
     (cond
      (identical? "style" attr-name)
      (bind-style! element attr-value node-state)
@@ -599,7 +596,7 @@
 
 (defn- on-attached [state node]
   (when state
-    (when-let [node-attached (aget state "node-attached")]
+    (when-let [node-attached (aget state "node-on-attached")]
       (node-attached node))))
 
 (defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
@@ -729,13 +726,13 @@
 ;;           (.removeChild dom-node last-child)
 ;;           (recur))))))
 
-(defn- hide-node [node callback]
-  (exec-transition node :node-detaching callback))
+;; (defn- hide-node [node callback]
+;;   (exec-transition node :node-detaching callback))
 
 ;; Reactive Element Handling
 
-(defprotocol INodeContainer
-  (-replace [container new-elem-spec]))
+;; (defprotocol INodeContainer
+;;   (-replace [container new-elem-spec]))
 
 (deftype ReactiveElement [id parent ref cur-element dirty updating disposed
                           animate invalidate]
@@ -795,7 +792,7 @@
                       cur-state (get-element-state cur)]
                   (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
                     (if-let [hide (when cur-state
-                                    (aget cur-state "node-detaching"))]
+                                    (aget cur-state "node-on-detaching"))]
                       (hide cur
                             (fn []
                               (if (.-disposed state)
@@ -898,12 +895,12 @@
              (string? tag-handler)
              (build-dom-element tag elem-spec tag-handler tag-name tail)
 
-             (fn? attr-handler)
+             (fn? tag-handler)
              (tag-handler tag-name tail)
 
              :default
-             (throw (js/Error. (str "Invalid ns node handler " tag-handler))))
-            (throw (js/Error. (str "Undefined ns node prefix " tag-ns))))
+             (.warn js/console "Invalid ns node handler" tag-handler))
+            (.warn js/console "Undefined ns node prefix" tag-ns))
           (build-dom-element tag elem-spec nil tag-name tail))))))
 
 (defn mount! [element child]

@@ -122,33 +122,36 @@
                  rights (vec (for [x (reverse offsets)] (rx (let [w @width] (- w (* x (- w @mouse-x) @ease-x))))))
                  tops (vec (for [y offsets] (rx (* y @mouse-y @ease-y))))
                  bottoms (vec (for [y (reverse offsets)] (rx (let [h @height] (- h (* y (- h @mouse-y) @ease-y))))))]
-             (dom/with-transitions
-               [:svg/g
-                {:data-state graph-state
-                 :node/attached
-                 (fn [x cb]
-                   (animation/start-easing! ease-x 0.0 1.0 1000
-                                            animation/quad-in nil)
-                   (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out
-                                            (fn [] (put! action-ch :ready))))
-                 :node/detaching
-                 (fn [x cb]
-                   (put! action-ch :updating)
-                   (animation/start-easing! ease-x 1.0 0.0 1000
-                                            animation/quad-out nil)
-                   (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))}
-                (for [i (range n*)] (circle (nth lefts i) mouse-y))
-                (for [i (range n*)] (circle (nth rights i) mouse-y))
-                (for [j (range n*)] (circle mouse-x (nth tops j)))
-                (for [j (range n*)] (circle mouse-x (nth bottoms j)))
-                (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
-                (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
-                (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
-                (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]
-               {:on-jitter (fn [x cb]
-                             (jitter ease-x nil)
-                             (jitter ease-y (fn []
-                                              (put! action-ch :ready))))})))]])])
+             [:svg/g
+              {:data-state graph-state
+               :node/on-attached
+               (fn [x]
+                 (animation/start-easing! ease-x 0.0 1.0 1000
+                                          animation/quad-in nil)
+                 (animation/start-easing! ease-y 0.0 1.0 1000 animation/quad-out
+                                          (fn [] (put! action-ch :ready))))
+               :node/on-detaching
+               (fn [x cb]
+                 (put! action-ch :updating)
+                 (animation/start-easing! ease-x 1.0 0.0 1000
+                                          animation/quad-out nil)
+                 (animation/start-easing! ease-y 1.0 0.0 1000 animation/quad-in cb))
+
+               :state/on-jitter
+               (fn [x cb]
+                 (jitter ease-x nil)
+                 (jitter ease-y (fn []
+                                  (put! action-ch :ready))))
+
+               }
+              (for [i (range n*)] (circle (nth lefts i) mouse-y))
+              (for [i (range n*)] (circle (nth rights i) mouse-y))
+              (for [j (range n*)] (circle mouse-x (nth tops j)))
+              (for [j (range n*)] (circle mouse-x (nth bottoms j)))
+              (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth tops j)))
+              (for [i (range n*) j (range n*)] (circle (nth lefts i) (nth bottoms j)))
+              (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
+              (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]))]])])
 
 (dom/mount! (.getElementById js/document "root") (view))
 
