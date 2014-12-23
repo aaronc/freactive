@@ -870,7 +870,7 @@
         (append-children! elem ch))
       (append-child! elem ch))))
 
-(defn- build-dom-element [xmlns tag-name tail]
+(defn- build-dom-element [tag elem-spec xmlns tag-name tail]
   (let [node (create-dom-node xmlns tag-name)
         attrs? (first tail)
         attrs (when (map? attrs?) attrs?)
@@ -899,7 +899,7 @@
           (if-let [tag-handler (aget node-ns-lookup tag-ns)]
             (cond
              (string? tag-handler)
-             (build-dom-element tag-handler tag-name tail)
+             (build-dom-element tag elem-spec tag-handler tag-name tail)
 
              (fn? attr-handler)
              (tag-handler tag-name tail)
@@ -907,7 +907,7 @@
              :default
              (throw (js/Error. (str "Invalid ns node handler " tag-handler))))
             (throw (js/Error. (str "Undefined ns node prefix " tag-ns))))
-          (build-dom-element nil tag-name tail))))))
+          (build-dom-element tag elem-spec nil tag-name tail))))))
 
 (defn mount! [element child]
   (when-let [last-child (.-lastChild element)]
