@@ -543,7 +543,7 @@
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing true)
+(def enable-diffing false)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)

@@ -122,7 +122,7 @@ An easer is designed to be used as a dependency in a reactive computation, like 
           {:font-size (rx (str (* 16 @ease-factor) "px"))}} "Hello World!"]
     {:on-show (fn [node callback]
                 (animation/start-easing! ease-factor 0 1.0 1000
-                                         animation/quad-in-out callback))}))
+                                         (ease :quad-in-out) callback))}))
 ```
 
 By creating an `easing-chain`, we can do some more complex things:
@@ -131,9 +131,9 @@ By creating an `easing-chain`, we can do some more complex things:
 (def ease2 (animation/easer 1.0))
 (def complex-transition
   (animation/easing-chain
-    [[ease1 0.0 1.0 1000 animation/quad-in-out]
-     [ease2 1.0 0.0 500 animation/quad-out]
-     [ease2 0.0 1.0 150 animation/quint-in]]))
+    [[ease1 0.0 1.0 1000 (ease :quad-in-out)]
+     [ease2 1.0 0.0 500 (ease :quad-out)]
+     [ease2 0.0 1.0 150 (ease :quint-in)]]))
 (defn my-view []
   (dom/with-transitions
     [:h1 {:style
@@ -144,7 +144,7 @@ By creating an `easing-chain`, we can do some more complex things:
      (fn [node callback] (complex-transition callback))}))
 ```
 
-**Easing functions:** an easing function, `f`, is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(= (f 1) 1)`. Basically the easing function is supposed to smoothly transition from `0` to `1`. The easer itself takes care of properly scaling the values based on `duration` and `from` and `to` values. A selection of easing functions from Dan Kersten's [ominate](https://github.com/danielytics/ominate) (thank you!) is currently included in this library, but this is subject to change.
+**Easing functions:** an easing function, `f`, is a function that is designed to take an input `t` parameter that ranges from `0.0` to `1.0` that has the property `(= (f 0) 0)` and `(= (f 1) 1)`. Basically the easing function is supposed to smoothly transition from `0` to `1`. The easer itself takes care of properly scaling the values based on `duration` and `from` and `to` values. The easing functions shown above use [bardo](https://github.com/pleasetrythisathome/bardo)'s `ease` function from `bardo.ease`. Any third-party easing library such as bardo can be used for easing functions. (freactive only provides the most basic `quad-in` and `quad-out` easing functions built-in.)
 
 **Optional `from` parameter:** the optional `from` parameter to `start-easing!` has a special behavior - if the current value of the easer is different from `from`, the `duration` of easing will be adjusted (linearly for now) based on the difference bettween `from` and the current value. This is to keep the speed of easing somewhat consistent. If you don't want this behavior and always want the same `duration` regardless of the current value of the easer, don't specify a `from` value.
 
