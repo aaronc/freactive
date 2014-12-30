@@ -12,10 +12,6 @@
 (defprotocol IElementSpec
   (-get-virtual-dom [x]))
 
-;(defrecord ElementSpec [spec]
-;  IElementSpec
-;  (-get-virtual-dom [x] spec))
-
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
 
@@ -68,13 +64,6 @@
 (declare set-attr!)
 
 (declare get-transition)
-
-;; (defn- init-element-meta! [state element-spec tag ]
-;;   (let [m (meta element-spec)]
-;;     (set! (.-meta state) m)
-;;     (when-let [on-disposed (get m :node-disposed)]
-;;       (set! (.-disposed-callback state) on-disposed)))
-;;   (set! (.-tag state) tag))
 
 (defn- reset-element-spec! [state spec tag]
   (when-let [on-disposed (.-disposed-callback state)]
@@ -145,21 +134,6 @@
       (node-detaching x (fn [] (remove-dom-node x)))
       (remove-dom-node x))
     (-remove! x)))
-
-;; ## Defining Transitions
-
-;(defn- wrap-element-spec [elem-spec]
-;  (if (string? elem-spec)
-;    (ElementSpec. elem-spec)
-;    elem-spec))
-
-;; (defn with-transitions [elem-spec transitions]
-;;   (vary-meta elem-spec merge transitions))
-
-;; (defn- exec-transition [node transition-name callback]
-;;   (if-let [transition (get-transition node transition-name)]
-;;     (transition node callback)
-;;     (when callback (callback))))
 
 ;; ## Polyfills
 
@@ -341,7 +315,7 @@
         (.removeAttribute element attr-name)))))
 
 (defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
-  (when (identical? cb-name "disposed")
+  (when (identical? cb-name "on-disposed")
     (set! (.-disposed-callback node-state) cb-value)
     ;; other callbacks automatically included in attr map
     ))
@@ -702,41 +676,7 @@
         (on-attached state new-elem))
       new-elem)))
 
-;(defn- do-show-element [parent new-elem nil]
-;  (when new-elem
-;    (let [show (get-transition new-elem :node-attached)
-;          new-elem (replace-or-append-child parent new-elem cur-elem true)]
-;      (when show
-;        (show new-elem)
-;        new-elem)
-;      new-elem)))
-
-(defn- mount-element
-  ([parent new-elem before]
-   (let [show (get-transition new-elem :node-mounted)
-         new-elem (append-or-insert-child parent new-elem before)]
-     (when show
-       (show new-elem)
-       new-elem)
-     new-elem)))
-
-;; (defn- clear-children! [parent]
-;;   (let [dom-node parent
-;;   ;(get-dom-node parent)
-;;         ]
-;;     (loop []
-;;       (let [last-child (.-lastChild dom-node)]
-;;         (when last-child
-;;           (.removeChild dom-node last-child)
-;;           (recur))))))
-
-;; (defn- hide-node [node callback]
-;;   (exec-transition node :node-detaching callback))
-
 ;; Reactive Element Handling
-
-;; (defprotocol INodeContainer
-;;   (-replace [container new-elem-spec]))
 
 (deftype ReactiveElement [id parent ref cur-element dirty updating disposed
                           animate invalidate]
@@ -839,7 +779,7 @@
         (show-new-elem (get-new-elem) cur)
         state)
       (do
-        (mount-element parent (raw-deref* child-ref) before)))))
+        (insert-child* (raw-deref* child-ref) before)))))
 
 (defn bind-child [parent child before cur]
   (if-let [binder (:binder (meta child))]
@@ -849,15 +789,10 @@
 ;; Building Elements
 
 (defn insert-child! [parent child before]
-  (cond
-    (satisfies? IDeref child)
-    (bind-child parent child before nil)
-
-    :default
-    (mount-element parent child before)))
+  (append-or-insert-child parent child before))
 
 (defn append-child! [parent child]
-  (insert-child! parent child nil))
+  (append-or-insert-child parent child nil))
 
 (defn- append-children! [elem children]
   (doseq [ch children]
