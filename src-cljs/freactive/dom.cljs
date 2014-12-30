@@ -63,8 +63,6 @@
 
 (declare set-attr!)
 
-(declare get-transition)
-
 (defn- reset-element-spec! [state spec tag]
   (when-let [on-disposed (.-disposed-callback state)]
     (on-disposed)
@@ -96,11 +94,6 @@
 (defprotocol IRemove
   (-remove! [x]))
 
-(defn- get-transition [x transition-name]
-  (let [spec (get-element-spec x)]
-    (when-not (string? spec)
-      (get (meta spec) transition-name))))
-
 (defn- dispose-node
   ([dom-node]
    ;(println "disposing" dom-node)
@@ -130,9 +123,7 @@
 
 (defn remove! [x]
   (if (dom-node? x)
-    (if-let [node-detaching (get-transition x :node-detaching)]
-      (node-detaching x (fn [] (remove-dom-node x)))
-      (remove-dom-node x))
+    (remove-dom-node x)
     (-remove! x)))
 
 ;; ## Polyfills
