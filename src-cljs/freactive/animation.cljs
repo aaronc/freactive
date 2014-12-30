@@ -93,12 +93,6 @@
 
 (def linear identity)
 
-(defn quad-in
-  "Modeled after the parabola y = x^2"
-  [p]
-  (* p p))
+(defn quad-in [p] (* p p))
 
-(defn quad-out
-  "Modeled after the parabola y = -x^2 + 2x"
-  [p]
-  (- (* p (- p 2))))
+(defn quad-out [p] (- (* p (- p 2))))

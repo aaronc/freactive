@@ -551,12 +551,12 @@
 
 ;; ## Core DOM Manipulation Methods
 
-(declare build-element)
+(declare build)
 
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing false)
+(def enable-diffing true)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
@@ -582,8 +582,8 @@
         (if top-level
           (do
             ;(println "build")
-            (build-element new-elem-spec))
-          (build-element new-elem-spec))]
+            (build new-elem-spec))
+          (build new-elem-spec))]
     (dispose-node cur-dom-node)
     (let [state (register-element-with-parent parent new-elem)]
       (.replaceChild parent new-elem cur-dom-node)
@@ -668,7 +668,7 @@
 (defn- append-or-insert-child [parent vdom before]
   (if (satisfies? IDeref vdom)
     (bind-child parent vdom before nil)
-    (let [new-elem (build-element vdom)]
+    (let [new-elem (build vdom)]
       (let [state (register-element-with-parent parent new-elem)]
         (if before
           (.insertBefore parent new-elem before)
@@ -781,7 +781,7 @@
       (do
         (insert-child* (raw-deref* child-ref) before)))))
 
-(defn bind-child [parent child before cur]
+(defn- bind-child [parent child before cur]
   (if-let [binder (:binder (meta child))]
     (binder parent child before cur append-or-insert-child replace-child remove-dom-node)
     (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node)))
@@ -813,7 +813,7 @@
       (append-children! node children))
     node))
 
-(defn build-element [elem-spec]
+(defn build [elem-spec]
   (let [virtual-dom (get-virtual-dom elem-spec)]
     (cond
       (string? virtual-dom)
