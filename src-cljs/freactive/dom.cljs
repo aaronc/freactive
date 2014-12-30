@@ -292,9 +292,6 @@
 (defn get-data-state [element]
   (.getAttribute element "data-state"))
 
-(defn- enter-data-state! [element node-state state old-state]
-  )
-
 (defn set-data-state!
   ([element state]
     (let [cur-state (get-data-state element)

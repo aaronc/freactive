@@ -253,7 +253,9 @@
                          (.-state this)))
    :rawDeref (fn rawDeref []
                (this-as this
-                        (when (.-dirty this) (.compute this))
+                        (when (.-dirty this)
+                          (binding [*invalidate-rx* nil]
+                            (.compute this)))
                         (.-state this)))})
 
 (deftype ReactiveExpression [id ^:mutable state ^:mutable dirty f ^:mutable deps meta
