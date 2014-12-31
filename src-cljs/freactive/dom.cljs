@@ -19,8 +19,9 @@
   (when (.-getAttribute dom-node)
     (.getAttribute dom-node attr-name)))
 
-(defn- get-node-id [x]
-  (get-attr x "data-freactive-id"))
+;; (defn- get-node-id [x]
+;;   (get-attr x "data-freactive-id")
+;;   )
 
 (defn- get-element-state [x]
   ;;(get element-state-lookup x)
@@ -96,7 +97,7 @@
 
 (defn- dispose-node
   ([dom-node]
-   ;(println "disposing" dom-node)
+   (println "disposing" dom-node)
    (when-let [state                                       ;;(aget element-state-lookup node-id)
               (get-element-state dom-node)]
      (dispose-node (.-id state) state)
@@ -104,7 +105,7 @@
        (when-let [child-states (.-child-states parent-state)]
          (js-delete child-states node-id)))))
   ([child-key state]
-   ;; (println "disposing" child-key)
+   (println "disposing" child-key)
    (when state
      (set! (.-disposed state) true)
      (when-let [disposed-callback (.-disposed-callback state)]
@@ -220,7 +221,7 @@
                             :disposed_callback
                             (fn []
                               ;; (println "cleaning attr binding")
-                              ;; (println "disposing attr" key)
+                              (println "disposing attr binding" key)
                               (remove-watch* ref key)
                               (when clean* (clean* ref))
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
@@ -489,7 +490,7 @@
       child-states
       (fn [child-state child-key _]
         (when (identical? (aget child-key 0) "-")
-          ;; (println "disposing attr" child-key)
+          (println "disposing attr" child-key)
           (.push to-remove child-key)
           (set! (.-disposed child-state) true)
           (when-let [cb (.-disposed-callback child-state)]
@@ -569,8 +570,7 @@
                            (init-element-state! parent nil nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
-        (register-with-parent-state parent-state
-                                    (get-node-id new-elem) state)
+        (register-with-parent-state parent-state (.-id state) state)
         state))))
 
 (defn- get-state-attr [state attr-str]
