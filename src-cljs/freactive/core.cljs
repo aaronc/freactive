@@ -2,7 +2,20 @@
   (:refer-clojure :exclude [atom])
   (:require [goog.object]))
 
-;; (def ^:dynamic *invalidate-rx* nil)
+;; Core API
+
+(deftype BindingInfo [raw-deref add-watch remove-watch clean-watch])
+
+(defprotocol IReactive
+  (-get-binding-fns [this]))
+
+(def ^:dynamic *register-dep* nil)
+
+(defn register-dep [dep id binding-info]
+  (when-let [rdep *register-dep*]
+    (rdep dep id binding-info)))
+
+;; END Core API
 
 (def ^:dynamic *lazy* nil)
 
@@ -16,31 +29,6 @@
   (let [id auto-reactive-id]
     (set! auto-reactive-id (inc auto-reactive-id))
     (str "-r." id)))
-
-(deftype BindingInfo [raw-deref add-watch remove-watch clean-watch])
-
-(defprotocol IReactive
-  (-get-binding-fns [this]))
-
-(def ^:dynamic *register-dep* nil)
-
-;; (defn register-dep [dep id binding-info]
-;;   (when-let [invalidate *invalidate-rx*]
-;;     (when *trace-capture* (*trace-capture* dep))
-;;     (aset (.-deps invalidate) id
-;;           (fn [key]
-;;             ((or (.-clean-watch binding-info)
-;;                  (.-remove-watch binding-info))
-;;              dep key)))
-;;     ((.-add-watch binding-info)
-;;      dep (.-id invalidate)
-;;      (fn []
-;;        ((.-remove-watch binding-info) dep id)
-;;        (invalidate)))))
-
-(defn register-dep [dep id binding-info]
-  (when-let [rdep *register-dep*]
-    (rdep dep id binding-info)))
 
 (def ^:private iwatchable-binding-fns
   (BindingInfo. cljs.core/-deref cljs.core/-add-watch
@@ -182,29 +170,26 @@
   ([x] (ReactiveAtom. (new-reactive-id )x nil nil nil #js {} 0))
   ([x & {:keys [meta validator]}] (ReactiveAtom. (new-reactive-id) x meta validator nil #js {} 0)))
 
-(defn- make-invalidate-fn [reactive id]
-  (let [invalidate-fn
-        (fn invalidate []
-          (when-not (.-dirty reactive)
-            (set! (.-dirty reactive) true)
-            (if (> (.-watchers reactive) 0)
-              ;; updates state and notifies watches
-              (when (.compute reactive)
-                (.notifyInvalidationWatches reactive))
-              ;; updates only invalidation watches
-              (.notifyInvalidationWatches reactive))))]
-    (set! (.-id invalidate-fn) id)
-    (set! (.-deps invalidate-fn) #js {})
-    invalidate-fn))
+;; (defn- make-invalidate-fn [reactive id]
+;;   (let [invalidate-fn
+;;         (fn invalidate []
+;;           (when-not (.-dirty reactive)
+;;             (set! (.-dirty reactive) true)
+;;             (if (> (.-watchers reactive) 0)
+;;               ;; updates state and notifies watches
+;;               (when (.compute reactive)
+;;                 (.notifyInvalidationWatches reactive))
+;;               ;; updates only invalidation watches
+;;               (.notifyInvalidationWatches reactive))))]
+;;     (set! (.-id invalidate-fn) id)
+;;     (set! (.-deps invalidate-fn) #js {})
+;;     invalidate-fn))
 
 (defn- make-register-dep [rx]
   (fn do-register-dep [dep id binding-info]
     (when *trace-capture* (*trace-capture* dep))
-    (aset (.-deps rx) id
-          (fn []
-            ((or (.-clean-watch binding-info)
-                 (.-remove-watch binding-info))
-             dep (.-id rx))))
+    (aset (.-deps rx) id #js [dep binding-info])
+    ;; (println "cur deps:" (.-deps rx))
     ((.-add-watch binding-info)
      dep (.-id rx)
      (fn []
@@ -315,11 +300,17 @@
   (clean [this key]
     (.removeFWatch this key)
     (.removeInvalidationWatch this key)
+    ;; (println "trying to clean" watchers iwatchers deps)
     (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
-          ;; (println "cleaning" (.-id this) key)
-          (goog.object/forEach (.-deps (.-invalidate this))
+          ;; (println "cleaning" (.-id this) key deps)
+          (goog.object/forEach deps
                                (fn [val key obj]
-                                 (val)
+                                 ;; (println "cleaning:" key val)
+                                 (let [dep (aget val 0)
+                                       binding-info (aget val 1)]
+                                   ((or (.-clean-watch binding-info)
+                                        (.-remove-watch binding-info))
+                                    dep id))
                                  (js-delete obj key)))
           (set! (.-dirty this) true)))
   
@@ -368,7 +359,7 @@
   ([f lazy]
    (let [id (new-reactive-id)
          reactive (ReactiveExpression. id nil true f #js {} nil nil #js {} 0 #js {} 0 nil lazy
-                                       (or *do-trace-captures* (fn [_])))]
+                                       *do-trace-captures*)]
      (set! (.-register-dep-fn reactive) (make-register-dep reactive))
      reactive)))
 
@@ -389,7 +380,7 @@
         (set! (.-state cursor) new-value)
         (when (> watchers 0)
           (.notifyFWatches cursor old-value new-value))
-        (when-not (> iwatchers 0)
+        (when (> iwatchers 0)
           (.notifyInvalidationWatches cursor))
         new-value)))
   (clean [this key]
