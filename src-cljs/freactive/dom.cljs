@@ -97,14 +97,14 @@
 (defn- dispose-node
   ([dom-node]
    ;(println "disposing" dom-node)
-   (when-let [node-id (get-node-id dom-node)]
-     (when-let [state                                       ;;(aget element-state-lookup node-id)
-                (get-element-state dom-node)]
-       (dispose-node node-id state)
-       (when-let [parent-state (.-parent-state state)]
-         (when-let [child-states (.-child-states parent-state)]
-           (js-delete child-states node-id))))))
+   (when-let [state                                       ;;(aget element-state-lookup node-id)
+              (get-element-state dom-node)]
+     (dispose-node (.-id state) state)
+     (when-let [parent-state (.-parent-state state)]
+       (when-let [child-states (.-child-states parent-state)]
+         (js-delete child-states node-id)))))
   ([child-key state]
+   ;; (println "disposing" child-key)
    (when state
      (set! (.-disposed state) true)
      (when-let [disposed-callback (.-disposed-callback state)]
@@ -211,7 +211,7 @@
   (let [binding-fns (r/get-binding-fns ref)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
-        clean (or (.-clean-watch binding-fns) remove-watch*)
+        clean* (.-clean binding-fns)
         raw-deref* (.-raw-deref binding-fns)
         ref-meta (meta ref)]
     (when (and add-watch* remove-watch*)
@@ -220,7 +220,9 @@
                             :disposed_callback
                             (fn []
                               ;; (println "cleaning attr binding")
-                              (clean ref key)
+                              ;; (println "disposing attr" key)
+                              (remove-watch* ref key)
+                              (when clean* (clean* ref))
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
                                 (binding-disposed)))}
             invalidate
@@ -487,6 +489,7 @@
       child-states
       (fn [child-state child-key _]
         (when (identical? (aget child-key 0) "-")
+          ;; (println "disposing attr" child-key)
           (.push to-remove child-key)
           (set! (.-disposed child-state) true)
           (when-let [cb (.-disposed-callback child-state)]
@@ -696,7 +699,7 @@
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
         raw-deref* (.-raw-deref binding-fns)
-        clean (or (.-clean-watch binding-fns) remove-watch*)]
+        clean (.-clean binding-fns)]
     (if (and add-watch* remove-watch*)
       (let [id (r/new-reactive-id)
 
@@ -770,7 +773,8 @@
         (set! (.-disposed-callback state)
               (fn []
                 ;; (println "cleaning node binding")
-                (clean child-ref id)
+                (remove-watch* child-ref id)
+                (when clean* (clean* child-ref))
                 (when-let [binding-disposed (get ref-meta :binding-disposed)]
                   (binding-disposed))))
         (when-let [parent-state (get-element-state parent)]

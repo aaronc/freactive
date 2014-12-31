@@ -4,7 +4,7 @@
 
 ;; Core API
 
-(deftype BindingInfo [raw-deref add-watch remove-watch clean-watch])
+(deftype BindingInfo [raw-deref add-watch remove-watch clean])
 
 (defprotocol IReactive
   (-get-binding-fns [this]))
@@ -94,8 +94,7 @@
   (fastDeref [this]
     (register-dep this id fwatch-binding-info) 
     state)
-  (clean [this key]
-    (.removeFWatch this key))
+  (clean [this])
   cljs.core/IAtom
 
   IReactive
@@ -190,13 +189,11 @@
     (when *trace-capture* (*trace-capture* dep))
     (aset (.-deps rx) id #js [dep binding-info])
     ;; (println "cur deps:" (.-deps rx))
-    (let [add-watch* (.-add-watch binding-info)]
-      (add-watch*
-       dep (.-id rx)
-           (fn []
-             (let [remove-watch* (.-remove-watch binding-info)]
-               (remove-watch* dep (.-id rx)))
-             (.invalidate rx))))))
+    ((.-add-watch binding-info)
+     dep (.-id rx)
+     (fn []
+       ((.-remove-watch binding-info) dep (.-id rx))
+       (.invalidate rx)))))
 
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
@@ -299,24 +296,22 @@
         (set! state new-val)
         (.notifyFWatches this old-val new-val)
         new-val)))
-  (clean [this key]
-    (.removeFWatch this key)
-    (.removeInvalidationWatch this key)
+  (clean [this]
     ;; (println "trying to clean" watchers iwatchers invalidation-watches)
-    (when true
-        ;;(and (identical? 0 watchers) (identical? 0 iwatchers))
+    (when (and (identical? 0 watchers) (identical? 0 iwatchers))
           ;; (println "cleaning" (.-id this) key deps)
-          (goog.object/forEach deps
-                               (fn [val key obj]
-                                 ;; (println "cleaning:" key val)
-                                 (let [dep (aget val 0)
-                                       binding-info (aget val 1)
-                                       clean-watch
-                                       (or (.-clean-watch binding-info)
-                                        (.-remove-watch binding-info))]
-                                   (clean-watch dep id))
-                                 (js-delete obj key)))
-          (set! (.-dirty this) true)))
+      (goog.object/forEach deps
+                           (fn [val key obj]
+                             ;; (println "cleaning:" key val)
+                             (let [dep (aget val 0)
+                                   binding-info (aget val 1)]
+                               (let [remove-watch* (.-remove-watch binding-info)]
+                                 (remove-watch* dep id))
+                               (when-let [clean* (.-clean-watch binding-info)]
+                                 (clean-watch dep)))
+                             (js-delete obj key)))
+      ;; (.invalidate this)
+      (set! (.-dirty this) true)))
   
   IReactive
   (-get-binding-fns [this]
@@ -377,7 +372,7 @@
     (-equiv this other))
   (compute [cursor]
     (set! (.-dirty cursor) false)
-    (add-watch-fn)
+    (add-watch-fn this)
     (let [new-value ((.-getter cursor) @ref)
           old-value (.-state cursor)]
       (when-not (identical? old-value new-value)
@@ -387,9 +382,7 @@
         (when (> iwatchers 0)
           (.notifyInvalidationWatches cursor))
         new-value)))
-  (clean [this key]
-    (.removeFWatch this key)
-    (.removeInvalidationWatch this key)
+  (clean [this]
     (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
           (remove-watch-fn ref id)
           (set! (.-dirty this) true)))
@@ -467,7 +460,7 @@
         binding-fns (get-binding-fns ref)
         add-watch-fn
         (if-let [add-watch* (.-add-watch binding-fns)]
-          (fn [] (add-watch* ref id invalidate))
+          (fn [cursor] (add-watch* ref id (fn [] (.invalidate cursor))))
           (fn []))
         remove-watch-fn
         (if-let [remove-watch* (.-remove-watch binding-fns)]
@@ -476,7 +469,7 @@
      ;; (set! (.-invalidate cursor) invalidate)
      (set! (.-add-watch-fn cursor) add-watch-fn)
      (set! (.-remove-watch-fn cursor) add-watch-fn)
-     (add-watch-fn)
+     (add-watch-fn cursor)
      cursor))
 
 (defn cursor
