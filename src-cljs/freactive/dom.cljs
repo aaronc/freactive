@@ -210,7 +210,7 @@
   (let [binding-fns (r/get-binding-fns ref)
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
-        clean (or (.-clean binding-fns) remove-watch*)
+        clean (or (.-clean-watch binding-fns) remove-watch*)
         raw-deref* (.-raw-deref binding-fns)
         ref-meta (meta ref)]
     (when (and add-watch* remove-watch*)
@@ -686,7 +686,7 @@
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
         raw-deref* (.-raw-deref binding-fns)
-        clean (or (.-clean binding-fns) remove-watch*)]
+        clean (or (.-clean-watch binding-fns) remove-watch*)]
     (if (and add-watch* remove-watch*)
       (let [id (r/new-reactive-id)
 
