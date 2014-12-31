@@ -190,11 +190,13 @@
     (when *trace-capture* (*trace-capture* dep))
     (aset (.-deps rx) id #js [dep binding-info])
     ;; (println "cur deps:" (.-deps rx))
-    ((.-add-watch binding-info)
-     dep (.-id rx)
-     (fn []
-       ((.-remove-watch binding-info) dep (.-id rx))
-       (.invalidate rx)))))
+    (let [add-watch* (.-add-watch binding-info)]
+      (add-watch*
+       dep (.-id rx)
+           (fn []
+             (let [remove-watch* (.-remove-watch binding-info)]
+               (remove-watch* dep (.-id rx)))
+             (.invalidate rx))))))
 
 (defn- lazy? [default-laziness]
   (if-not (nil? *lazy*) *lazy* default-laziness))
@@ -235,7 +237,7 @@
              (aset (.-invalidation-watches this) key f))
            this))
 
-(defn- -removeInvalidationWatch [this key]
+(defn- -removeInvalidationWatch [key]
   (this-as this
            (when (aget (.-invalidation-watches this) key)
              (set! (.-iwatchers this) (dec (.-iwatchers this)))
@@ -300,17 +302,19 @@
   (clean [this key]
     (.removeFWatch this key)
     (.removeInvalidationWatch this key)
-    ;; (println "trying to clean" watchers iwatchers deps)
-    (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
+    ;; (println "trying to clean" watchers iwatchers invalidation-watches)
+    (when true
+        ;;(and (identical? 0 watchers) (identical? 0 iwatchers))
           ;; (println "cleaning" (.-id this) key deps)
           (goog.object/forEach deps
                                (fn [val key obj]
                                  ;; (println "cleaning:" key val)
                                  (let [dep (aget val 0)
-                                       binding-info (aget val 1)]
-                                   ((or (.-clean-watch binding-info)
-                                        (.-remove-watch binding-info))
-                                    dep id))
+                                       binding-info (aget val 1)
+                                       clean-watch
+                                       (or (.-clean-watch binding-info)
+                                        (.-remove-watch binding-info))]
+                                   (clean-watch dep id))
                                  (js-delete obj key)))
           (set! (.-dirty this) true)))
   

@@ -218,6 +218,7 @@
             attr-state #js {:disposed false
                             :disposed_callback
                             (fn []
+                              ;; (println "cleaning attr binding")
                               (clean ref key)
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
                                 (binding-disposed)))}
@@ -361,7 +362,9 @@
       (let [attr-ns (namespace k)
             attr-name (name k)]
         (binder node attr-ns attr-name v node-state)
-        (aset js-attrs (if attr-ns (str attr-ns "/" attr-name) attr-name) v)))
+        (aset js-attrs (if attr-ns (str attr-ns "/" attr-name) attr-name)
+              (when-not (satisfies? IDeref v)
+                v))))
     js-attrs))
 
 (defn- bind-attrs! [node attrs node-state]
@@ -759,6 +762,7 @@
         (set! (.-invalidate state) invalidate)
         (set! (.-disposed-callback state)
               (fn []
+                ;; (println "cleaning node binding")
                 (clean child-ref id)
                 (when-let [binding-disposed (get ref-meta :binding-disposed)]
                   (binding-disposed))))
