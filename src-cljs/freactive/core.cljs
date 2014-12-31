@@ -301,8 +301,8 @@
         new-val)))
   (clean [this]
     ;; (println "trying to clean" watchers iwatchers invalidation-watches)
-    (when true
-        ;; (and (identical? 0 watchers) (identical? 0 iwatchers))
+    (when ;;true
+        (and (identical? 0 watchers) (identical? 0 iwatchers))
       ;; (println "cleaning" id)
       (goog.object/forEach deps
                            (fn [val key obj]
@@ -315,8 +315,9 @@
                                  (clean* dep)))
                              (js-delete obj key)))
       ;; (.invalidate this)
-      (when-not (.-dirty this)
-        (.invalidate this))
+      ;; (when-not (.-dirty this)
+      ;;   (.invalidate this))
+      (set! (.-dirty this) true)
     ))
   
   IReactive
