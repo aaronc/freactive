@@ -519,35 +519,6 @@
                            new-style
                            bind-style-prop!))))
 
-;; From hiccup.compiler:
-(def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
-       :private true}
-     re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
-
-(def ^:private node-ns-lookup
-  #js
-  {:svg "http://www.w3.org/2000/svg"})
-
-(defn register-node-prefix! [prefix xml-ns-or-handler]
-  (aset node-ns-lookup prefix xml-ns-or-handler))
-
-(def ^:dynamic *xml-namespaces* nil)
-
-(defn- get-xml-namespace [kw-ns]
-  (let [xmlns (get *xml-namespaces* kw-ns)]
-    (assert xmlns (str "Don't know how to handle namespace " kw-ns))))
-
-(def ^:private re-dot (js/RegExp. "\\." "g"))
-
-(defn- create-dom-node [xmlns tag-name]
-  (let [[_ tag id class] (re-matches re-tag tag-name)
-        node (if xmlns
-               (.createElementNS js/document xmlns tag)
-               (.createElement js/document tag))]
-    (when id (set! (.-id node) id))
-    (when class (set! (.-className node) (.replace class re-dot " ")))
-    node))
-
 ;(defn- create-dom-node-simple [tag]
 ;  (let [tag-ns (namespace tag)
 ;        node (if tag-ns
@@ -810,10 +781,56 @@
         (append-children! elem ch))
       (append-child! elem ch))))
 
+(defn update-attrs
+  ([vdom f & args]
+   (let [tag (first vdom)
+         attrs? (second vdom)
+         attrs (when (map? attrs?) attrs?)]
+     (concat [tag (apply f attrs args)] (if attrs (nnext vdom) (next vdom))))))
+
+;; (defn- create-dom-node [xmlns tag-name]
+;;   (let [
+;;         node ]
+;;     (when id (set! (.-id node) id))
+;;     (when class (set! (.-className node) (.replace class re-dot " ")))
+;;     node))
+
+;; From hiccup.compiler:
+(def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
+       :private true}
+     re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
+
+(def ^:private node-ns-lookup
+  #js
+  {:svg "http://www.w3.org/2000/svg"})
+
+(defn register-node-prefix! [prefix xml-ns-or-handler]
+  (aset node-ns-lookup prefix xml-ns-or-handler))
+
+;; (def ^:dynamic *xml-namespaces* nil)
+
+;; (defn- get-xml-namespace [kw-ns]
+;;   (let [xmlns (get *xml-namespaces* kw-ns)]
+;;     (assert xmlns (str "Don't know how to handle namespace " kw-ns))))
+
+(def ^:private re-dot (js/RegExp. "\\." "g"))
+
+
 (defn- build-dom-element [tag elem-spec xmlns tag-name tail]
-  (let [node (create-dom-node xmlns tag-name)
+  (let [[_ tag-name id class] (re-matches re-tag tag-name)
+        node (if xmlns
+               (.createElementNS js/document xmlns tag-name)
+               (.createElement js/document tag-name))
         attrs? (first tail)
         attrs (when (map? attrs?) attrs?)
+        attrs (cond-> attrs
+                      (and id (not (:id attrs)))
+                      (assoc :id id)
+                      class
+                      (update :class
+                              (fn [cls]
+                                (let [class (.replace class re-dot " ")]
+                                  (if cls (str class " " cls) class)))))
         state (init-element-state! node elem-spec tag)
         children (if attrs (rest tail) tail)]
     (bind-attrs! node attrs state)
