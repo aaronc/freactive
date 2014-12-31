@@ -84,7 +84,7 @@
 
 (def fwatch-binding-info
   (BindingInfo.
-   #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean % %2)))
+   #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %)))
 
 (deftype ReactiveAtom [id state meta validator watches fwatches watchers]
   Object
@@ -248,20 +248,23 @@
        :invalidate
        (fn invalidate []
          (this-as this
-          (when-not (.-dirty this) (set! (.-dirty this) true)
+                  (when-not (.-dirty this)
+                    (set! (.-dirty this) true)
                     (if (> (.-watchers this) 0)
                       ;; updates state and notifies watches
                       (when (.compute this)
                         (.notifyInvalidationWatches this))
                       ;; updates only invalidation watches
-                      (.notifyInvalidationWatches this)))))})
+                      (.notifyInvalidationWatches this))
+                    (.clean this)
+                    )))})
 
 (def invalidates-binding-info
   (BindingInfo.
    #(.rawDeref %)
    #(.addInvalidationWatch % %2 %3)
    #(.removeInvalidationWatch % %2)
-   #(.clean % %2)))
+   #(.clean %)))
 
 (def rx-mixin
   #js
@@ -298,8 +301,9 @@
         new-val)))
   (clean [this]
     ;; (println "trying to clean" watchers iwatchers invalidation-watches)
-    (when (and (identical? 0 watchers) (identical? 0 iwatchers))
-          ;; (println "cleaning" (.-id this) key deps)
+    (when true
+        ;; (and (identical? 0 watchers) (identical? 0 iwatchers))
+      ;; (println "cleaning" id)
       (goog.object/forEach deps
                            (fn [val key obj]
                              ;; (println "cleaning:" key val)
@@ -307,11 +311,13 @@
                                    binding-info (aget val 1)]
                                (let [remove-watch* (.-remove-watch binding-info)]
                                  (remove-watch* dep id))
-                               (when-let [clean* (.-clean-watch binding-info)]
-                                 (clean-watch dep)))
+                               (when-let [clean* (.-clean binding-info)]
+                                 (clean* dep)))
                              (js-delete obj key)))
       ;; (.invalidate this)
-      (set! (.-dirty this) true)))
+      (when-not (.-dirty this)
+        (.invalidate this))
+    ))
   
   IReactive
   (-get-binding-fns [this]

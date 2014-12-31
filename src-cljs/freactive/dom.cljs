@@ -97,15 +97,16 @@
 
 (defn- dispose-node
   ([dom-node]
-   (println "disposing" dom-node)
+   ;; (println "disposing" dom-node)
    (when-let [state                                       ;;(aget element-state-lookup node-id)
               (get-element-state dom-node)]
-     (dispose-node (.-id state) state)
-     (when-let [parent-state (.-parent-state state)]
-       (when-let [child-states (.-child-states parent-state)]
-         (js-delete child-states node-id)))))
+     (let [node-id (.-id state)]
+       (dispose-node node-id state)
+       (when-let [parent-state (.-parent-state state)]
+         (when-let [child-states (.-child-states parent-state)]
+           (js-delete child-states node-id))))))
   ([child-key state]
-   (println "disposing" child-key)
+   ;; (println "disposing" child-key)
    (when state
      (set! (.-disposed state) true)
      (when-let [disposed-callback (.-disposed-callback state)]
@@ -203,7 +204,7 @@
             prop-value
             (.toString prop-value)))
     (js-delete (.-style elem) prop-name))
-  prop)
+  prop-value)
 
 (defn- remove-style-prop! [elem prop-name]
   (js-delete (.-style elem) prop-name))
@@ -221,7 +222,7 @@
                             :disposed_callback
                             (fn []
                               ;; (println "cleaning attr binding")
-                              (println "disposing attr binding" key)
+                              ;; (println "disposing attr binding" key)
                               (remove-watch* ref key)
                               (when clean* (clean* ref))
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
@@ -262,6 +263,10 @@
 (defn get-data-state [element]
   (.getAttribute element "data-state"))
 
+(defn- get-state-attr [state attr-str]
+  (when-let [attrs (when state (.-attrs state))]
+    (aget attrs attr-str)))
+
 (defn set-data-state!
   ([element state]
     (let [cur-state (get-data-state element)
@@ -270,7 +275,7 @@
       (when-not (identical? cur-state state)
         (do-set-data-state! element state)
         (when-let [enter-transition (get-state-attr node-state (str "state/on-" state))]
-          (enter-transition element old-state state))))))
+          (enter-transition element cur-state state))))))
 
 (defn- bind-prop-attr! [set-fn element attr-name attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
@@ -490,7 +495,7 @@
       child-states
       (fn [child-state child-key _]
         (when (identical? (aget child-key 0) "-")
-          (println "disposing attr" child-key)
+          ;; (println "disposing attr" child-key)
           (.push to-remove child-key)
           (set! (.-disposed child-state) true)
           (when-let [cb (.-disposed-callback child-state)]
@@ -572,10 +577,6 @@
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state (.-id state) state)
         state))))
-
-(defn- get-state-attr [state attr-str]
-  (when-let [attrs (when state (.-attrs state))]
-    (aget attrs attr-str)))
 
 (defn- on-attached [state node]
   (when-let [node-attached (get-state-attr state "node/on-attached")]
@@ -699,7 +700,7 @@
         add-watch* (.-add-watch binding-fns)
         remove-watch* (.-remove-watch binding-fns)
         raw-deref* (.-raw-deref binding-fns)
-        clean (.-clean binding-fns)]
+        clean* (.-clean binding-fns)]
     (if (and add-watch* remove-watch*)
       (let [id (r/new-reactive-id)
 
@@ -755,6 +756,7 @@
             invalidate
             (fn on-child-ref-invalidated []
               (remove-watch* child-ref id)
+              ;; (when clean* (clean* child-ref))
               (when-not (.-disposed state)
                 (set! (.-dirty state) true)
                 (when-not (.-updating state)
