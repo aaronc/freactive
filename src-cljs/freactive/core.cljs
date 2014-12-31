@@ -193,6 +193,7 @@
      dep (.-id rx)
      (fn []
        ((.-remove-watch binding-info) dep (.-id rx))
+       (js-delete (.-deps rx) id)
        (.invalidate rx)))))
 
 (defn- lazy? [default-laziness]
