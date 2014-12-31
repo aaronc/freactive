@@ -201,7 +201,8 @@
           (if (.-substring prop-value)
             prop-value
             (.toString prop-value)))
-    (js-delete (.-style elem) prop-name)))
+    (js-delete (.-style elem) prop-name))
+  prop)
 
 (defn- remove-style-prop! [elem prop-name]
   (js-delete (.-style elem) prop-name))
@@ -281,7 +282,8 @@
                           (fn []
                             (unlisten!* element event-name handler)))}]
       (register-with-parent-state node-state (str "-" "event" "." event-name) attr-state)
-      (listen! element event-name handler)))
+      (listen! element event-name handler))
+  handler)
 
 (defn- bind-style! [element styles node-state]
   (doseq [[p v] styles]
@@ -289,8 +291,12 @@
 
 (def ^:private attr-setters
   #js
-  {:data-state (fn [element state] (set-data-state! element state))
-   :class (fn [element cls] (set! (.-className element) cls))
+  {:data-state (fn [element state]
+                 (set-data-state! element state)
+                 state)
+   :class (fn [element cls]
+               (set! (.-className element) cls)
+               cls)
    ;; :id (fn [element id] (set! (.-id element) id))
    })
 
@@ -304,18 +310,20 @@
           (if (.-substring attr-value) ;; tests if attr-value is a string
             attr-value
             (.toString attr-value)))
-        (.removeAttribute element attr-name)))))
+        (.removeAttribute element attr-name))
+      attr-value)))
 
 (defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
   (when (identical? cb-name "on-disposed")
     (set! (.-disposed-callback node-state) cb-value)
     ;; other callbacks automatically included in attr map
-    ))
+    )
+  cb-value)
 
 (def ^:private attr-ns-lookup
   #js
   {:node bind-lifecycle-callback!
-   :state (fn []) ;; automatically handled in attr map
+   :state (fn [_ _ _ v] v) ;; automatically handled in attr map
    })
 
 (defn register-attr-prefix! [prefix xml-ns-or-handler]
@@ -329,7 +337,8 @@
           (if (.-substring attr-value)
             attr-value
             (.toString attr-value)))
-        (.removeAttributeNS element attr-ns attr-name))))
+        (.removeAttributeNS element attr-ns attr-name))
+      attr-value))
 
 (defn- bind-attr! [element attr-ns attr-name attr-value node-state]
   (if attr-ns
@@ -361,10 +370,8 @@
     (doseq [[k v] attrs]
       (let [attr-ns (namespace k)
             attr-name (name k)]
-        (binder node attr-ns attr-name v node-state)
         (aset js-attrs (if attr-ns (str attr-ns "/" attr-name) attr-name)
-              (when-not (satisfies? IDeref v)
-                v))))
+              (binder node attr-ns attr-name v node-state))))
     js-attrs))
 
 (defn- bind-attrs! [node attrs node-state]
@@ -443,9 +450,9 @@
       (let [attr-ns (namespace k)
             attr-name (name k)
             attr-str (if attr-ns (str attr-ns "/" attr-name) attr-name)]
-        (rebinder node attr-ns attr-name new-val node-state)
         (js-delete old-attrs attr-str)
-        (aset new-attrs-js attr-str new-val)))
+        (aset new-attrs-js attr-str
+              (rebinder node attr-ns attr-name new-val node-state))))
     (goog.object/forEach old-attrs
       (fn [_ attr-str _]
         (let [parts (.split attr-str "/")
