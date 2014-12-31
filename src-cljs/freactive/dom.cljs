@@ -782,6 +782,9 @@
       (append-child! elem ch))))
 
 (defn update-attrs
+  "Convenience function to update the attrs in a virtual dom vector.
+Works like Clojure's update function but f (and its args) only modify the attrs
+map in vdom."
   ([vdom f & args]
    (let [tag (first vdom)
          attrs? (second vdom)
