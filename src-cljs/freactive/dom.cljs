@@ -45,9 +45,7 @@
 (defn- get-virtual-dom [x]
   (if x
     (cond
-      (dom-node? x)
-      (when-let [state (get-element-state x)]
-        (get-virtual-dom (.-element-spec state)))
+      (dom-node? x) x
 
       (string? x) x
 
@@ -553,6 +551,27 @@
   (when-let [node-attached (get-state-attr state "node/on-attached")]
     (node-attached node)))
 
+(defn- on-moving [state node cb]
+  (if-let [node-moving (get-state-attr state "node/on-moving")]
+    (node-moving node cb)
+    (cb)))
+
+(defn- on-moved [state node]
+  (when-let [node-moved (get-state-attr state "node/on-moved")]
+    (node-moved node)))
+
+(defn- insert-node* [parent new-elem insert-fn]
+  (let [state (register-element-with-parent parent new-elem)]
+    (insert-fn)
+    (on-attached state new-elem)))
+
+(defn- move-node* [node move-fn]
+  (on-moving (get-element-state node) node move-fn))
+
+(defn- do-replace-node [parent new-elem cur-dom-node]
+  (insert-node* parent new-elem 
+                  (fn [] (.replaceChild parent new-elem cur-dom-node))))
+
 (defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
   (let [new-elem
         (if top-level
@@ -561,9 +580,7 @@
             (build new-elem-spec))
           (build new-elem-spec))]
     (dispose-node cur-dom-node)
-    (let [state (register-element-with-parent parent new-elem)]
-      (.replaceChild parent new-elem cur-dom-node)
-      (on-attached state new-elem))
+    (do-replace-node parent new-elem cur-dom-node)
     new-elem))
 
 (declare replace-child)
@@ -630,6 +647,9 @@
       (do
         (bind-child parent new-virtual-dom nil cur-dom-node))
 
+      (dom-node? new-virtual-dom)
+      (do-replace-node parent new-virtual-dom cur-dom-node)
+
       :default
       (if enable-diffing
         (if top-level
@@ -641,15 +661,25 @@
         (replace-node-completely
           parent new-elem-spec cur-dom-node top-level)))))
 
+(defn- do-append-or-insert-child [parent node before]
+  (if before
+    (.insertBefore parent node before)
+    (.appendChild parent node)))
+
 (defn- append-or-insert-child [parent vdom before]
-  (if (satisfies? IDeref vdom)
+  (cond
+    (and  (dom-node? vdom) (.-parentNode vdom))
+    (move-node* vdom
+       (fn [] (do-append-or-insert-child parent vdom before)))
+
+    (satisfies? IDeref vdom)
     (bind-child parent vdom before nil)
+
+    :default
     (let [new-elem (build vdom)]
-      (let [state (register-element-with-parent parent new-elem)]
-        (if before
-          (.insertBefore parent new-elem before)
-          (.appendChild parent new-elem))
-        (on-attached state new-elem))
+      (insert-node*
+       parent new-elem
+       (fn [] (do-append-or-insert-child parent new-elem before))) 
       new-elem)))
 
 ;; Reactive Element Handling
@@ -767,7 +797,7 @@
 
 ;; Building Elements
 
-(defn insert-child! [parent child before]
+(defn insert-before! [parent child before]
   (append-or-insert-child parent child before))
 
 (defn append-child! [parent child]
