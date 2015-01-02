@@ -401,50 +401,41 @@
     (set-attrs!* node (dissoc attrs :style) node-state bind-attr! js-attrs bind-attr-key)
     (set-attrs!* node style node-state bind-style-prop! js-style bind-style-prop-key)))
 
-(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder binder-state-key-fn]
-  (let [new-attrs-js #js {}
-        child-states (.-child-states node-state)]
+(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
+  (let [new-attrs-js #js {}]
     (doseq [[k new-val] new-attrs]
-      (let [atr-str (str k)
-            old-val (aget old-attrs atr-str)]
-        (when old-val
-          (js-delete old-attrs atr-str))
-        (when (or (not old-val) (not (identical? old-val new-val)))
-          (dispose-child-state child-states (binder-state-key-fn k))
-          (rebinder node k new-val node-state))
-        (aset new-attrs-js atr-str new-val)))
+      (js-delete old-attrs (str k))
+      (rebinder node k new-val node-state)
+      (aset new-attrs-js (str k) new-val))
     (goog.object/forEach old-attrs
       (fn [_ attr-str _]
-        (dispose-child-state child-states (binder-state-key-fn attr-str))
         (rebinder node (keyword (.substring attr-str 1)) nil node-state)))
     new-attrs-js))
 
-(defn- dispose-rxs [state]
+(defn- dispose-attrs [state]
   (let [child-states (.-child-states state)]
     (goog.object/forEach
-      child-states
-      (fn [child-state child-key _]
-        (when (identical? (.substring child-key 0 2) "--")
-          (dispose-state child-state)
-          (js-delete child-states child-key))))))
+     child-states
+     (fn [child-state child-key _]
+       (when (identical? (aget child-key 0) "-")
+         (dispose-state child-state)
+         (js-delete child-states child-key))))))
 
 (defn- replace-attrs! [node node-state new-attrs]
   (let [old-attrs (.-attrs node-state)
         old-style (.-style node-state)
         new-style (:style new-attrs)]
-    (dispose-rxs node-state)
+    (dispose-attrs node-state)
     (set! (.-attrs node-state)
           (replace-attrs!* node node-state
                            old-attrs
                            (dissoc new-attrs :style)
-                           bind-attr!
-                           bind-attr-key))
+                           bind-attr!))
     (set! (.-style node-state)
           (replace-attrs!* node node-state
                            old-style
                            new-style
-                           bind-style-prop!
-                           bind-style-prop-key))))
+                           bind-style-prop!))))
 
 ;(defn- create-dom-node-simple [tag]
 ;  (let [tag-ns (namespace tag)
