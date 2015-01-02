@@ -1,14 +1,29 @@
 (ns freactive.animation
   (:require
     [freactive.core :as r]
-    [freactive.dom :as dom]))
+    [freactive.dom :as dom]
+    [goog.object]))
 
-(deftype AnimationEaser [state easing-fn animating on-complete
-                         watches invalidation-watches]
+(def ^:private easer-binding-info
+  (r/->BindingInfo
+   #(.fastDeref %)
+   #(.addFWatch % %2 %3)
+   #(.removeFWatch % %2)
+   nil))
+
+(deftype AnimationEaser [id state easing-fn animating on-complete
+                         watches fwatches]
+  Object
+  (fastDeref [this]
+    (r/register-dep this id easer-binding-info)
+    state)
+
+  r/IReactive
+  (-get-binding-fns [this] easer-binding-info)
+
   IWatchable
   (-notify-watches [this oldval newval]
-    (doseq [[key f] watches]
-      (f key this oldval newval)))
+    (.notifyFWatches this oldval newval))
   (-add-watch [this key f]
     (set! (.-watches this) (assoc watches key f))
     this)
@@ -17,13 +32,12 @@
     this)
 
   IDeref
-  (-deref [this]
-    (if r/*invalidate-rx*
-      (add-watch this r/*invalidate-rx* r/*invalidate-rx*))
-    state))
+  (-deref [this] (.fastDeref this)))
+
+(r/apply-js-mixin AnimationEaser r/fwatch-mixin)
 
 (defn easer [init-state]
-  (AnimationEaser. init-state nil false nil nil nil))
+  (AnimationEaser. (r/new-reactive-id) init-state nil false nil nil #js {}))
 
 (defn start-easing!
   ([easer from to duration easing-fn when-complete]
@@ -32,7 +46,7 @@
          duration (* ratio duration)]
      (start-easing! easer to duration easing-fn when-complete)))
   ([easer to duration easing-fn when-complete]
-   (let [start-ms (r/-raw-deref dom/frame-time)
+   (let [start-ms (.rawDeref dom/frame-time)
          from (.-state easer)
          total-change (- to from)
          scaled-easing-fn
@@ -52,15 +66,15 @@
      (when-not (.-animating easer)
        ;;(println "starting animation loop")
        (set! (.-animating easer) true)
-       (add-watch dom/frame-time easer
+       (.addFWatch dom/frame-time (.-id easer)
                   (fn [_ _ _ new-ms]
                     (if (.-animating easer)
                       (let [cur-state (.-state easer)
                             new-state ((.-easing-fn easer) new-ms)]
                         (set! (.-state easer) new-state)
-                        (-notify-watches easer cur-state new-state))
+                        (.notifyFWatches easer cur-state new-state))
                       (do
-                        (remove-watch dom/frame-time easer)
+                        (.removeFWatch dom/frame-time (.-id easer))
                         (when-let [cb (.-on-complete easer)]
                           (set! (.-on-complete easer) nil)
                           (cb)))))))
@@ -78,12 +92,6 @@
 
 (def linear identity)
 
-(defn quad-in
-  "Modeled after the parabola y = x^2"
-  [p]
-  (* p p))
+(defn quad-in [p] (* p p))
 
-(defn quad-out
-  "Modeled after the parabola y = -x^2 + 2x"
-  [p]
-  (- (* p (- p 2))))
+(defn quad-out [p] (- (* p (- p 2))))
