@@ -42,7 +42,7 @@
 (defn new-reactive-id []
   (let [id auto-reactive-id]
     (set! auto-reactive-id (inc auto-reactive-id))
-    (str "-r." id)))
+    (str "--r." id)))
 
 (defn apply-js-mixin [the-type mixin]
   (let [ptype (.-prototype the-type)]

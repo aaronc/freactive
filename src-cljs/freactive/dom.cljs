@@ -93,6 +93,11 @@
 (defprotocol IRemove
   (-remove! [x]))
 
+(defn- dispose-state [state]
+  (set! (.-disposed state) true)
+     (when-let [disposed-callback (.-disposed-callback state)]
+       (disposed-callback)))
+
 (defn- dispose-node
   ([dom-node]
    ;; (println "disposing" dom-node)
@@ -106,9 +111,7 @@
   ([child-key state]
    ;; (println "disposing" child-key)
    (when state
-     (set! (.-disposed state) true)
-     (when-let [disposed-callback (.-disposed-callback state)]
-       (disposed-callback))
+     (dispose-state state)
      (when-not (identical? (aget child-key 0) "-")
        ;; (js-delete element-state-lookup child-key)
        (goog.object/forEach (.-child-states state)
@@ -380,9 +383,7 @@
 (defn- dispose-child-state [child-states child-key]
   (when child-states
     (when-let [state (aget child-states child-key)]
-      (set! (.-disposed state) true)
-      (when-let [disposed-callback (.-disposed-callback state)]
-        (disposed-callback))
+      (dispose-state state)
       (js-delete child-states child-key))))
 
 (defn- set-attrs!* [node attrs node-state binder js-attrs binder-state-key-fn]
@@ -400,82 +401,50 @@
     (set-attrs!* node (dissoc attrs :style) node-state bind-attr! js-attrs bind-attr-key)
     (set-attrs!* node style node-state bind-style-prop! js-style bind-style-prop-key)))
 
-;; (defn- unbind-attr!* [node-state prefix attr-name]
-;;   (let [attr-key (str "-" prefix "." attr-name)]
-;;     (dispose-child-state node-state attr-key)))
-
-;; (defn- rebind-style-prop! [element style-name style-value node-state]
-;;   (unbind-attr!* node-state "style" style-name)
-;;   (if style-value
-;;     (bind-style-prop! element nil style-name style-value node-state)
-;;     (remove-style-prop! element style-name)))
-
-;; (defn- rebind-style! [element styles node-state]
-;;   (doseq [[p v] styles]
-;;     (rebind-style-prop! element p v node-state)))
-
-;; (defn- rebind-event! [element event-name handler node-state]
-;;   (unbind-attr!* node-state "event" event-name)
-;;   (when handler
-;;     (listen! element event-name handler)))
-
-;; (defn- rebind-prop-attr! [element attr-name attr-value node-state]
-;;   (unbind-attr!* node-state "attr" attr-name)
-;;   (bind-attr! element nil attr-name attr-value node-state)
-;;   )
-
-;; (defn- rebind-attr! [element attr-name attr-value node-state]
-;;   (cond
-;;       (identical? "style" attr-name)
-;;       (rebind-style! element attr-value node-state)
-
-;;       (identical? 0 (.indexOf attr-name "on-"))
-;;       (rebind-event! element (.substring attr-name 3) attr-value node-state)
-
-;;       :default
-;;       (rebind-prop-attr! element attr-name attr-value node-state)))
-
-(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
-  (let [new-attrs-js #js {}]
+(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder binder-state-key-fn]
+  (let [new-attrs-js #js {}
+        child-states (.-child-states node-state)]
     (doseq [[k new-val] new-attrs]
-      (js-delete old-attrs (str k))
-      (rebinder node k new-val node-state)
-      (aset new-attrs-js (str k) new-val))
+      (let [atr-str (str k)
+            old-val (aget old-attrs atr-str)]
+        (when old-val
+          (js-delete old-attrs atr-str))
+        (when (or (not old-val) (not (identical? old-val new-val)))
+          (dispose-child-state child-states (binder-state-key-fn k))
+          (rebinder node k new-val node-state))
+        (aset new-attrs-js atr-str new-val)))
     (goog.object/forEach old-attrs
       (fn [_ attr-str _]
+        (dispose-child-state child-states (binder-state-key-fn attr-str))
         (rebinder node (keyword (.substring attr-str 1)) nil node-state)))
     new-attrs-js))
 
-(defn- dispose-attrs [state]
-  (let [child-states (.-child-states state)
-        to-remove #js []]
+(defn- dispose-rxs [state]
+  (let [child-states (.-child-states state)]
     (goog.object/forEach
       child-states
       (fn [child-state child-key _]
-        (when (identical? (aget child-key 0) "-")
-          ;; (println "disposing attr" child-key)
-          (.push to-remove child-key)
-          (set! (.-disposed child-state) true)
-          (when-let [cb (.-disposed-callback child-state)]
-            (cb)))))
-    (doseq [child-key to-remove]
-      (js-delete child-states child-key))))
+        (when (identical? (.substring child-key 0 2) "--")
+          (dispose-state child-state)
+          (js-delete child-states child-key))))))
 
 (defn- replace-attrs! [node node-state new-attrs]
   (let [old-attrs (.-attrs node-state)
         old-style (.-style node-state)
         new-style (:style new-attrs)]
-    (dispose-attrs node-state)
+    (dispose-rxs node-state)
     (set! (.-attrs node-state)
           (replace-attrs!* node node-state
                            old-attrs
                            (dissoc new-attrs :style)
-                           bind-attr!))
+                           bind-attr!
+                           bind-attr-key))
     (set! (.-style node-state)
           (replace-attrs!* node node-state
                            old-style
                            new-style
-                           bind-style-prop!))))
+                           bind-style-prop!
+                           bind-style-prop-key))))
 
 ;(defn- create-dom-node-simple [tag]
 ;  (let [tag-ns (namespace tag)
