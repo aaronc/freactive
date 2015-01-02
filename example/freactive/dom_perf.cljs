@@ -62,10 +62,10 @@
 (defn- jitter [easer cb]
   (let [value (- 1.0 (* 0.01 (rand)))]
     ((animation/easing-chain
-       [[easer value 50 animation/quint-out]
-        [easer 1.0 50 animation/quint-in]
-        [easer value 50 animation/quint-out]
-        [easer 1.0 50 animation/quint-out]]) cb)))
+       [[easer value 50 animation/quad-out]
+        [easer 1.0 50 animation/quad-in]
+        [easer value 50 animation/quad-out]
+        [easer 1.0 50 animation/quad-out]]) cb)))
 
 (defn view []
   [:div
