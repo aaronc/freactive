@@ -419,7 +419,7 @@
 (defn- rebind-prop-attr! [element attr-name attr-value node-state]
   (unbind-attr!* node-state "attr" attr-name)
   (if attr-value
-    (bind-attr! element attr-name attr-value node-state)
+    (bind-attr! element nil attr-name attr-value node-state)
     (remove-attr! element attr-name)))
 
 (defn- rebind-attr! [element attr-name attr-value node-state]
