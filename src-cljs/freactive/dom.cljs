@@ -7,14 +7,13 @@
 
 (defonce ^:private auto-node-id 0)
 
-(defprotocol IElementSpec
-  (-get-virtual-dom [x]))
-
-(defprotocol IHasDOMNode
-  (-get-dom-node [x]))
-
-(defn- dom-node? [x]
-  (and x (> (.-nodeType x) 0)))
+(defprotocol IDOMImage
+  "A protocol for things that can be represented as virtual DOM or contain DOM nodes.
+Can be used to define custom conversions to DOM nodes or text for things such as numbers
+or dates; or can be used to define containers for DOM elements themselves."
+  (-get-dom-image [x]
+    "Should return either virtual DOM (a vector or string) or an actual DOM node.
+"))
 
 (defn get-dom-node [x]
   (if (dom-node? x)
@@ -24,14 +23,14 @@
 (defn- get-element-state [x]
   (.-freactive-state x))
 
-(extend-protocol IElementSpec
+(extend-protocol IDOMImage
   boolean
-  (-get-virtual-dom [x] (str x))
+  (-get-dom-image [x] (str x))
 
   number
-  (-get-virtual-dom [x] (str x)))
+  (-get-dom-image [x] (str x)))
 
-(defn- get-virtual-dom [x]
+(defn- get-dom-image [x]
   (if x
     (cond
       (dom-node? x) x
@@ -42,7 +41,7 @@
 
       (satisfies? IDeref x) x
 
-      :default (-get-virtual-dom x))
+      :default (-get-dom-image x))
 
     ;; nil values treated as empty "placeholder" text nodes
     ""))
@@ -514,7 +513,7 @@
 (declare bind-child)
 
 (defn- replace-child [parent new-elem-spec cur-dom-node top-level]
-  (let [new-virtual-dom (get-virtual-dom new-elem-spec)]
+  (let [new-virtual-dom (get-dom-image new-elem-spec)]
     (cond
       (and (string? new-virtual-dom)
            (text-node? cur-dom-node))
@@ -565,8 +564,8 @@
 
 (deftype ReactiveElement [id parent ref cur-element dirty updating disposed
                           animate invalidate]
-  IHasDOMNode
-  (-get-dom-node [_] (get-dom-node cur-element)))
+  IDOMImage
+  (-get-dom-image [_] (get-dom-image cur-element)))
 
 (defn- bind-child* [parent child-ref before cur insert-child* replace-child* remove*]
   (let [binding-fns (r/get-binding-fns child-ref)
@@ -612,7 +611,7 @@
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)
                       node-state (get-element-state cur)]
-                  (when-not (identical? (get-virtual-dom cur) (get-virtual-dom new-elem))
+                  (when-not (identical? (get-dom-image cur) (get-dom-image new-elem))
                     (if-let [hide (get-state-attr node-state ":node/on-detaching")]
                       (hide cur
                             (fn []
@@ -742,7 +741,7 @@ map in vdom."
     node))
 
 (defn build [elem-spec]
-  (let [virtual-dom (get-virtual-dom elem-spec)]
+  (let [virtual-dom (get-dom-image elem-spec)]
     (cond
       (string? virtual-dom)
       (.createTextNode js/document virtual-dom)

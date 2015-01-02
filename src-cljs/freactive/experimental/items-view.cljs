@@ -14,7 +14,7 @@
   Object
   (getNode [this k v]
     (or (when-let [node (get nodes k)]
-        (dom/get-dom-node node))
+        (dom/get-dom-image node))
       (view-fn (create-cursor k v))))
   (withinBounds [this idx k v]
     (if range-test
