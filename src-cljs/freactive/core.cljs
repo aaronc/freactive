@@ -9,27 +9,6 @@
 (defprotocol IReactive
   (-get-binding-fns [this]))
 
-(def ^:dynamic *register-dep* nil)
-
-(defn register-dep [dep id binding-info]
-  (when-let [rdep *register-dep*]
-    (rdep dep id binding-info)))
-
-;; END Core API
-
-(def ^:dynamic *lazy* nil)
-
-(def ^:dynamic *do-trace-captures* nil)
-
-(def ^:dynamic *trace-capture* nil)
-
-(def ^:private auto-reactive-id 0)
-
-(defn new-reactive-id []
-  (let [id auto-reactive-id]
-    (set! auto-reactive-id (inc auto-reactive-id))
-    (str "-r." id)))
-
 (def ^:private iwatchable-binding-fns
   (BindingInfo. cljs.core/-deref cljs.core/-add-watch
           cljs.core/-remove-watch nil))
@@ -42,6 +21,28 @@
    (satisfies? IReactive iref) (-get-binding-fns iref)
    (satisfies? IWatchable iref) iwatchable-binding-fns
    :default deref-only-binding-fns))
+
+(def ^:dynamic *register-dep* nil)
+
+(defn register-dep
+  ([dep]
+   (register-dep dep (goog/getUid) (get-binding-fns)))
+  ([dep id binding-info]
+   (when-let [rdep *register-dep*]
+     (rdep dep id binding-info))))
+
+;; END Core API
+
+(def ^:dynamic *do-trace-captures* nil)
+
+(def ^:dynamic *trace-capture* nil)
+
+(def ^:private auto-reactive-id 0)
+
+(defn new-reactive-id []
+  (let [id auto-reactive-id]
+    (set! auto-reactive-id (inc auto-reactive-id))
+    (str "-r." id)))
 
 (defn apply-js-mixin [the-type mixin]
   (let [ptype (.-prototype the-type)]
@@ -196,9 +197,6 @@
        (js-delete (.-deps rx) id)
        (.invalidate rx)))))
 
-(defn- lazy? [default-laziness]
-  (if-not (nil? *lazy*) *lazy* default-laziness))
-
 ;; (defn- register-eager-rx-dep
 ;;   [id rx]
 ;;   (when-let [invalidate *invalidate-rx*]
@@ -271,7 +269,7 @@
   #js
   {:fastDeref (fn fastDeref []
                 (this-as this
-                         (if (lazy? (.-lazy this))
+                         (if (.-lazy this)
                            (register-dep this (.-id this) invalidates-binding-info)
                            (register-dep this (.-id this) fwatch-binding-info))
                          (when (.-dirty this) (.compute this))
