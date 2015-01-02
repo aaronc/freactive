@@ -250,15 +250,15 @@
                   attr-value node-state)
       (setter attr-value))))
 
-(defn add-event-handler! [element evt-name handler]
+(defn ^:dynamic ^:pluggable listen!
+  "Adds an event handler. Can be replaced by a plugin such as goog.events."
+  [element evt-name handler]
   (.addEventListener element evt-name handler))
 
-(defn remove-event-handler! [element evt-name handler]
+(defn ^:dynamic ^:pluggable unlisten!
+  "Removes an event handler. Can be replaced by a plugin such as goog.events."
+  [element evt-name handler]
   (.removeEventListener  element evt-name handler))
-
-(def ^:dynamic listen! add-event-handler!)
-
-(def ^:dynamic unlisten! remove-event-handler!)
 
 (defn- do-set-data-state! [element state]
   (set-attr! element "data-state" state))
