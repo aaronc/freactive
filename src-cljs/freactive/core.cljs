@@ -374,7 +374,7 @@
   (swap! ref (fn [cur] (setter cur (f (getter cur)))))
   (.rawDeref cursor))
 
-(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches iwatchers lazy invalidate add-watch-fn remove-watch-fn]
+(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches iwatchers lazy add-watch-fn remove-watch-fn]
   Object
   (equiv [this other]
     (-equiv this other))
@@ -447,7 +447,7 @@
 
 (apply-js-mixin ReactiveCursor fwatch-mixin)
 (apply-js-mixin ReactiveCursor invalidates-mixin)
-(apply-js-mixin ReactiveExpression rx-mixin)
+(apply-js-mixin ReactiveCursor rx-mixin)
 
 (defn cursor* [ref korks-or-getter setter lazy]
   (let [id (new-reactive-id)
@@ -463,7 +463,7 @@
                 (when ks
                   (fn [cur new-sub] (assoc-in cur ks new-sub)))
                 (fn [_ _] (assert false "Cursor does not support updates")))
-        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} 0 lazy nil nil nil)
+        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} 0 lazy nil nil)
         ;; invalidate  (make-invalidate-fn cursor id)
         binding-fns (get-binding-fns ref)
         add-watch-fn
