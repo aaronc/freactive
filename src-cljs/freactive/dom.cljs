@@ -7,26 +7,21 @@
 
 (defonce ^:private auto-node-id 0)
 
-;; (defonce ^:private element-state-lookup #js {})
-
 (defprotocol IElementSpec
   (-get-virtual-dom [x]))
+
+(defprotocol IHasDOMNode
+  (-get-dom-node [x]))
 
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
 
-(defn- get-attr [dom-node attr-name]
-  (when (.-getAttribute dom-node)
-    (.getAttribute dom-node attr-name)))
-
-;; (defn- get-node-id [x]
-;;   (get-attr x "data-freactive-id")
-;;   )
+(defn get-dom-node [x]
+  (if (dom-node? x)
+    x
+    (-get-dom-node x)))
 
 (defn- get-element-state [x]
-  ;;(get element-state-lookup x)
-  ;; (when-let [node-id (get-node-id x)]
-  ;;   (aget element-state-lookup node-id))
   (.-freactive-state x))
 
 (extend-protocol IElementSpec
@@ -35,12 +30,6 @@
 
   number
   (-get-virtual-dom [x] (str x)))
-
-(defn- get-element-spec [x]
-  (if (dom-node? x)
-    (when-let [state (get-element-state x)]
-      (.-element-spec state))
-    x))
 
 (defn- get-virtual-dom [x]
   (if x
@@ -58,26 +47,17 @@
     ;; nil values treated as empty "placeholder" text nodes
     ""))
 
-;; (deftype ElementState [id disposed element-spec child-states])
-
-(declare set-attr!)
-
-(defn- reset-element-spec! [state spec tag]
+(defn- reset-element-state! [state]
   (when-let [on-disposed (.-disposed-callback state)]
     (on-disposed)
-    (set! (.-disposed-callback state) nil))
-  (set! (.-element-spec state) spec))
+    (set! (.-disposed-callback state) nil)))
 
-(defn- init-element-state! [dom-node element-spec tag]
+(defn- init-element-state! [dom-node tag]
   (let [node-id (str auto-node-id)
         state ;;(ElementState. node-id false element-spec nil)
         #js
-        {:id node-id :disposed false :tag tag
-         :element_spec element-spec}]
+        {:id node-id :disposed false :tag tag}]
     (set! auto-node-id (inc auto-node-id))
-    ;; (set-attr! dom-node "data-freactive-id" node-id)
-    ;; (init-element-meta! state element-spec tag)
-    ;; (aset element-state-lookup node-id state)
     (set! (.-freactive-state dom-node) state)
     state))
 
@@ -89,9 +69,6 @@
 (defn- unregister-from-parent-state [parent-state child-key]
   (when-let [child-states (.-child-states parent-state)]
     (js-delete child-states child-key)))
-
-(defprotocol IRemove
-  (-remove! [x]))
 
 (defn- dispose-state [state]
   (set! (.-disposed state) true)
@@ -125,9 +102,8 @@
     (.removeChild parent dom-node)))
 
 (defn remove! [x]
-  (if (dom-node? x)
-    (remove-dom-node x)
-    (-remove! x)))
+  (assert (dom-node? x) "remove! only implemented for DOM nodes currently")
+  (remove-dom-node x))
 
 ;; ## Polyfills
 
@@ -150,7 +126,7 @@
 
 (def ^:private enable-fps-instrumentation false)
 
-(defn- enable-fps-instrumentation!
+(defn enable-fps-instrumentation!
   ([] (enable-fps-instrumentation! true))
   ([enable] (set! enable-fps-instrumentation enable)))
 
@@ -221,8 +197,6 @@
             attr-state #js {:disposed false
                             :disposed_callback
                             (fn []
-                              ;; (println "cleaning attr binding")
-                              ;; (println "disposing attr binding" key)
                               (remove-watch* ref key)
                               (when clean* (clean* ref))
                               (when-let [binding-disposed (get ref-meta :binding-disposed)]
@@ -280,7 +254,7 @@
         (when-let [enter-transition (get-state-attr node-state (str ":state/on-" state))]
           (enter-transition element cur-state state))))))
 
-(defn bind-attr-key [attr-key] (str "-attr:" attr-key))
+(defn- bind-attr-key [attr-key] (str "-attr:" attr-key))
 
 (defn- bind-prop-attr! [set-fn element attr-key attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
@@ -393,7 +367,7 @@
       (binder node k v node-state)
       (aset js-attrs (str k) v))))
 
-(defn- set-attrs! [node attrs]
+(defn set-attrs! [node attrs]
   (let [node-state (get-element-state node)
         style (:style attrs)
         js-attrs (.-attrs node-state)
@@ -437,19 +411,6 @@
                            new-style
                            bind-style-prop!))))
 
-;(defn- create-dom-node-simple [tag]
-;  (let [tag-ns (namespace tag)
-;        node (if tag-ns
-;               (let [resolved-ns
-;                     (if (identical? tag-ns "svg")
-;                       "http://www.w3.org/2000/svg"
-;                       (get-xml-namespace tag-ns))]
-;                 (.createElementNS js/document resolved-ns tag))
-;               (.createElement js/document tag))]
-;    node))
-
-;; ## Core DOM Manipulation Methods
-
 (declare build)
 
 (defn- text-node? [dom-node]
@@ -461,7 +422,7 @@
   (when-not (text-node? new-elem)
     (let [parent-state (get-element-state parent)
           parent-state (or parent-state
-                           (init-element-state! parent nil nil))]
+                           (init-element-state! parent nil))]
       (let [state (get-element-state new-elem)]
         (set! (.-parent-state state) parent-state)
         (register-with-parent-state parent-state (.-id state) state)
@@ -527,30 +488,28 @@
   (let [cur-state (get-element-state cur-dom-node)
         cur-tag (.-tag cur-state)
         new-tag (first vdom)]
-    (if (identical? spec (.-element-spec cur-state))
-      cur-dom-node
-      (if (keyword-identical? new-tag cur-tag)
-        (do
-          ;; (println "diff hit" (first vdom) (.-id cur-state))
-          (let [                                            ;;old-attrs (.-attrs cur-state)
-                new-attrs? (second vdom)
-                new-attrs (when (map? new-attrs?) new-attrs?)]
-            (reset-element-spec! cur-state vdom new-tag)
-            (replace-attrs! cur-dom-node
-                            cur-state
-                            new-attrs)
-            (let [new-children (if new-attrs (nnext vdom) (next vdom))
-                  dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
-              (loop [cur-child dangling-child]
-                (when cur-child
-                  (let [next-sib (.-nextSibling cur-child)]
-                    (remove-dom-node cur-child)
-                    (recur next-sib)))))
-            (on-attached cur-state cur-dom-node)
-            cur-dom-node))
-        (do
-          ;; (println "build hit" (first vdom) (first cur-vdom))
-          (replace-node-completely parent vdom cur-dom-node top-level))))))
+    (if (keyword-identical? new-tag cur-tag)
+      (do
+        ;; (println "diff hit" (first vdom) (.-id cur-state))
+        (let [                                            ;;old-attrs (.-attrs cur-state)
+              new-attrs? (second vdom)
+              new-attrs (when (map? new-attrs?) new-attrs?)]
+          (reset-element-state! cur-state)
+          (replace-attrs! cur-dom-node
+                          cur-state
+                          new-attrs)
+          (let [new-children (if new-attrs (nnext vdom) (next vdom))
+                dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
+            (loop [cur-child dangling-child]
+              (when cur-child
+                (let [next-sib (.-nextSibling cur-child)]
+                  (remove-dom-node cur-child)
+                  (recur next-sib)))))
+          (on-attached cur-state cur-dom-node)
+          cur-dom-node))
+      (do
+        ;; (println "build hit" (first vdom) (first cur-vdom))
+        (replace-node-completely parent vdom cur-dom-node top-level)))))
 
 (declare bind-child)
 
@@ -606,15 +565,8 @@
 
 (deftype ReactiveElement [id parent ref cur-element dirty updating disposed
                           animate invalidate]
-  IElementSpec
-  (-get-virtual-dom [_] ref)
-  IRemove
-  (-remove! [this]
-    (set! (.-disposed this) true)
-    (when-not updating
-      (remove! cur-element))
-    (when-let [parent-state (get-element-state parent)]
-      (unregister-from-parent-state parent-state id))))
+  IHasDOMNode
+  (-get-dom-node [_] (get-dom-node cur-element)))
 
 (defn- bind-child* [parent child-ref before cur insert-child* replace-child* remove*]
   (let [binding-fns (r/get-binding-fns child-ref)
@@ -706,14 +658,12 @@
           (binding-initialized))
         (set! (.-updating state) false)
         (show-new-elem (get-new-elem) cur)
-        state)
+        (.-cur-element state))
       (do
         (insert-child* (raw-deref* child-ref) before)))))
 
 (defn- bind-child [parent child before cur]
-  (if-let [binder (:binder (meta child))]
-    (binder parent child before cur append-or-insert-child replace-child remove-dom-node)
-    (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node)))
+  (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node))
 
 ;; Building Elements
 
@@ -784,7 +734,7 @@ map in vdom."
                               (fn [cls]
                                 (let [class (.replace class re-dot " ")]
                                   (if cls (str class " " cls) class)))))
-        state (init-element-state! node elem-spec tag)
+        state (init-element-state! node tag)
         children (if attrs (rest tail) tail)]
     (bind-attrs! node attrs state)
     (when children

@@ -5,14 +5,6 @@
 
 (defn- create-cursor [k v])
 
-(defn- get-node [nodes k v view-fn]
-  (loop [node (get nodes k)]
-    (if node
-      (if (instance? dom/ReactiveElement node)
-        (recur (.-cur-element node))
-        node)
-      (view-fn (create-cursor k v)))))
-
 (deftype ItemsView [container items view-fn
                     ^:mutable projection nodes
                     lower-index upper-index
@@ -20,6 +12,10 @@
                     filter
                     disposed]
   Object
+  (getNode [this k v]
+    (or (when-let [node (get nodes k)]
+        (dom/get-dom-node node))
+      (view-fn (create-cursor k v))))
   (withinBounds [this idx k v]
     (if range-test
       (range-test idx k v)

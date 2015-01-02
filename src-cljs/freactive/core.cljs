@@ -51,31 +51,28 @@
      (fn [val key obj]
        (aset ptype key val)))))
 
-(defn- -addFWatch [key f]
-  (this-as this
-           (when-not (aget (.-fwatches this) key)
-             (set! (.-watchers this) (inc (.-watchers this)))
-             (aset (.-fwatches this) key f))))
-
-(defn- -removeFWatch [key]
-  (this-as this
-           (when (aget (.-fwatches this) key)
-             (set! (.-watchers this) (dec (.-watchers this)))
-             (js-delete (.-fwatches this) key))))
-
-(defn- -notifyFWatches [oldVal newVal]
-  (this-as this
-           (goog.object/forEach
-            (.-fwatches this)
-            (fn [f key _]
-              (f key this oldVal newVal)))
-           (doseq [[key f] (.-watches this)]
-             (f key this oldVal newVal))))
-
 (def fwatch-mixin
-  #js {:addFWatch -addFWatch
-       :removeFWatch -removeFWatch
-       :notifyFWatches -notifyFWatches})
+  #js {:addFWatch
+       (fn addFWatch [key f]
+         (this-as this
+                  (when-not (aget (.-fwatches this) key)
+                    (set! (.-watchers this) (inc (.-watchers this)))
+                    (aset (.-fwatches this) key f))))
+       :removeFWatch
+       (fn removeFWatch [key]
+         (this-as this
+                  (when (aget (.-fwatches this) key)
+                    (set! (.-watchers this) (dec (.-watchers this)))
+                    (js-delete (.-fwatches this) key))))
+       :notifyFWatches
+       (fn notifyFWatches [oldVal newVal]
+         (this-as this
+                  (goog.object/forEach
+                   (.-fwatches this)
+                   (fn [f key _]
+                     (f key this oldVal newVal)))
+                  (doseq [[key f] (.-watches this)]
+                    (f key this oldVal newVal))))})
 
 (let [core-deref cljs.core/deref]
   (set! cljs.core/deref (fn [x]
@@ -152,10 +149,6 @@
 
 (apply-js-mixin ReactiveAtom fwatch-mixin)
 
-;; (extend ReactiveAtom
-;;   IWatchable
-;;   IWatchable-extension)
-
 (defn atom
   "Creates and returns a ReactiveAtom with an initial value of x and zero or
   more options (in any order):
@@ -170,26 +163,10 @@
   ([x] (ReactiveAtom. (new-reactive-id )x nil nil nil #js {} 0))
   ([x & {:keys [meta validator]}] (ReactiveAtom. (new-reactive-id) x meta validator nil #js {} 0)))
 
-;; (defn- make-invalidate-fn [reactive id]
-;;   (let [invalidate-fn
-;;         (fn invalidate []
-;;           (when-not (.-dirty reactive)
-;;             (set! (.-dirty reactive) true)
-;;             (if (> (.-watchers reactive) 0)
-;;               ;; updates state and notifies watches
-;;               (when (.compute reactive)
-;;                 (.notifyInvalidationWatches reactive))
-;;               ;; updates only invalidation watches
-;;               (.notifyInvalidationWatches reactive))))]
-;;     (set! (.-id invalidate-fn) id)
-;;     (set! (.-deps invalidate-fn) #js {})
-;;     invalidate-fn))
-
 (defn- make-register-dep [rx]
   (fn do-register-dep [dep id binding-info]
     (when *trace-capture* (*trace-capture* dep))
     (aset (.-deps rx) id #js [dep binding-info])
-    ;; (println "cur deps:" (.-deps rx))
     ((.-add-watch binding-info)
      dep (.-id rx)
      (fn []
@@ -197,53 +174,28 @@
        (js-delete (.-deps rx) id)
        (.invalidate rx)))))
 
-;; (defn- register-eager-rx-dep
-;;   [id rx]
-;;   (when-let [invalidate *invalidate-rx*]
-;;     (when *trace-capture* (*trace-capture* rx))
-;;     (aset (.-deps invalidate) id rx)
-;;     (.addFWatch
-;;      rx (.-id invalidate)
-;;      (fn [_ _ _ _]
-;;        (.removeFWatch rx id)
-;;        (invalidate)))))
-
-;; (defn- register-lazy-rx-dep
-;;   [id rx]
-;;   (when-let [invalidate *invalidate-rx*]
-;;     (when *trace-capture* (*trace-capture* rx))
-;;     (aset (.-deps invalidate) id rx)
-;;     (.addInvalidationWatch
-;;      rx (.-id invalidate)
-;;      (fn [_ _]
-;;        (.removeInvalidationWatch rx id)
-;;        (invalidate)))))
-
-(defn- -notifyInvalidationWatches []
-  (this-as this
-           (goog.object/forEach
-            (.-invalidation-watches this)
-            (fn [f key _]
-              (f key this)))))
-
-(defn- -addInvalidationWatch [key f]
-  (this-as this
-           (when-not (aget (.-invalidation-watches this) key)
-             (set! (.-iwatchers this) (inc (.-iwatchers this)))
-             (aset (.-invalidation-watches this) key f))
-           this))
-
-(defn- -removeInvalidationWatch [key]
-  (this-as this
-           (when (aget (.-invalidation-watches this) key)
-             (set! (.-iwatchers this) (dec (.-iwatchers this)))
-             (js-delete (.-invalidation-watches this) key))
-           this))
-
 (def invalidates-mixin
-  #js {:notifyInvalidationWatches -notifyInvalidationWatches
-       :addInvalidationWatch -addInvalidationWatch
-       :removeInvalidationWatch -removeInvalidationWatch
+  #js {:notifyInvalidationWatches
+       (fn notifyInvalidationWatches []
+         (this-as this
+                  (goog.object/forEach
+                   (.-invalidation-watches this)
+                   (fn [f key _]
+                     (f key this)))))
+       :addInvalidationWatch 
+       (fn addInvalidationWatch [key f]
+         (this-as this
+                  (when-not (aget (.-invalidation-watches this) key)
+                    (set! (.-iwatchers this) (inc (.-iwatchers this)))
+                    (aset (.-invalidation-watches this) key f))
+                  this))
+       :removeInvalidationWatch
+       (fn removeInvalidationWatch [key]
+         (this-as this
+                  (when (aget (.-invalidation-watches this) key)
+                    (set! (.-iwatchers this) (dec (.-iwatchers this)))
+                    (js-delete (.-invalidation-watches this) key))
+                  this))
        :invalidate
        (fn invalidate []
          (this-as this
@@ -299,10 +251,8 @@
         (.notifyFWatches this old-val new-val)
         new-val)))
   (clean [this]
-    ;; (println "trying to clean" watchers iwatchers invalidation-watches)
     (when ;;true
         (and (identical? 0 watchers) (identical? 0 iwatchers))
-      ;; (println "cleaning" id)
       (goog.object/forEach deps
                            (fn [val key obj]
                              ;; (println "cleaning:" key val)
@@ -313,11 +263,7 @@
                                (when-let [clean* (.-clean binding-info)]
                                  (clean* dep)))
                              (js-delete obj key)))
-      ;; (.invalidate this)
-      ;; (when-not (.-dirty this)
-      ;;   (.invalidate this))
-      (set! (.-dirty this) true)
-    ))
+      (set! (.-dirty this) true)))
   
   IReactive
   (-get-binding-fns [this]
