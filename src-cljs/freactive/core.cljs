@@ -26,7 +26,7 @@
 
 (defn register-dep
   ([dep]
-   (register-dep dep (goog/getUid) (get-binding-fns dep)))
+   (register-dep dep (goog/getUid dep) (get-binding-fns dep)))
   ([dep id binding-info]
    (when-let [rdep *register-dep*]
      (rdep dep id binding-info))))

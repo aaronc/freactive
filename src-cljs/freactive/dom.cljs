@@ -15,18 +15,15 @@ or dates; or can be used to define containers for DOM elements themselves."
     "Should return either virtual DOM (a vector or string) or an actual DOM node.
 "))
 
-(defn- dom-node? [x]
-  (and x (> (.-nodeType x) 0)))
-
-(defn- get-element-state [x]
-  (.-freactive-state x))
-
 (extend-protocol IDOMImage
   boolean
   (-get-dom-image [x] (str x))
 
   number
   (-get-dom-image [x] (str x)))
+
+(defn- dom-node? [x]
+  (and x (> (.-nodeType x) 0)))
 
 (defn- get-dom-image [x]
   (if x
@@ -43,6 +40,9 @@ or dates; or can be used to define containers for DOM elements themselves."
 
     ;; nil values treated as empty "placeholder" text nodes
     ""))
+
+(defn- get-element-state [x]
+  (.-freactive-state x))
 
 (defn- reset-element-state! [state]
   (when-let [on-disposed (.-disposed-callback state)]

@@ -13,7 +13,7 @@
      false))
 
 (defmacro non-reactively [& body]
-  `(binding [freactive.core/*invalidate-rx* nil]
+  `(binding [freactive.core/*register-dep* nil]
      ~@body))
 
 (def ^:private auto-id (atom 0))
@@ -34,11 +34,6 @@
                                (cljs.core/js-keys (.-invalidation-watches res#))
                                "& watches:"
                                (cljs.core/keys (.-watches res#))))]
-       (freactive.core/add-invalidation-watch res# ~id invalidation-cb#)
+       (.addInvalidationWatch res# ~id invalidation-cb#)
        res#)))
-
-
-;(defmacro animation-rx [& body]
-;  `(freactive.experimental.animation/animation-rx*
-;     (fn [] ~@body)))
 
