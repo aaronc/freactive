@@ -4,22 +4,17 @@
     [freactive.dom :as dom]
     [goog.object]))
 
-(def ^:private easer-binding-info
-  (r/->BindingInfo
-   #(.fastDeref %)
-   #(.addFWatch % %2 %3)
-   #(.removeFWatch % %2)
-   nil))
-
 (deftype AnimationEaser [id state easing-fn animating on-complete
                          watches fwatches]
   Object
-  (fastDeref [this]
-    (r/register-dep this id easer-binding-info)
+  (rawDeref [this] state)
+  (reactiveDeref [this]
+    (r/register-dep this id r/fwatch-binding-info)
     state)
+  (clean [_])
 
   r/IReactive
-  (-get-binding-fns [this] easer-binding-info)
+  (-get-binding-fns [this] r/fwatch-binding-info)
 
   IWatchable
   (-notify-watches [this oldval newval]
@@ -32,7 +27,7 @@
     this)
 
   IDeref
-  (-deref [this] (.fastDeref this)))
+  (-deref [this] (.reactiveDeref this)))
 
 (r/apply-js-mixin AnimationEaser r/fwatch-mixin)
 

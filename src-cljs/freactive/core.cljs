@@ -74,11 +74,11 @@
                   (doseq [[key f] (.-watches this)]
                     (f key this oldVal newVal))))})
 
-;; (let [core-deref cljs.core/deref]
-;;   (set! cljs.core/deref (fn [x]
-;;                           (if (.-reactiveDeref x)
-;;                             (.reactiveDeref x)
-;;                             (core-deref x)))))
+(let [core-deref cljs.core/deref]
+  (set! cljs.core/deref (fn [x]
+                          (if (.-reactiveDeref x)
+                            (.reactiveDeref x)
+                            (core-deref x)))))
 
 (def fwatch-binding-info
   (BindingInfo.
@@ -89,6 +89,9 @@
   (equiv [this other]
     (-equiv this other))
   (rawDeref [_] state)
+  (reactiveDeref [this]
+    (register-dep this id fwatch-binding-info) 
+    state)
   (clean [this])
   cljs.core/IAtom
 
@@ -99,9 +102,7 @@
   (-equiv [o other] (identical? o other))
 
   cljs.core/IDeref
-  (-deref [this]
-    (register-dep this id fwatch-binding-info) 
-    state)
+  (-deref [this] (.reactiveDeref this))
 
   IMeta
   (-meta [_] meta)
