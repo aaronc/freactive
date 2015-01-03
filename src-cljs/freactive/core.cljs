@@ -26,7 +26,7 @@
 
 (defn register-dep
   ([dep]
-   (register-dep dep (goog/getUid) (get-binding-fns)))
+   (register-dep dep (goog/getUid) (get-binding-fns dep)))
   ([dep id binding-info]
    (when-let [rdep *register-dep*]
      (rdep dep id binding-info))))
@@ -324,7 +324,7 @@
     (-equiv this other))
   (compute [cursor]
     (set! (.-dirty cursor) false)
-    (add-watch-fn this)
+    (add-watch-fn cursor)
     (let [new-value ((.-getter cursor) @ref)
           old-value (.-state cursor)]
       (when-not (identical? old-value new-value)

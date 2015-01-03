@@ -15,10 +15,8 @@ or dates; or can be used to define containers for DOM elements themselves."
     "Should return either virtual DOM (a vector or string) or an actual DOM node.
 "))
 
-(defn get-dom-node [x]
-  (if (dom-node? x)
-    x
-    (-get-dom-node x)))
+(defn- dom-node? [x]
+  (and x (> (.-nodeType x) 0)))
 
 (defn- get-element-state [x]
   (.-freactive-state x))
