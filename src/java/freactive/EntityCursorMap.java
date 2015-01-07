@@ -2,13 +2,29 @@ package freactive;
 
 import clojure.lang.*;
 
+import java.util.Map;
+
 public class EntityCursorMap {
     class EntityCursor implements IReactiveAtom, IEntityCursor {
         private final Object entityKey;
+        private Object entityValue;
+        private CallbackSet watches;
+        private CallbackSet iwatches;
 
-        EntityCursor(Object entityKey)
+        private EntityCursor(Object entityKey, Object entityValue)
         {
             this.entityKey = entityKey;
+            this.entityValue = entityValue;
+        }
+
+        private void update(Object newValue)
+        {
+            Object oldValue = entityValue;
+            entityValue = newValue;
+            if(watches != null)
+                watches.invokeAll(oldValue, newValue);
+            if(iwatches != null)
+                iwatches.invokeAll();
         }
 
         @Override
@@ -73,17 +89,22 @@ public class EntityCursorMap {
 
         @Override
         public IInvalidates addInvalidationWatch(Object key, IFn callback) {
-            return null;
+            if(iwatches == null)
+                iwatches = new CallbackSet(this);
+            iwatches.add(key, callback);
+            return this;
         }
 
         @Override
         public IInvalidates removeInvalidationWatch(Object key) {
-            return null;
+            if(iwatches != null)
+                iwatches.remove(key);
+            return this;
         }
 
         @Override
         public void setValidator(IFn vf) {
-
+            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -93,26 +114,34 @@ public class EntityCursorMap {
 
         @Override
         public IPersistentMap getWatches() {
+            if(watches != null)
+                return watches.getCallbacks();
             return null;
         }
 
         @Override
         public IRef addWatch(Object key, IFn callback) {
-            return null;
+            if(watches == null)
+                watches = new CallbackSet(this);
+            watches.add(key, callback);
+            return this;
         }
 
         @Override
         public IRef removeWatch(Object key) {
-            return null;
+            if(watches != null)
+                watches.remove(key);
+            return this;
         }
 
         @Override
         public Object deref() {
-            return null;
+            return entityValue;
         }
     }
 
     private final IObservableCollection coll;
+
     private final Atom cursorMap = new Atom(PersistentHashMap.EMPTY);
 
     public EntityCursorMap(IObservableCollection coll) {
@@ -120,6 +149,40 @@ public class EntityCursorMap {
         coll.subscribe(this, new AFn() {
             @Override
             public Object invoke(Object key, Object coll, Object changes) {
+                for(ISeq cs = RT.seq(changes); cs != null; cs = cs.next())
+                {
+                    Object first = cs.first();
+                    if(first instanceof Map.Entry)
+                    {
+                        Map.Entry me = (Map.Entry)first;
+                        final Object k = me.getKey();
+                        Object v = me.getValue();
+                        Object cursor = ((IPersistentMap)cursorMap.deref()).valAt(k);
+                        if(cursor != null)
+                        {
+                            ((EntityCursor)cursor).update(v);
+                            if(v == null)
+                                cursorMap.swap(new AFn() {
+                                    @Override
+                                    public Object invoke(Object state) {
+                                        return ((IPersistentMap)state).without(k);
+                                    }
+                                });
+                        }
+                        else {
+                            if(v != null)
+                            {
+                                final EntityCursor newCursor = new EntityCursor(k, v);
+                                cursorMap.swap(new AFn() {
+                                    @Override
+                                    public Object invoke(Object state) {
+                                        return ((IPersistentMap)state).assoc(k, newCursor);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
                 return null;
             }
         });
@@ -129,6 +192,6 @@ public class EntityCursorMap {
         Object cursor = ((IPersistentMap)cursorMap.deref()).valAt(key);
         if(cursor != null)
             return (IEntityCursor)cursor;
-        return null;
+        else return null;
     }
 }
