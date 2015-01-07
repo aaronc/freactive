@@ -1,7 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [freactive ReactiveAtom Reactive StatefulReactive ReactiveAtomView]))
+  (:import [freactive ReactiveAtom Reactive StatefulReactive ReactiveCursor]))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -42,11 +42,23 @@ return false or throw an exception."
 (defn reactive-state [init-state f & options]
   (#'clojure.core/setup-reference (StatefulReactive. init-state f) options))
 
-(defn reactive-atom-view
-  ([ratom view-transform]
-   (reactive-atom-view view-transform (fn [x _] x)))
-  ([ratom view-transform update-transform]
-   (ReactiveAtomView. ratom view-transform update-transform)))
+(defn cursor
+  ([ratom korks-or-getter]
+   (cursor ratom korks-or-getter))
+  ([ratom korks-or-getter setter]
+    (let [ks (cond
+               (keyword? korks-or-getter)
+               [korks-or-getter]
+
+               (sequential? korks-or-getter)
+               korks-or-getter)
+          getter (if ks (fn [cur] (get-in cur ks)) korks-or-getter)
+          setter (or
+                   setter
+                   (when ks
+                     (fn [cur new-sub] (assoc-in cur ks new-sub)))
+                   (fn [_ _] (assert false "Cursor does not support updates")))]
+      (ReactiveCursor. ratom getter setter))))
 
 ;; (import '(java.util TimerTask Timer))
 
@@ -90,11 +102,11 @@ return false or throw an exception."
 
 ;; (test2)
 
-(defn atom-view
-  ([ratom view-fn]
-   (atom-view ratom view-fn identity))
-  ([ratom view-fn update-fn]
-   (ReactiveAtomView. ratom view-fn update-fn)))
+;(defn atom-view
+;  ([ratom view-fn]
+;    (atom-view ratom view-fn identity))
+;  ([ratom view-fn update-fn]
+;    (ReactiveAtomView. ratom view-fn update-fn)))
 
 (def rx* reactive*)
 

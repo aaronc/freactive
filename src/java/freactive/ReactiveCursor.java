@@ -4,7 +4,7 @@ import clojure.lang.*;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ReactiveAtomView implements IReactiveAtom {
+public class ReactiveCursor implements IReactiveAtom {
     private final IReactiveAtom source;
     private volatile Object curView;
     private volatile Object cur;
@@ -15,8 +15,8 @@ public class ReactiveAtomView implements IReactiveAtom {
     private final IFn viewTransform;
     private final IFn updateTransform;
 
-    public ReactiveAtomView(final IReactiveAtom source, final IFn viewTransform,
-                            final IFn updateTransform) {
+    public ReactiveCursor(final IReactiveAtom source, final IFn viewTransform,
+                          final IFn updateTransform) {
         this.source = source;
         this.viewTransform = viewTransform;
         this.updateTransform = updateTransform;
@@ -101,7 +101,7 @@ public class ReactiveAtomView implements IReactiveAtom {
 
     @Override
     public boolean compareAndSet(Object oldv, Object newv) {
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("compareAndSet not supported for cursors");
     }
 
     @Override

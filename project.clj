@@ -26,5 +26,6 @@
                                   :pretty-print true
                                   :source-map    true}}]}}}
   :source-paths ["src/clojure" "src-cljs"]
+  :test-paths ["test" "example"]
   :javac-options ["-Xlint:unchecked"]
   :java-source-paths ["src/java"])
