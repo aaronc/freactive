@@ -1,7 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [freactive ReactiveAtom Reactive StatefulReactive ReactiveCursor]))
+  (:import [freactive ReactiveAtom Reactive StatefulReactive ReactiveCursor IHasCursors KeyedCursor ObservableMap] (clojure.lang IDeref)))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -42,23 +42,31 @@ return false or throw an exception."
 (defn reactive-state [init-state f & options]
   (#'clojure.core/setup-reference (StatefulReactive. init-state f) options))
 
-(defn cursor
-  ([ratom korks-or-getter]
-   (cursor ratom korks-or-getter))
-  ([ratom korks-or-getter setter]
-    (let [ks (cond
-               (keyword? korks-or-getter)
-               [korks-or-getter]
-
-               (sequential? korks-or-getter)
-               korks-or-getter)
-          getter (if ks (fn [cur] (get-in cur ks)) korks-or-getter)
-          setter (or
-                   setter
-                   (when ks
-                     (fn [cur new-sub] (assoc-in cur ks new-sub)))
+(defn lens-cursor
+  ([ratom getter]
+    (lens-cursor getter nil))
+  ([ratom getter setter]
+    (let [setter (or setter
                    (fn [_ _] (assert false "Cursor does not support updates")))]
       (ReactiveCursor. ratom getter setter))))
+
+(defn cursor
+  ([ratom korks]
+    (reduce
+      (fn [parent key]
+        (if (instance? IHasCursors parent)
+          (.getKeyedCursor parent key)
+          (KeyedCursor. parent key)))
+      ratom
+      (cond
+        (keyword? korks)
+        [korks]
+
+        (sequential? korks)
+        korks
+
+        :default
+        (assert false (str "Don't know how to create a cursor from" korks))))))
 
 ;; (import '(java.util TimerTask Timer))
 
@@ -114,3 +122,8 @@ return false or throw an exception."
   `(freactive.core/rx*
      (fn []
        ~@body)))
+
+(defn observable-map [data] (ObservableMap.
+                              (if (instance? IDeref data)
+                                data
+                                (atom data))))

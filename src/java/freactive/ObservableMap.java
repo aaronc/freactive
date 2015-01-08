@@ -107,7 +107,7 @@ public class ObservableMap implements ITransientMap, IObservableCollection, ITra
     }
 
     @Override
-    public IEntityCursor entityCursor(Object entityKey) {
+    public IKeyedCursor entityCursor(Object entityKey) {
         return null;
     }
 

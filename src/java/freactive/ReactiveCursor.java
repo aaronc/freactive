@@ -5,7 +5,7 @@ import clojure.lang.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ReactiveCursor implements IReactiveAtom {
-    private final IReactiveAtom source;
+    protected final IReactiveAtom source;
     private volatile Object curView;
     private volatile Object cur;
     private final CallbackSet invalidationWatches = new CallbackSet(this);

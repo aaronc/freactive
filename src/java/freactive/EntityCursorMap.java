@@ -5,11 +5,11 @@ import clojure.lang.*;
 import java.util.Map;
 
 public class EntityCursorMap {
-    class EntityCursor implements IReactiveAtom, IEntityCursor {
+    class EntityCursor implements IReactiveAtom, IKeyedCursor {
         private final Object entityKey;
         private Object entityValue;
         private CallbackSet watches;
-        private CallbackSet iwatches;
+        private CallbackSet invalidationWatches;
 
         private EntityCursor(Object entityKey, Object entityValue)
         {
@@ -23,12 +23,17 @@ public class EntityCursorMap {
             entityValue = newValue;
             if(watches != null)
                 watches.invokeAll(oldValue, newValue);
-            if(iwatches != null)
-                iwatches.invokeAll();
+            if(invalidationWatches != null)
+                invalidationWatches.invokeAll();
         }
 
         @Override
-        public Object entityKey() {
+        public Object cursorParent() {
+            return coll;
+        }
+
+        @Override
+        public Object cursorKey() {
             return entityKey;
         }
 
@@ -89,16 +94,16 @@ public class EntityCursorMap {
 
         @Override
         public IInvalidates addInvalidationWatch(Object key, IFn callback) {
-            if(iwatches == null)
-                iwatches = new CallbackSet(this);
-            iwatches.add(key, callback);
+            if(invalidationWatches == null)
+                invalidationWatches = new CallbackSet(this);
+            invalidationWatches.add(key, callback);
             return this;
         }
 
         @Override
         public IInvalidates removeInvalidationWatch(Object key) {
-            if(iwatches != null)
-                iwatches.remove(key);
+            if(invalidationWatches != null)
+                invalidationWatches.remove(key);
             return this;
         }
 
@@ -188,10 +193,10 @@ public class EntityCursorMap {
         });
     }
 
-    public IEntityCursor getEntityCursor(Object key) {
+    public IKeyedCursor getEntityCursor(Object key) {
         Object cursor = ((IPersistentMap)cursorMap.deref()).valAt(key);
         if(cursor != null)
-            return (IEntityCursor)cursor;
+            return (IKeyedCursor)cursor;
         else return null;
     }
 }
