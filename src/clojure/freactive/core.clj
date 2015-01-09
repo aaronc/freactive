@@ -1,7 +1,7 @@
 (ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref swap! reset! compare-and-set!])
-  (:import [freactive ReactiveAtom Reactive StatefulReactive ReactiveCursor IHasCursors KeyedCursor ObservableMap] (clojure.lang IDeref)))
+  (:import [freactive ReactiveAtom ReactiveExpression StatefulReactive ReactiveCursor IHasCursors KeyedCursor ObservableMap] (clojure.lang IDeref)))
 
 ;; Copying clojure.core atom stuff here so that we can use my ReactiveAtom class.
 
@@ -24,10 +24,10 @@ return false or throw an exception."
   ([x & options] (#'clojure.core/setup-reference (atom x) options)))
 
 (defn reactive* [f & options]
-  (#'clojure.core/setup-reference (Reactive. f) options))
+  (#'clojure.core/setup-reference (ReactiveExpression. f) options))
 
 (defn eager-reactive* [f & options]
-  (#'clojure.core/setup-reference (Reactive. f false) options))
+  (#'clojure.core/setup-reference (ReactiveExpression. f false) options))
 
 (defmacro reactive [& body]
   `(freactive.core/reactive*

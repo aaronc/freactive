@@ -2,9 +2,28 @@ package freactive;
 
 import clojure.lang.*;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ReactiveCursor implements IReactiveAtom {
+   private static final IReactive.BindingInfo EagerBindingInfo =
+            new BindingInfo(new AFn() {
+                @Override
+                public Object invoke(Object self) {
+                    return ((ReactiveExpression) self).rawDeref();
+                }
+            }, new AFn() {
+                @Override
+                public Object invoke(Object self, Object key, Object f) {
+                    return ((IRef) self).addWatch(key, (IFn)f);
+                }
+            }, new AFn() {
+                @Override
+                public Object invoke(Object self, Object key) {
+                    return ((IRef) self).removeWatch(key);
+                }
+            }, null);
+
     protected final IReactiveAtom source;
     private volatile Object curView;
     private volatile Object cur;
@@ -163,4 +182,10 @@ public class ReactiveCursor implements IReactiveAtom {
             curView = viewTransform.invoke(source.deref());
         return curView;
     }
+
+    @Override
+    public BindingInfo getBindingInfo() {
+        return EagerBindingInfo;
+    }
+
 }

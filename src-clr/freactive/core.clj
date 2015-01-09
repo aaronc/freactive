@@ -1,7 +1,7 @@
 ﻿(ns freactive.core
   (:refer-clojure
    :exclude [atom agent ref])
-  (:import [freactive ReactiveAtom Reactive]))
+  (:import [freactive ReactiveAtom ReactiveExpression]))
 
 (defn atom
   "Creates and returns an Atom with an initial value of x and zero or
@@ -22,7 +22,7 @@ return false or throw an exception."
   ([x & options] (#'clojure.core/setup-reference (atom x) options)))
 
 (defn reactive [f & options]
-  (#'clojure.core/setup-reference (Reactive. f) options))
+  (#'clojure.core/setup-reference (ReactiveExpression. f) options))
 
 (import '(System.Timers Timer))
 

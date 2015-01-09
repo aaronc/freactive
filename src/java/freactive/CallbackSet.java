@@ -126,4 +126,12 @@ public class CallbackSet {
     public IPersistentMap getCallbacks() {
         return (IPersistentMap)callbacks.deref();
     }
+
+    public int count() {
+        return getCallbacks().count();
+    }
+
+    public boolean empty() {
+        return count() <= 0;
+    }
 }

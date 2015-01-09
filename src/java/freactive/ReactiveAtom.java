@@ -35,7 +35,7 @@ public ReactiveAtom(Object state, IPersistentMap meta){
 }
 
 public Object deref(){
-    Reactive.registerDep(this);
+    IReactive.registerDep(this);
 	return state.get();
 }
 
@@ -157,4 +157,9 @@ public synchronized IInvalidates removeInvalidationWatch(Object key) {
 public IPersistentMap getInvalidationWatches() {
     return getWatches();
 }
+
+	@Override
+	public BindingInfo getBindingInfo() {
+		return IReactive.IRefBindingInfo;
+	}
 }

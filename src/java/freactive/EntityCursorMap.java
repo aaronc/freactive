@@ -143,6 +143,11 @@ public class EntityCursorMap {
         public Object deref() {
             return entityValue;
         }
+
+        @Override
+        public BindingInfo getBindingInfo() {
+            return null;
+        }
     }
 
     private final IObservableCollection coll;

@@ -13,20 +13,17 @@
   (BindingInfo. cljs.core/-deref cljs.core/-add-watch
           cljs.core/-remove-watch nil))
 
-(def ^:private deref-only-binding-fns
-  (BindingInfo. cljs.core/-deref nil nil nil))
-
 (defn get-binding-fns [iref]
   (cond
    (satisfies? IReactive iref) (-get-binding-fns iref)
-   (satisfies? IWatchable iref) iwatchable-binding-fns
-   :default deref-only-binding-fns))
+   iwatchable-binding-fns))
 
 (def ^:dynamic *register-dep* nil)
 
 (defn register-dep
   ([dep]
-   (register-dep dep (goog/getUid dep) (get-binding-fns dep)))
+    (when-let [rdep *register-dep*]
+      (rdep (goog/getUid dep) (get-binding-fns dep))))
   ([dep id binding-info]
    (when-let [rdep *register-dep*]
      (rdep dep id binding-info))))
@@ -251,8 +248,7 @@
         (.notifyFWatches this old-val new-val)
         new-val)))
   (clean [this]
-    (when ;;true
-        (and (identical? 0 watchers) (identical? 0 iwatchers))
+    (when  (and (identical? 0 watchers) (identical? 0 iwatchers))
       (goog.object/forEach deps
                            (fn [val key obj]
                              ;; (println "cleaning:" key val)
