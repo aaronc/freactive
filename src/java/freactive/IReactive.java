@@ -69,11 +69,31 @@ public interface IReactive {
                 }
             }, null);
 
+    public static final IReactive.BindingInfo IInvalidatesBindingInfo =
+            new BindingInfo(new AFn() {
+                @Override
+                public Object invoke(Object self) {
+                    return ((IDeref) self).deref();
+                }
+            }, new AFn() {
+                @Override
+                public Object invoke(Object self, Object key, Object f) {
+                    return ((IInvalidates) self).addInvalidationWatch(key, (IFn)f);
+                }
+            }, new AFn() {
+                @Override
+                public Object invoke(Object self, Object key) {
+                    return ((IInvalidates) self).removeInvalidationWatch(key);
+                }
+            }, null);
+
     public static BindingInfo getBindingInfo(Object iref) {
         if(iref instanceof IReactive) {
             return ((IReactive)iref).getBindingInfo();
         } else if (iref instanceof IRef) {
             return IRefBindingInfo;
+        } else if (iref instanceof IInvalidates) {
+            return IInvalidatesBindingInfo;
         }
         throw new Error(String.format("Don't know how to create binding info for %s", iref.toString()));
     }
