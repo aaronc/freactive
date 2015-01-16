@@ -16,7 +16,7 @@
 (defn get-binding-fns [iref]
   (cond
    (satisfies? IReactive iref) (-get-binding-fns iref)
-   iwatchable-binding-fns))
+   :default iwatchable-binding-fns))
 
 (def ^:dynamic *register-dep* nil)
 
