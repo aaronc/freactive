@@ -163,22 +163,21 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 ;; ## Attributes, Styles & Events
 
+(defn normalize-attr-value [value]
+  (cond
+    (.-substring value) value
+    (keyword? value) (name value)
+    :default (.toString value)))
+
 (defn- set-attr! [element attr-name attr-value]
   (if attr-value
-    (.setAttribute element attr-name
-                   (if (.-substring attr-value) ;; tests if attr-value is a string
-                     attr-value
-                     (.toString attr-value)))
+    (.setAttribute element attr-name (normalize-attr-value attr-value))
     (.removeAttribute element attr-name)))
 
 (defn- set-style-prop! [elem prop-name prop-value]
   ;(println "set-style-prop!" elem prop-name prop-value)
   (if prop-value
-    (aset (.-style elem)
-          prop-name
-          (if (.-substring prop-value)
-            prop-value
-            (.toString prop-value)))
+    (aset (.-style elem) prop-name (normalize-attr-value prop-value))
     (js-delete (.-style elem) prop-name))
   prop-value)
 
@@ -307,9 +306,7 @@ or dates; or can be used to define containers for DOM elements themselves."
       ;(println "setting attr" element attr-name attr-value)
       (if attr-value
         (.setAttributeNS element attr-ns attr-name
-          (if (.-substring attr-value)
-            attr-value
-            (.toString attr-value)))
+          (normalize-attr-value attr-value))
         (.removeAttributeNS element attr-ns attr-name))
       attr-value))
 
