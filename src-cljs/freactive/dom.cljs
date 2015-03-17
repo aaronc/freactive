@@ -719,17 +719,21 @@ map in vdom."
                (.createElementNS js/document xmlns tag-name)
                (.createElement js/document tag-name))
         attrs? (first tail)
-        attrs (when (map? attrs?) attrs?)
+        have-attrs (map? attrs?)
+        attrs (when have-attrs attrs?)
         attrs (cond-> attrs
-                      (and id (not (:id attrs)))
-                      (assoc :id id)
-                      class
-                      (update :class
-                              (fn [cls]
-                                (let [class (.replace class re-dot " ")]
-                                  (if cls (str class " " cls) class)))))
+
+                (and id (not (:id attrs)))
+                (assoc :id id)
+                
+                class
+                (update :class
+                        (fn [cls]
+                          (let [class (.replace class re-dot " ")]
+                            (if cls (str class " " cls) class)))))
+
         state (init-element-state! node tag)
-        children (if attrs (rest tail) tail)]
+        children (if have-attrs (rest tail) tail)]
     (bind-attrs! node attrs state)
     (when children
       (append-children! node children))
