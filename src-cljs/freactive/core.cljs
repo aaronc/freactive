@@ -395,9 +395,14 @@
             (keyword? korks-or-getter)
             [korks-or-getter]
 
+            (number? korks-or-getter)
+            [korks-or-getter]
+
             (sequential? korks-or-getter)
             korks-or-getter)
-        getter (if ks (fn [cur] (get-in cur ks)) korks-or-getter)
+        getter (if ks
+                 (fn [cur] (get-in cur ks))
+                 korks-or-getter)
         setter (or
                 setter
                 (when ks
@@ -427,3 +432,6 @@
 (defn lazy-cursor
   ([ref korks-or-getter] (cursor* ref korks-or-getter nil true))
   ([ref getter setter] (cursor* ref getter setter true)))
+
+
+(defn lens-cursor [ref getter setter] (cursor ref getter setter))

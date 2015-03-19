@@ -254,8 +254,8 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (defn- bind-prop-attr! [set-fn element attr-key attr-value node-state]
   (if (satisfies? cljs.core/IDeref attr-value)
-        (bind-attr* set-fn element (bind-attr-key attr-key) attr-value node-state)
-        (set-fn attr-value)))
+    (bind-attr* set-fn element (bind-attr-key attr-key) attr-value node-state)
+    (set-fn attr-value)))
 
 (defn- bind-event-listener! [element event-name handler node-state]
   (let [attr-state #js {:disposed false :handler handler
@@ -274,10 +274,17 @@ or dates; or can be used to define containers for DOM elements themselves."
                  (set-data-state! element state)
                  state)
    :class (fn [element cls]
-               (set! (.-className element) cls)
-               cls)
+            (set! (.-className element) cls)
+            cls)
+   ;; :value (fn [element v]
+   ;;          (set! (.-value element) v)
+   ;;          v)
    ;; :id (fn [element id] (set! (.-id element) id))
    })
+
+;; attributes to set directly
+(doseq [a #js ["id" "value"]]
+  (aset attr-setters a (fn [e v] (aset e a v))))
 
 (defn- get-attr-setter [element attr-name]
   (if-let [setter (aget attr-setters attr-name)]
@@ -410,7 +417,7 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing true)
+(def enable-diffing false)
 
 (defn- register-element-with-parent [parent new-elem]
   (when-not (text-node? new-elem)
@@ -478,10 +485,40 @@ or dates; or can be used to define containers for DOM elements themselves."
           nil))
       cur-child)))
 
+;; From hiccup.compiler:
+(def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
+       :private true}
+     re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
+
+(def ^:private node-ns-lookup
+  #js
+  {:svg "http://www.w3.org/2000/svg"})
+
+;; (defn- build* [virtual-dom build-dom-element*]
+;;   (let [tag (first virtual-dom)
+;;         tag-ns (namespace tag)
+;;         tag-name (name tag)
+;;         tail (rest virtual-dom)]
+;;     (if tag-ns
+;;       (if-let [tag-handler (aget node-ns-lookup tag-ns)]
+;;         (cond
+;;           (string? tag-handler)
+;;           (build-dom-element tag elem-spec tag-handler tag-name tail)
+
+;;           (fn? tag-handler)
+;;           (tag-handler tag-name tail)
+
+;;           :default
+;;           (.warn js/console "Invalid ns node handler" tag-handler))
+;;         (.warn js/console "Undefined ns node prefix" tag-ns))
+;;       (build-dom-element tag elem-spec nil tag-name tail))))
+
 (defn- try-diff [parent spec vdom cur-dom-node top-level]
   (let [cur-state (get-element-state cur-dom-node)
         cur-tag (.-tag cur-state)
-        new-tag (first vdom)]
+        ;; [_ tag-name id class] (re-matches re-tag (first vdom))
+        new-tag (first vdom)
+        ]
     (if (keyword-identical? new-tag cur-tag)
       (do
         ;; (println "diff hit" (first vdom) (.-id cur-state))
@@ -524,7 +561,7 @@ or dates; or can be used to define containers for DOM elements themselves."
       (do-replace-node parent new-virtual-dom cur-dom-node)
 
       :default
-      (if enable-diffing
+      (if (and enable-diffing (not (text-node? cur-dom-node)))
         (if top-level
           (do
             ;; (println "starting diff replace")
@@ -692,15 +729,6 @@ map in vdom."
 ;;     (when class (set! (.-className node) (.replace class re-dot " ")))
 ;;     node))
 
-;; From hiccup.compiler:
-(def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
-       :private true}
-     re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
-
-(def ^:private node-ns-lookup
-  #js
-  {:svg "http://www.w3.org/2000/svg"})
-
 (defn register-node-prefix! [prefix xml-ns-or-handler]
   (aset node-ns-lookup prefix xml-ns-or-handler))
 
@@ -712,7 +740,6 @@ map in vdom."
 
 (def ^:private re-dot (js/RegExp. "\\." "g"))
 
-
 (defn- build-dom-element [tag elem-spec xmlns tag-name tail]
   (let [[_ tag-name id class] (re-matches re-tag tag-name)
         node (if xmlns
@@ -720,7 +747,7 @@ map in vdom."
                (.createElement js/document tag-name))
         attrs? (first tail)
         have-attrs (map? attrs?)
-        attrs (when have-attrs attrs?)
+        attrs (if have-attrs attrs? {})
         attrs (cond-> attrs
 
                 (and id (not (:id attrs)))
@@ -732,7 +759,7 @@ map in vdom."
                           (let [class (.replace class re-dot " ")]
                             (if cls (str class " " cls) class)))))
 
-        state (init-element-state! node tag)
+        state (init-element-state! node tag-name)
         children (if have-attrs (rest tail) tail)]
     (bind-attrs! node attrs state)
     (when children
@@ -771,3 +798,4 @@ map in vdom."
   (when-let [last-child (.-lastChild element)]
     (remove! last-child))
   (append-child! element child))
+
