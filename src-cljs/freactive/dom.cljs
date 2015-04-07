@@ -163,10 +163,14 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 ;; ## Attributes, Styles & Events
 
+(defprotocol IDOMAttrValue
+  (-get-attr-value [value]))
+
 (defn normalize-attr-value [value]
   (cond
     (.-substring value) value
     (keyword? value) (name value)
+    (satisfies? IDOMAttrValue value) (-get-attr-value value)
     :default (.toString value)))
 
 (defn- set-attr! [element attr-name attr-value]
