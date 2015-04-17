@@ -227,7 +227,7 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn ^:dynamic ^:pluggable listen!
   "Adds an event handler. Can be replaced by a plugin such as goog.events."
   [element evt-name handler]
-  (.addEventListener element evt-name handler))
+  (.addEventListener element evt-name handler false))
 
 (defn ^:dynamic ^:pluggable unlisten!
   "Removes an event handler. Can be replaced by a plugin such as goog.events."
@@ -321,6 +321,20 @@ or dates; or can be used to define containers for DOM elements themselves."
         (.removeAttributeNS element attr-ns attr-name))
       attr-value))
 
+(defn- ->str [kw-or-str]
+  (if (string? kw-or-str)
+    kw-or-str
+    (if-let [attr-ns (namespace kw-or-str)]
+      (str attr-ns "/" (name kw-or-str))
+      (name kw-or-str))))
+
+(defn- bind-event-listeners! [element listener-map node-state]
+  (doseq [[k v] listener-map]
+    (bind-event-listener!
+     element
+     (->str k)
+     v node-state)))
+
 (defn- bind-attr! [element attr-key attr-value node-state]
   (let [attr-ns (namespace attr-key)
         attr-name (name attr-key)]
@@ -340,6 +354,9 @@ or dates; or can be used to define containers for DOM elements themselves."
       (cond
         (identical? 0 (.indexOf attr-name "on-"))
         (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+
+        (identical? attr-name "events")
+        (bind-event-listeners! element attr-value node-state)
 
         :default
         (bind-prop-attr! (get-attr-setter element attr-name) element

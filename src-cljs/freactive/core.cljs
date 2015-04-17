@@ -71,12 +71,6 @@
                   (doseq [[key f] (.-watches this)]
                     (f key this oldVal newVal))))})
 
-(let [core-deref cljs.core/deref]
-  (set! cljs.core/deref (fn [x]
-                          (if (.-reactiveDeref x)
-                            (.reactiveDeref x)
-                            (core-deref x)))))
-
 (def fwatch-binding-info
   (BindingInfo.
    #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %)))
