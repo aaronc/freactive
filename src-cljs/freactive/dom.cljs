@@ -9,6 +9,7 @@
 
 (defprotocol IDOMImage
   "A protocol for things that can be represented as virtual DOM or contain DOM nodes.
+
 Can be used to define custom conversions to DOM nodes or text for things such as numbers
 or dates; or can be used to define containers for DOM elements themselves."
   (-get-dom-image [x]
@@ -170,6 +171,8 @@ or dates; or can be used to define containers for DOM elements themselves."
   (cond
     (.-substring value) value
     (keyword? value) (name value)
+    (identical? value true) ""
+    (identical? value false) nil
     (satisfies? IDOMAttrValue value) (-get-attr-value value)
     :default (.toString value)))
 
