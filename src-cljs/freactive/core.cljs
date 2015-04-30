@@ -283,7 +283,7 @@
       (set! (.-watches this) (assoc watches key f)))
     this)
   (-remove-watch [this key]
-    (when (contains? watchers key)
+    (when (contains? watches key)
       (set! (.-watchers this) (dec watchers))
       (set! (.-watches this) (dissoc watches key)))
     this)
