@@ -427,5 +427,147 @@
   ([ref korks-or-getter] (cursor* ref korks-or-getter nil true))
   ([ref getter setter] (cursor* ref getter setter true)))
 
-
 (defn lens-cursor [ref getter setter] (cursor ref getter setter))
+
+
+;; WIP on new cursor implementation
+(comment
+
+  (defprotocol IHasCursors
+    (-get-cursor [this sub-key]))
+
+  (defprotocol ICursor
+    (-cursor-key [this])
+    (-child-cursor [this key])
+    (-parent-cursor [this]))
+
+  (defn cursor-key [^clj cursor]
+    (-cursor-key cursor))
+
+  (defn child-cursor [^clj cursor key]
+    (-child-cursor cursor))
+
+  (defn descendant-cursor [^clj cursor path]
+    (loop [[key & more] path
+           res cursor]
+      (if key
+        (recur more (child-cursor res key))
+        res)))
+
+  (defn parent-cursor [^clj cursor]
+    (-parent-cursor cursor))
+
+  (defn get-root-cursor [cursor]
+    (loop [cursor cursor]
+      (if-let [parent (parent-cursor cursor)]
+        (recur parent)
+        cursor)))
+
+  (defn cursor-path [cursor]
+    (loop [cursor cursor
+           path []]
+      (let [parent (parent-cursor cursor)
+            key (cursor-key cursor)]
+        (if (and parent key)
+          (recur parent (conj path key))
+          path))))
+
+  (defn cursor [cursor korks]
+    (if (sequential? korks)
+      (descendant-cursor cursor korks)
+      (child-cursor cursor korks)))
+
+  (deftype Cursor [id parent tkey children
+                   getter setter dirty state meta
+                   watches fwatches watchers invalidation-watches iwatchers
+                   lazy add-watch-fn remove-watch-fn]
+    Object
+    (equiv [this other]
+      (-equiv this other))
+    (compute [cursor]
+      (set! (.-dirty cursor) false)
+      (add-watch-fn cursor)
+      (let [new-value ((.-getter cursor) @ref)
+            old-value (.-state cursor)]
+        (when-not (identical? old-value new-value)
+          (set! (.-state cursor) new-value)
+          (when (> watchers 0)
+            (.notifyFWatches cursor old-value new-value))
+          (when (> iwatchers 0)
+            (.notifyInvalidationWatches cursor))
+          new-value)))
+    (clean [this]
+      (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
+            (remove-watch-fn ref id)
+            (set! (.-dirty this) true)))
+
+    cljs.core/IAtom
+
+    IReactive
+    (-get-binding-fns [this]
+      (if lazy invalidates-binding-info fwatch-binding-info))
+
+    cljs.core/IEquiv
+    (-equiv [o other] (identical? o other))
+
+    cljs.core/IDeref
+    (-deref [this] (.reactiveDeref this))
+
+    IMeta
+    (-meta [_] meta)
+
+    IPrintWithWriter
+    (-pr-writer [a writer opts]
+      (-write writer "#<Cursor: ")
+      (pr-writer state writer opts)
+      (-write writer ">"))
+
+    IWatchable
+    (-notify-watches [this oldval newval]
+      (.notifyFWatches this oldval newval))
+
+    (-add-watch [this key f]
+      (when-not (contains? watches key)
+        (set! (.-watchers this) (inc watchers))
+        (set! (.-watches this) (assoc watches key f)))
+      this)
+    (-remove-watch [this key]
+      (when (contains? watches key)
+        (set! (.-watchers this) (dec watchers))
+        (set! (.-watches this) (dissoc watches key)))
+      this)
+
+    IHash
+    (-hash [this] (goog/getUid this))
+
+    IReset
+    (-reset! [this new-value]
+      (swap! ref (fn [cur] (setter cur new-value)))
+      (.rawDeref this))
+
+    ISwap
+    (-swap! [this f] (cursor-swap! this ref getter setter f))
+    (-swap! [this f x] (cursor-swap! this ref getter setter #(f % x)))
+    (-swap! [this f x y] (cursor-swap! this ref getter setter #(f % x y)))
+    (-swap! [this f x y more] (cursor-swap! this ref getter setter #(apply f %  x y  more)))
+
+    ICursor
+    (-cursor-key [this] tkey)
+    (-child-cursor [this ckey]
+      (if-let [child-cursor (first (get children ckey))]
+        (first child-cursors)
+        (let [child-cursor (Cursor. )]
+          (set! (.-children this) (update children conj child-cursor))
+          child-cursor)))
+    (-parent-cursor [this]
+      (when tkey
+        parent)))
+
+  (defn root-cursor [atom-like])
+
+  (defn atom [init]
+    (root-cursor (cljs.core/atom init)))
+
+  (apply-js-mixin ReactiveCursor fwatch-mixin)
+  (apply-js-mixin ReactiveCursor invalidates-mixin)
+  (apply-js-mixin ReactiveCursor rx-mixin))
