@@ -186,7 +186,7 @@ This is somewhat similar (but not exactly) to cursors in [om][om] - which was th
 
 ## Items View
 
-An experimental `items-view` has been created, but is still a work in progress... This documentation describes the concetp in a very general way.
+An experimental `items-view` has been created, but is still a work in progress... This documentation describes the concept in a very general way.
 
 The idea of the `items-view` is to provide a generic container for large collections of objects that send notifications about exactly which items changed so that diffing is not neeeded. An analogue to this in the desktop UI world is the [WPF `ItemsControl`](http://msdn.microsoft.com/en-us/library/system.windows.controls.itemscontrol%28v=vs.110%29.aspx) which is a base class for `ListView`'s and `TreeView`'s. Basically it allows to framework to observe a collection and add or remove nodes rendering them based on a data template.
 
