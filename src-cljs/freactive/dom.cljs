@@ -13,7 +13,7 @@
 Can be used to define custom conversions to DOM nodes or text for things such as numbers
 or dates; or can be used to define containers for DOM elements themselves."
   (-get-dom-image [x]
-    "Should return either virtual DOM (a vector or string) or an actual DOM node.
+    "Should return either virtual DOM (a vector or string) or an actual DOM node."))
 "))
 
 (extend-protocol IDOMImage
@@ -667,7 +667,7 @@ or dates; or can be used to define containers for DOM elements themselves."
                 (let [new-elem (get-new-elem)
                       cur (.-cur-element state)
                       node-state (get-element-state cur)]
-                  (when-not (identical? (get-dom-image cur) (get-dom-image new-elem))
+                  (when-not (= (get-dom-image cur) (get-dom-image new-elem))
                     (if-let [hide (get-state-attr node-state ":node/on-detaching")]
                       (hide cur
                             (fn []
