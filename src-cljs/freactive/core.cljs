@@ -6,13 +6,13 @@
 
 ;; Core API for reactive binding
 
-(deftype BindingInfo [raw-deref add-watch remove-watch clean dispose])
+(deftype BindingInfo [raw-deref add-watch remove-watch clean])
 
 (defprotocol IReactive
   (-get-binding-fns [this]))
 
 (def ^:private iwatchable-binding-fns
-  (BindingInfo. cljs.core/-deref cljs.core/-add-watch cljs.core/-remove-watch nil nil))
+  (BindingInfo. cljs.core/-deref cljs.core/-add-watch cljs.core/-remove-watch nil))
 
 (defn get-binding-fns [iref]
   (if (satisfies? IReactive iref)
@@ -45,14 +45,6 @@
   (-update! [this key f args])
   (-update-in! [this ks f args])
   (-assoc-in! [this ks v]))
-
-(defprotocol IDisposable
-  (-dispose! [this])
-  (-disposed? [this]))
-
-(defn dispose! [this] (-dispose! this))
-
-(defn disposed? [this] (-disposed? this))
 
 (defn update! [cursor key f & args]
   (-update! cursor key f args))
@@ -142,7 +134,7 @@
 
 (def fwatch-binding-info
   (BindingInfo.
-   #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %) #(.dispose %)))
+   #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %)))
 
 (defn- make-register-dep [rx]
   (fn do-register-dep [dep id binding-info]
@@ -196,8 +188,7 @@
    #(.rawDeref %)
    #(.addInvalidationWatch % %2 %3)
    #(.removeInvalidationWatch % %2)
-   #(.clean %)
-   #(.dispose %)))
+   #(.clean %)))
 
 (def rx-mixin
   #js
@@ -233,7 +224,7 @@
         (.notifyFWatches this old-val new-val)
         new-val)))
   (clean [this]
-    (when  (and (identical? 0 watchers) (identical? 0 iwatchers))
+    (when (and (identical? 0 watchers) (identical? 0 iwatchers))
       (goog.object/forEach deps
                            (fn [val key obj]
                              ;; (println "cleaning:" key val)
@@ -250,10 +241,6 @@
   IReactive
   (-get-binding-fns [this]
     (if lazy invalidates-binding-info fwatch-binding-info))
-
-  IDisposable
-  (-dispose! [this] (.dispose this))
-  (-disposed? [this] false)
 
   IEquiv
   (-equiv [o other] (identical? o other))
@@ -315,15 +302,20 @@
 
 ;; WIP on new cursor implementation
 
-(deftype Cursor [id parent tkey ^:mutable child-cursors swap-fn ^:mutable state meta watches fwatches watchers keyset-watches]
+(deftype Cursor [id parent tkey ^:mutable child-cursors get-fn swap-fn ^:mutable state meta ^:mutable watches ^:mutable fwatches ^:mutable watchers ^:mutable keyset-watches]
     Object
     (equiv [this other]
       (-equiv this other))
-    (clean [this])
-    (dispose [this]
-      (when-let [disposed-fn (.-disposed-fn this)]
-        (disposed-fn)
-        (set! (.-disposed this) true)))
+    (activate [this]
+      (when (.-dirty this)
+        (when-let [activate-fn (.-activate-fn this)]
+          (activate-fn)
+          (.rawDeref this)
+          (set! (.-dirty this) false))))
+    (clean [this]
+      (when-let [clean-fn (.-clean-fn this)]
+        (set! (.-dirty this) true)
+        (clean-fn)))
     (updateChild [this key f args]
       (set! (.-change-ks this) [key])
       (apply swap-fn update key f args)
@@ -336,9 +328,9 @@
       (doseq [child (get child-cursors child-key)]
         (.updateCursor child new-val)))
     (updateCursor [this new-state]
-      (let [old-state state]
-        (set! state new-state)
-        (when-not (identical? old-state state)
+      (when-not (identical? state new-state)
+        (let [old-state state]
+          (set! state new-state)
           (if-let [change-ks (.-change-ks this)]
             (let [change-ks (if (keyword? change-ks)
                               [(case change-ks
@@ -359,37 +351,56 @@
                       ))))
               (set! (.-change-key this) nil))
             (cond keyset-watches
-              (let [old-keys (keyset old-state)
-                    new-keys (keyset state)
-                    [removed added both] (diff-set (set old-keys) (set new-keys))]
-                (when (or (not (empty? removed)) (not (empty? added)))
-                  ;; notify key set change
-                  )
-                (doseq [rx removed]
-                  (.notifyChild rx nil))
-                (doseq [ra added]
-                  (.notifyChild ra (get state ra)))
-                (doseq [rc both]
-                  (when-let [cursors (get child-cursors rc)]
-                    (when-let [cur (first cursors)]
-                      (let [old-val (.-state cur)
-                            new-val (get state rc)]
-                        (when-not (identical? old-val new-val)
-                          (doseq [cur cursors]
-                            (.updateCursor cur new-val))))))))
-              child-cursors
-              (doseq [[ckey cursors] child-cursors]
-                (let [old-val (get old-state ckey)
-                      new-val (get state ckey)]
-                  (when-not (identical? old-val new-val)
-                    (doseq [cur cursors]
-                      (.updateCursor cur new-val)))))))
+                  (let [old-keys (keyset old-state)
+                        new-keys (keyset state)
+                        [removed added both] (diff-set (set old-keys) (set new-keys))]
+                    (when (or (not (empty? removed)) (not (empty? added)))
+                      ;; notify key set change
+                      )
+                    (doseq [rx removed]
+                      (.notifyChild rx nil))
+                    (doseq [ra added]
+                      (.notifyChild ra (get state ra)))
+                    (doseq [rc both]
+                      (when-let [cursors (get child-cursors rc)]
+                        (when-let [cur (first cursors)]
+                          (let [old-val (.-state cur)
+                                new-val (get state rc)]
+                            (when-not (identical? old-val new-val)
+                              (doseq [cur cursors]
+                                (.updateCursor cur new-val))))))))
+                  child-cursors
+                  (doseq [[ckey cursors] child-cursors]
+                    (let [old-val (get old-state ckey)
+                          new-val (get state ckey)]
+                      (when-not (identical? old-val new-val)
+                        (doseq [cur cursors]
+                          (.updateCursor cur new-val)))))))
           (.notifyFWatches this old-state state))))
     (rawDeref [this]
+      (when (.-dirty this)
+        (.updateCursor this (get-fn)))
       state)
     (reactiveDeref [this]
       (register-dep this id fwatch-binding-info)
-      state)
+      (.rawDeref this))
+    (addFWatch [this key f]
+      (when-not (aget (.-fwatches this) key)
+        (.activate this)
+        (set! (.-watchers this) (inc (.-watchers this)))
+        (aset (.-fwatches this) key f)))
+    (removeFWatch [this key]
+      (when (aget (.-fwatches this) key)
+        (set! (.-watchers this) (dec (.-watchers this)))
+        (js-delete (.-fwatches this) key)
+        (when (identical? watchers 0) (.clean this))))
+    (notifyFWatches [this oldVal newVal]
+      (goog.object/forEach
+       (.-fwatches this)
+       (fn [f key _]
+         (f key this oldVal newVal)))
+      (doseq [[key f] (.-watches this)]
+        (f key this oldVal newVal))) 
 
     cljs.core/IAtom
 
@@ -414,13 +425,16 @@
     IWatchable
     (-add-watch [this key f]
       (when-not (contains? watches key)
+        (.activate this)
         (set! (.-watchers this) (inc watchers))
         (set! (.-watches this) (assoc watches key f)))
       this)
     (-remove-watch [this key]
       (when (contains? watches key)
         (set! (.-watchers this) (dec watchers))
-        (set! (.-watches this) (dissoc watches key)))
+        (set! (.-watches this) (dissoc watches key))
+        (when (identical? watchers 0)
+          (.clean this)))
       this)
 
     IKeysetCursor
@@ -446,17 +460,15 @@
       (if-let [child-cursor (first (get child-cursors ckey))]
         (first child-cursors)
         (let [id (new-reactive-id)
-              cur (Cursor.
-                            id this ckey nil
-                            (fn [f & args] (.updateChild this ckey f args))
-                            (get state ckey)
-                            nil
-                            nil
-                            #js {}
-                            0
-                            nil)]
-          (set! child-cursors (update child-cursors ckey conj cur))
-          (set! (.-dispose-fn cur)
+              cur (Cursor. id this ckey nil
+                           (fn [] (get (.rawDeref this) ckey))
+                           (fn [f & args] (.updateChild this ckey f args))
+                           (get state ckey)
+                           nil nil #js {} 0 nil)
+              activate-fn (fn [] (set! child-cursors (update child-cursors ckey conj cur)))]
+          (activate-fn)
+          (set! (.-active-fn cur) activate-fn)
+          (set! (.-clean-fn cur)
                 (fn []
                   (set! child-cursors
                         (update child-cursors ckey
@@ -468,11 +480,6 @@
     (-parent-cursor [this]
       (when tkey
         parent))
-
-    IDisposable
-    (-dispose! [this]
-      (.dispose this))
-    (-disposed? [this] (or (.-disposed this) false))
 
     ITransientCollection
     (-conj! [this val]
@@ -505,8 +512,6 @@
       (set! (.-change-ks this) ks)
       (swap-fn assoc-in ks v)))
 
-(apply-js-mixin Cursor fwatch-mixin)
-
 (defn atom
   "Creates and returns a ReactiveAtom with an initial value of x and zero or
   more options (in any order):
@@ -519,8 +524,9 @@
   return false or throw an Error. If either of these error conditions
   occur, then the value of the atom will not change."
   [init & {:keys [meta validator]}]
-  (let [cur (Cursor. (new-reactive-id) nil nil nil nil init
+  (let [cur (Cursor. (new-reactive-id) nil nil nil nil nil init
                      meta nil #js {} 0 nil)]
+    (set! (.-get-fn cur) (fn [] (.-state cur)))
     (set!
      (.-swap-fn cur)
      (fn [f & args]
@@ -533,16 +539,21 @@
 
 (defn lens-cursor [parent getter setter]
   (let [id (new-reactive-id)
+        binding-info (get-binding-fns parent)
         cur (Cursor.
              id parent nil nil
+             (fn [] (getter ((.-raw-deref parent))))
              (fn [f & args]
                (swap! parent
                       (fn [x] (setter x (apply f (getter x) args)))))
              (getter @parent) nil nil #js {} 0 nil)
-        binding-info (get-binding-fns parent)]
-    ((.-add-watch binding-info) parent id
-     (fn [k r o n] (.updateCursor cur (getter n))))
-    (set! (.-dispose-fn cur)
+        activate-fn
+        (fn []
+          ((.-add-watch binding-info) parent id
+           (fn [k r o n] (.updateCursor cur (getter n)))))]
+    (activate-fn)
+    (set! (.-activate-fn cur) activate-fn)
+    (set! (.-clean-fn cur)
           (fn [] ((.-remove-watch binding-info) parent id)))
     cur))
 
