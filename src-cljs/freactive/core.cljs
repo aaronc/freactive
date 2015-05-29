@@ -6,13 +6,13 @@
 
 ;; Core API for reactive binding
 
-(deftype BindingInfo [raw-deref add-watch remove-watch clean])
+(deftype BindingInfo [raw-deref add-watch remove-watch clean dispose])
 
 (defprotocol IReactive
   (-get-binding-fns [this]))
 
 (def ^:private iwatchable-binding-fns
-  (BindingInfo. cljs.core/-deref cljs.core/-add-watch cljs.core/-remove-watch nil))
+  (BindingInfo. cljs.core/-deref cljs.core/-add-watch cljs.core/-remove-watch nil nil))
 
 (defn get-binding-fns [iref]
   (if (satisfies? IReactive iref)
@@ -45,6 +45,14 @@
   (-update! [this key f args])
   (-update-in! [this ks f args])
   (-assoc-in! [this ks v]))
+
+(defprotocol IDisposable
+  (-dispose! [this])
+  (-disposed? [this]))
+
+(defn dispose! [this] (-dispose! this))
+
+(defn disposed? [this] (-disposed? this))
 
 (defn update! [cursor key f & args]
   (-update! cursor key f args))
@@ -134,7 +142,7 @@
 
 (def fwatch-binding-info
   (BindingInfo.
-   #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %)))
+   #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %) #(.dispose %)))
 
 (defn- make-register-dep [rx]
   (fn do-register-dep [dep id binding-info]
@@ -188,7 +196,8 @@
    #(.rawDeref %)
    #(.addInvalidationWatch % %2 %3)
    #(.removeInvalidationWatch % %2)
-   #(.clean %)))
+   #(.clean %)
+   #(.dispose %)))
 
 (def rx-mixin
   #js
@@ -236,10 +245,15 @@
                                  (clean* dep)))
                              (js-delete obj key)))
       (set! (.-dirty this) true)))
+  (dispose [this] (.clean this))
   
   IReactive
   (-get-binding-fns [this]
     (if lazy invalidates-binding-info fwatch-binding-info))
+
+  IDisposable
+  (-dispose! [this] (.dispose this))
+  (-disposed? [this] false)
 
   IEquiv
   (-equiv [o other] (identical? o other))
@@ -306,6 +320,10 @@
     (equiv [this other]
       (-equiv this other))
     (clean [this])
+    (dispose [this]
+      (when-let [disposed-fn (.-disposed-fn this)]
+        (disposed-fn)
+        (set! (.-disposed this) true)))
     (updateChild [this key f args]
       (set! (.-change-ks this) [key])
       (apply swap-fn update key f args)
@@ -367,7 +385,8 @@
                     (doseq [cur cursors]
                       (.updateCursor cur new-val)))))))
           (.notifyFWatches this old-state state))))
-    (rawDeref [this] state)
+    (rawDeref [this]
+      state)
     (reactiveDeref [this]
       (register-dep this id fwatch-binding-info)
       state)
@@ -427,7 +446,7 @@
       (if-let [child-cursor (first (get child-cursors ckey))]
         (first child-cursors)
         (let [id (new-reactive-id)
-              child-cursor (Cursor.
+              cur (Cursor.
                             id this ckey nil
                             (fn [f & args] (.updateChild this ckey f args))
                             (get state ckey)
@@ -436,11 +455,24 @@
                             #js {}
                             0
                             nil)]
-          (set! child-cursors (update child-cursors ckey conj child-cursor))
-          child-cursor)))
+          (set! child-cursors (update child-cursors ckey conj cur))
+          (set! (.-dispose-fn cur)
+                (fn []
+                  (set! child-cursors
+                        (update child-cursors ckey
+                                (fn [cursors]
+                                  (let [cursors (remove #(= % cur) cursors)]
+                                    (when-not (empty? cursors)
+                                      cursors)))))))
+          cur)))
     (-parent-cursor [this]
       (when tkey
         parent))
+
+    IDisposable
+    (-dispose! [this]
+      (.dispose this))
+    (-disposed? [this] (or (.-disposed this) false))
 
     ITransientCollection
     (-conj! [this val]
@@ -510,6 +542,8 @@
         binding-info (get-binding-fns parent)]
     ((.-add-watch binding-info) parent id
      (fn [k r o n] (.updateCursor cur (getter n))))
+    (set! (.-dispose-fn cur)
+          (fn [] ((.-remove-watch binding-info) parent id)))
     cur))
 
 (defn root-cursor [atom-like]
