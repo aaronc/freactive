@@ -24,7 +24,13 @@
                                   :output-dir    "resources/public/js/compiled/out"
                                   :optimizations :none
                                   :pretty-print true
-                                  :source-map    true}}]}}}
+                                  :source-map    true}}
+                  {:id           "example-advanced"
+                   :source-paths ["src-cljs" "example" "test"]
+                   :compiler     {:output-to     "resources/public/js/compiled/advanced.js"
+                                  :output-dir    "resources/public/js/compiled/out-adv"
+                                  :optimizations :advanced
+                                  :main "freactive.dom-perf"}}]}}}
   :source-paths ["src/clojure" "src-cljs"]
   :test-paths ["test" "example"]
   :javac-options ["-Xlint:unchecked"]

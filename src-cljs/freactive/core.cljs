@@ -295,6 +295,16 @@
         :default
         nil))
 
+(defn kv-seq [coll]
+  (cond (map? coll)
+        (seq coll)
+
+        (counted? coll)
+        (zipmap (range (count coll)) (seq coll))
+
+        :default
+        nil))
+
 (defn- diff-set [a b]
   [(set/difference a b)
    (set/difference b a)
@@ -306,6 +316,12 @@
     Object
     (equiv [this other]
       (-equiv this other))
+    (registerOne [this]
+      (set! watchers (inc watchers))
+      (.activate this))
+    (unregisterOne [this]
+      (set! watchers (dec watchers))
+      (.clean this))
     (activate [this]
       (when (.-dirty this)
         (when-let [activate-fn (.-activate-fn this)]
@@ -392,14 +408,13 @@
       (.rawDeref this))
     (addFWatch [this key f]
       (when-not (aget (.-fwatches this) key)
-        (.activate this)
-        (set! (.-watchers this) (inc (.-watchers this)))
-        (aset (.-fwatches this) key f)))
+        (aset (.-fwatches this) key f)
+        (.registerOne this)))
     (removeFWatch [this key]
       (when (aget (.-fwatches this) key)
-        (set! (.-watchers this) (dec (.-watchers this)))
+        
         (js-delete (.-fwatches this) key)
-        (.clean this)))
+        (.unregisterOne this)))
     (notifyFWatches [this oldVal newVal]
       (goog.object/forEach
        (.-fwatches this)
@@ -431,29 +446,26 @@
     IWatchable
     (-add-watch [this key f]
       (when-not (contains? watches key)
-        (.activate this)
-        (set! (.-watchers this) (inc watchers))
-        (set! (.-watches this) (assoc watches key f)))
+        (set! (.-watches this) (assoc watches key f))
+        (.registerOne this))
       this)
     (-remove-watch [this key]
       (when (contains? watches key)
-        (set! (.-watchers this) (dec watchers))
         (set! (.-watches this) (dissoc watches key))
-        (.clean this))
+        (.unregisterOne this))
       this)
 
     IKeysetCursor
     (-keyset [this] (coll-keyset state))
     (-add-keyset-watch [this key f]
       (when-not (contains? keyset-watches key)
-        (.activate this)
-        (set! (.-watchers this) (inc watchers))
-        (set! (.-keyset-watches this) (assoc keyset-watches key f))))
+        (set! (.-keyset-watches this) (assoc keyset-watches key f))
+        (.registerOne this))
+      )
     (-remove-keyset-watch [this key]
       (when (contains? keyset-watches key)
-        (set! (.-watchers this) (dec watchers))
         (set! (.-keyset-watches this) (dissoc keyset-watches key))
-        (.clean this)))
+        (.unregisterOne this)))
 
     IHash
     (-hash [this] (goog/getUid this))
@@ -478,8 +490,11 @@
                            (fn [f & args] (.updateChild this ckey f args))
                            (get state ckey)
                            nil nil #js {} 0 nil)
-              activate-fn (fn [] (set! child-cursors (update child-cursors ckey conj cur)))]
-          (activate-fn)
+              activate-fn
+              (fn []
+                (set! child-cursors (update child-cursors ckey conj cur)))]
+          ;; (activate-fn)
+          (set! (.-dirty cur) true)
           (set! (.-activate-fn cur) activate-fn)
           (set! (.-clean-fn cur)
                 (fn []
@@ -513,7 +528,6 @@
     (-pop! [this]
       (set! (.-change-ks this) :pop)
       (swap-fn pop))
-
 
     IAssociativeCursor
     (-update! [this key f args] (.updateChild this key f args))
@@ -555,7 +569,7 @@
         binding-info (get-binding-fns parent)
         cur (Cursor.
              id parent nil nil
-             (fn [] (getter ((.-raw-deref parent))))
+             (fn [] (getter ((.-raw-deref binding-info) parent)))
              (fn [f & args]
                (swap! parent
                       (fn [x] (setter x (apply f (getter x) args)))))
@@ -564,7 +578,8 @@
         (fn []
           ((.-add-watch binding-info) parent id
            (fn [k r o n] (.updateCursor cur (getter n)))))]
-    (activate-fn)
+    ;; (activate-fn)
+    (set! (.-dirty cur) true)
     (set! (.-activate-fn cur) activate-fn)
     (set! (.-clean-fn cur)
           (fn [] ((.-remove-watch binding-info) parent id)))
@@ -582,3 +597,29 @@
      (child-cursor parent korks)))
   ([parent getter setter]
    (lens-cursor parent getter setter)))
+
+(defn transducing-cursor
+  ([cur xf]
+   (let [xfc (cursor)
+         reducing-fn
+         (xf
+          (fn
+            ([] xfc)
+            ([acc] acc)
+            ([acc [k v :as kvp]]
+             (if (= 1 (count kvp))
+               (dissoc! acc k)
+               (assoc! acc k v)))))
+         get-fn
+         (fn [] (into {} xf (kv-seq @cur)))
+         swap-fn (fn [f & args] (assert false "Read-only cursor"))
+         activate-fn
+         (fn []
+           ;;(add-changes-watch cur (.-id xfc)
+           (fn [k r changes]
+             (doseq [change changes]
+               (reducing-fn xfc change)))
+           ;;)
+           )
+         ]
+     xfc)))
