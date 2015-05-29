@@ -313,9 +313,10 @@
           (.rawDeref this)
           (set! (.-dirty this) false))))
     (clean [this]
-      (when-let [clean-fn (.-clean-fn this)]
-        (set! (.-dirty this) true)
-        (clean-fn)))
+      (when (identical? 0 watches)
+        (when-let [clean-fn (.-clean-fn this)]
+          (set! (.-dirty this) true)
+          (clean-fn))))
     (updateChild [this key f args]
       (set! (.-change-ks this) [key])
       (apply swap-fn update key f args)
@@ -393,7 +394,7 @@
       (when (aget (.-fwatches this) key)
         (set! (.-watchers this) (dec (.-watchers this)))
         (js-delete (.-fwatches this) key)
-        (when (identical? watchers 0) (.clean this))))
+        (.clean this)))
     (notifyFWatches [this oldVal newVal]
       (goog.object/forEach
        (.-fwatches this)
@@ -433,8 +434,7 @@
       (when (contains? watches key)
         (set! (.-watchers this) (dec watchers))
         (set! (.-watches this) (dissoc watches key))
-        (when (identical? watchers 0)
-          (.clean this)))
+        (.clean this))
       this)
 
     IKeysetCursor
@@ -467,7 +467,7 @@
                            nil nil #js {} 0 nil)
               activate-fn (fn [] (set! child-cursors (update child-cursors ckey conj cur)))]
           (activate-fn)
-          (set! (.-active-fn cur) activate-fn)
+          (set! (.-activate-fn cur) activate-fn)
           (set! (.-clean-fn cur)
                 (fn []
                   (set! child-cursors
