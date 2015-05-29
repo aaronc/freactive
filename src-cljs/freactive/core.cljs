@@ -312,7 +312,7 @@
       this)
     (assocChild [this key val]
       (set! (.-change-ks this) [key])
-      (apply swap-fn assoc key val)
+      (swap-fn assoc key val)
       this)
     (notifyChild [this child-key new-val]
       (doseq [child (get child-cursors child-key)]
@@ -321,8 +321,13 @@
       (let [old-state state]
         (set! state new-state)
         (when-not (identical? old-state state)
-          (if-let [[change-key & descendant-ks] (.-change-ks this)]
-            (do
+          (if-let [change-ks (.-change-ks this)]
+            (let [change-ks (if (keyword? change-ks)
+                              [(case change-ks
+                                 :conj (dec (count state))
+                                 :pop (count state))]
+                              change-ks)
+                  [change-key & descendant-ks] change-ks]
               (when-let [cursors (get child-cursors change-key)]
                 (when-let [cur (first cursors)]
                   (let [old-val (.-state cur)
@@ -438,7 +443,9 @@
         parent))
 
     ITransientCollection
-    (-conj! [this val])
+    (-conj! [this val]
+      (set! (.-change-ks this) :conj)
+      (swap-fn conj val))
     (-persistent! [this] state)
 
     ITransientAssociative
@@ -447,10 +454,14 @@
     ITransientMap
     (-dissoc! [this key] 
       (set! (.-change-ks this) [key])
-      (apply swap-fn dissoc key))
+      (swap-fn dissoc key))
 
     ITransientVector
     (-assoc-n! [this n val] (.assocChild this n val))
+    (-pop! [this]
+      (set! (.-change-ks this) :pop)
+      (swap-fn pop))
+
 
     IAssociativeCursor
     (-update! [this key f args] (.updateChild this key f args))
@@ -460,7 +471,7 @@
       this)
     (-assoc-in! [this ks v]
       (set! (.-change-ks this) ks)
-      (apply swap-fn assoc-in ks v)))
+      (swap-fn assoc-in ks v)))
 
 (apply-js-mixin Cursor fwatch-mixin)
 

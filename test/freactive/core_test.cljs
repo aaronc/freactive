@@ -47,3 +47,19 @@
     (update! b :b inc)
     (is (:b @b 4))
     (is (= @c 5))))
+
+(deftest conj-pop-test 
+  (let [a (atom [1 2])
+        a1 (cursor a 1)
+        a2 (cursor a 2)]
+    (is (= @a2 nil))
+    (conj! a 3)
+    (is (= @a [1 2 3]))
+    (is (= @a2 3))
+    (pop! a)
+    (is (= @a2 nil))
+    (is (= @a1 2))
+    (pop! a)
+    (is (= @a1 nil))))
+
+
