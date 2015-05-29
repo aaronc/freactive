@@ -1,7 +1,8 @@
 (ns freactive.core-test
   (:refer-clojure :exclude [atom])
   (:require
-   [freactive.core :refer [atom cursor lens-cursor]]
+   [freactive.core :refer
+    [atom cursor lens-cursor update-in! update!]]
    [cljs.reader]
    [cljs.test :refer-macros [deftest is run-tests]])
   (:require-macros [freactive.macros :refer [rx]]))
@@ -34,3 +35,15 @@
     (is (= @a {:b 1}))
     (reset! a {:c 2})
     (is (= @l "{:c 2}"))))
+
+(deftest associative-cursor-test
+  (let [a (atom {:a {:b 2}})
+        b (cursor a :a)
+        c (rx (inc (:b @b)))]
+    (is (= (:b @b) 2))
+    (update-in! a [:a :b] inc)
+    (is (= (:b @b) 3))
+    (is (= @c 4))
+    (update! b :b inc)
+    (is (:b @b 4))
+    (is (= @c 5))))

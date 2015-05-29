@@ -12,8 +12,7 @@
   (-get-binding-fns [this]))
 
 (def ^:private iwatchable-binding-fns
-  (BindingInfo. cljs.core/-deref cljs.core/-add-watch
-          cljs.core/-remove-watch nil))
+  (BindingInfo. cljs.core/-deref cljs.core/-add-watch cljs.core/-remove-watch nil))
 
 (defn get-binding-fns [iref]
   (if (satisfies? IReactive iref)
@@ -43,10 +42,18 @@
   (-remove-keyset-watch [this key]))
 
 (defprotocol IAssociativeCursor
-  (-update! [this key f args]))
+  (-update! [this key f args])
+  (-update-in! [this ks f args])
+  (-assoc-in! [this ks v]))
 
 (defn update! [cursor key f & args]
   (-update! cursor key f args))
+
+(defn update-in! [cursor ks f & args]
+  (-update-in! cursor ks f args))
+
+(defn assoc-in! [cursor ks v]
+  (-assoc-in! cursor ks v))
 
 (defn cursor-key [^clj cursor]
   (-cursor-key cursor))
@@ -128,83 +135,6 @@
 (def fwatch-binding-info
   (BindingInfo.
    #(.rawDeref %) #(.addFWatch % %2 %3) #(.removeFWatch % %2) #(.clean %)))
-
-(deftype ReactiveAtom [id state meta validator watches fwatches watchers]
-  Object
-  (equiv [this other]
-    (-equiv this other))
-  (rawDeref [_] state)
-  (reactiveDeref [this]
-    (register-dep this id fwatch-binding-info) 
-    state)
-  (clean [this])
-  cljs.core/IAtom
-
-  IReactive
-  (-get-binding-fns [this] fwatch-binding-info)
-
-  cljs.core/IEquiv
-  (-equiv [o other] (identical? o other))
-
-  cljs.core/IDeref
-  (-deref [this] (.reactiveDeref this))
-
-  IMeta
-  (-meta [_] meta)
-
-  IPrintWithWriter
-  (-pr-writer [a writer opts]
-    (-write writer "#<ReactiveAtom: ")
-    (pr-writer state writer opts)
-    (-write writer ">"))
-
-  IWatchable
-  (-add-watch [this key f]
-    (set! (.-watches this) (assoc watches key f))
-    this)
-  (-remove-watch [this key]
-    (set! (.-watches this) (dissoc watches key))
-    this)
-
-  IHash
-  (-hash [this] (goog/getUid this))
-
-  IReset
-  (-reset! [a new-value]
-    (let [old-value (.-state a)]
-        (when-not (identical? old-value new-value)
-          (let [validate (.-validator a)]
-            (when-not (nil? validate)
-              (assert (validate new-value) "Validator rejected reference state")))
-          (set! (.-state a) new-value)
-          (.notifyFWatches a old-value new-value))
-        new-value))
-
-  ISwap
-  (-swap! [a f]
-    (-reset! a (f (.-state a))))
-  (-swap! [a f x]
-    (-reset! a (f (.-state a) x)))
-  (-swap! [a f x y]
-    (-reset! a (f (.-state a) x y)))
-  (-swap! [a f x y more]
-    (-reset! a (apply f (.-state a) x y more))))
-
-(apply-js-mixin ReactiveAtom fwatch-mixin)
-
-;; (defn atom
-;;   "Creates and returns a ReactiveAtom with an initial value of x and zero or
-;;   more options (in any order):
-;;   :meta metadata-map
-;;   :validator validate-fn
-;;   If metadata-map is supplied, it will be come the metadata on the
-;;   atom. validate-fn must be nil or a side-effect-free fn of one
-;;   argument, which will be passed the intended new state on any state
-;;   change. If the new state is unacceptable, the validate-fn should
-;;   return false or throw an Error. If either of these error conditions
-;;   occur, then the value of the atom will not change."
-;;   ([x] (ReactiveAtom. (new-reactive-id )x nil nil nil #js {} 0))
-;;   ([x & {:keys [meta validator]}] (ReactiveAtom. (new-reactive-id) x meta validator nil #js {} 0)))
 
 (defn- make-register-dep [rx]
   (fn do-register-dep [dep id binding-info]
@@ -354,128 +284,6 @@
      (set! (.-register-dep-fn reactive) (make-register-dep reactive))
      reactive)))
 
-(defn- cursor-swap! [cursor ref getter setter f]
-  (swap! ref (fn [cur] (setter cur (f (getter cur)))))
-  (.rawDeref cursor))
-
-(deftype ReactiveCursor [id ref getter setter dirty state meta watches fwatches watchers invalidation-watches iwatchers lazy add-watch-fn remove-watch-fn]
-  Object
-  (equiv [this other]
-    (-equiv this other))
-  (compute [cursor]
-    (set! (.-dirty cursor) false)
-    (add-watch-fn cursor)
-    (let [new-value ((.-getter cursor) @ref)
-          old-value (.-state cursor)]
-      (when-not (identical? old-value new-value)
-        (set! (.-state cursor) new-value)
-        (when (> watchers 0)
-          (.notifyFWatches cursor old-value new-value))
-        (when (> iwatchers 0)
-          (.notifyInvalidationWatches cursor))
-        new-value)))
-  (clean [this]
-    (when (identical? 0 (.-watchers this)) (identical? 0 (.-iwatchers this))
-          (remove-watch-fn ref id)
-          (set! (.-dirty this) true)))
-
-  cljs.core/IAtom
-
-  IReactive
-  (-get-binding-fns [this]
-    (if lazy invalidates-binding-info fwatch-binding-info))
-
-  cljs.core/IEquiv
-  (-equiv [o other] (identical? o other))
-
-  cljs.core/IDeref
-  (-deref [this] (.reactiveDeref this))
-
-  IMeta
-  (-meta [_] meta)
-
-  IPrintWithWriter
-  (-pr-writer [a writer opts]
-    (-write writer "#<ReactiveCursor: ")
-    (pr-writer state writer opts)
-    (-write writer ">"))
-
-  IWatchable
-  (-add-watch [this key f]
-    (when-not (contains? watches key)
-      (set! (.-watchers this) (inc watchers))
-      (set! (.-watches this) (assoc watches key f)))
-    this)
-  (-remove-watch [this key]
-    (when (contains? watches key)
-      (set! (.-watchers this) (dec watchers))
-      (set! (.-watches this) (dissoc watches key)))
-    this)
-
-  IHash
-  (-hash [this] (goog/getUid this))
-
-  IReset
-  (-reset! [this new-value]
-    (swap! ref (fn [cur] (setter cur new-value)))
-    (.rawDeref this))
-
-  ISwap
-  (-swap! [this f] (cursor-swap! this ref getter setter f))
-  (-swap! [this f x] (cursor-swap! this ref getter setter #(f % x)))
-  (-swap! [this f x y] (cursor-swap! this ref getter setter #(f % x y)))
-  (-swap! [this f x y more] (cursor-swap! this ref getter setter #(apply f %  x y  more))))
-
-(apply-js-mixin ReactiveCursor fwatch-mixin)
-(apply-js-mixin ReactiveCursor invalidates-mixin)
-(apply-js-mixin ReactiveCursor rx-mixin)
-
-(defn cursor* [ref korks-or-getter setter lazy]
-  (let [id (new-reactive-id)
-        ks (cond
-            (keyword? korks-or-getter)
-            [korks-or-getter]
-
-            (number? korks-or-getter)
-            [korks-or-getter]
-
-            (sequential? korks-or-getter)
-            korks-or-getter)
-        getter (if ks
-                 (fn [cur] (get-in cur ks))
-                 korks-or-getter)
-        setter (or
-                setter
-                (when ks
-                  (fn [cur new-sub] (assoc-in cur ks new-sub)))
-                (fn [_ _] (assert false "Cursor does not support updates")))
-        cursor (ReactiveCursor. id ref getter setter true nil nil nil #js {} 0 #js {} 0 lazy nil nil)
-        ;; invalidate  (make-invalidate-fn cursor id)
-        binding-fns (get-binding-fns ref)
-        add-watch-fn
-        (if-let [add-watch* (.-add-watch binding-fns)]
-          (fn [cursor] (add-watch* ref id (fn [] (.invalidate cursor))))
-          (fn []))
-        remove-watch-fn
-        (if-let [remove-watch* (.-remove-watch binding-fns)]
-          (fn [] (remove-watch* ref id))
-          (fn []))]
-     ;; (set! (.-invalidate cursor) invalidate)
-     (set! (.-add-watch-fn cursor) add-watch-fn)
-     (set! (.-remove-watch-fn cursor) add-watch-fn)
-     (add-watch-fn cursor)
-     cursor))
-
-;; (defn cursor
-;;   ([ref korks-or-getter] (cursor* ref korks-or-getter nil false))
-;;   ([ref getter setter] (cursor* ref getter setter false)))
-
-(defn lazy-cursor
-  ([ref korks-or-getter] (cursor* ref korks-or-getter nil true))
-  ([ref getter setter] (cursor* ref getter setter true)))
-
-;; (defn lens-cursor [ref getter setter] (cursor ref getter setter))
-
 (defn- keyset [coll]
   (cond (map? coll)
         (keys coll)
@@ -499,8 +307,12 @@
       (-equiv this other))
     (clean [this])
     (updateChild [this key f args]
-      (set! (.-change-key this) key)
+      (set! (.-change-ks this) [key])
       (apply swap-fn update key f args)
+      this)
+    (assocChild [this key val]
+      (set! (.-change-ks this) [key])
+      (apply swap-fn assoc key val)
       this)
     (notifyChild [this child-key new-val]
       (doseq [child (get child-cursors child-key)]
@@ -509,7 +321,7 @@
       (let [old-state state]
         (set! state new-state)
         (when-not (identical? old-state state)
-          (if-let [change-key (.-change-key this)]
+          (if-let [[change-key & descendant-ks] (.-change-ks this)]
             (do
               (when-let [cursors (get child-cursors change-key)]
                 (when-let [cur (first cursors)]
@@ -517,6 +329,8 @@
                         new-val (get state change-key)]
                     (when-not (identical? old-val new-val)
                       (doseq [cur cursors]
+                        (when descendant-ks
+                          (set! (.-change-ks cur) descendant-ks))
                         (.updateCursor cur new-val))
                       ;; check for key set change
                       ))))
@@ -587,10 +401,8 @@
 
     IKeysetCursor
     (-keyset [this] (keyset state))
-    (-add-keyset-watch [this key f]
-      )
-    (-remove-keyset-watch [this key]
-      )
+    (-add-keyset-watch [this key f])
+    (-remove-keyset-watch [this key])
 
     IHash
     (-hash [this] (goog/getUid this))
@@ -630,17 +442,25 @@
     (-persistent! [this] state)
 
     ITransientAssociative
-    (-assoc! [this key val] (.updateChild this key assoc [val]))
+    (-assoc! [this key val] (.assocChild this key val))
 
     ITransientMap
-    (-dissoc! [this key] (.updateChild this key dissoc nil))
+    (-dissoc! [this key] 
+      (set! (.-change-ks this) [key])
+      (apply swap-fn dissoc key))
 
     ITransientVector
-    (-assoc-n! [this n val] (.updateChild this n assoc [val])
-      )
+    (-assoc-n! [this n val] (.assocChild this n val))
 
     IAssociativeCursor
-    (-update! [this key f args] (.updateChild this f args)))
+    (-update! [this key f args] (.updateChild this key f args))
+    (-update-in! [this ks f args]
+      (set! (.-change-ks this) ks)
+      (apply swap-fn update-in ks f args)
+      this)
+    (-assoc-in! [this ks v]
+      (set! (.-change-ks this) ks)
+      (apply swap-fn assoc-in ks v)))
 
 (apply-js-mixin Cursor fwatch-mixin)
 
