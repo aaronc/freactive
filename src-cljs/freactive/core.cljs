@@ -285,7 +285,7 @@
      (set! (.-register-dep-fn reactive) (make-register-dep reactive))
      reactive)))
 
-(defn- keyset [coll]
+(defn coll-keyset [coll]
   (cond (map? coll)
         (keys coll)
 
@@ -325,13 +325,17 @@
       (set! (.-change-ks this) [key])
       (swap-fn assoc key val)
       this)
-    (notifyChild [this child-key new-val]
+    (resetChild [this child-key new-val]
       (doseq [child (get child-cursors child-key)]
         (.updateCursor child new-val)))
+    (notifyKeysetWatches [this removed added]
+      (doseq [[key f] keyset-watches]
+        (f key this removed added)))
     (updateCursor [this new-state]
       (when-not (identical? state new-state)
         (let [old-state state]
           (set! state new-state)
+          (.notifyFWatches this old-state state)
           (if-let [change-ks (.-change-ks this)]
             (let [change-ks (if (keyword? change-ks)
                               [(case change-ks
@@ -348,20 +352,22 @@
                         (when descendant-ks
                           (set! (.-change-ks cur) descendant-ks))
                         (.updateCursor cur new-val))
-                      ;; check for key set change
-                      ))))
+                      (cond
+                        (nil? old-val)
+                        (.notifyKeysetWatches this nil #{change-key})
+                        (nil? new-val)
+                        (.notifyKeysetWatches this #{change-key} nil))))))
               (set! (.-change-key this) nil))
             (cond keyset-watches
-                  (let [old-keys (keyset old-state)
-                        new-keys (keyset state)
+                  (let [old-keys (coll-keyset old-state)
+                        new-keys (coll-keyset state)
                         [removed added both] (diff-set (set old-keys) (set new-keys))]
                     (when (or (not (empty? removed)) (not (empty? added)))
-                      ;; notify key set change
-                      )
+                      (.notifyKeysetWatches this removed added))
                     (doseq [rx removed]
-                      (.notifyChild rx nil))
+                      (.resetChild rx nil))
                     (doseq [ra added]
-                      (.notifyChild ra (get state ra)))
+                      (.resetChild ra (get state ra)))
                     (doseq [rc both]
                       (when-let [cursors (get child-cursors rc)]
                         (when-let [cur (first cursors)]
@@ -376,8 +382,7 @@
                           new-val (get state ckey)]
                       (when-not (identical? old-val new-val)
                         (doseq [cur cursors]
-                          (.updateCursor cur new-val)))))))
-          (.notifyFWatches this old-state state))))
+                          (.updateCursor cur new-val))))))))))
     (rawDeref [this]
       (when (.-dirty this)
         (.updateCursor this (get-fn)))
@@ -438,9 +443,17 @@
       this)
 
     IKeysetCursor
-    (-keyset [this] (keyset state))
-    (-add-keyset-watch [this key f])
-    (-remove-keyset-watch [this key])
+    (-keyset [this] (coll-keyset state))
+    (-add-keyset-watch [this key f]
+      (when-not (contains? keyset-watches key)
+        (.activate this)
+        (set! (.-watchers this) (inc watchers))
+        (set! (.-keyset-watches this) (assoc keyset-watches key f))))
+    (-remove-keyset-watch [this key]
+      (when (contains? keyset-watches key)
+        (set! (.-watchers this) (dec watchers))
+        (set! (.-keyset-watches this) (dissoc keyset-watches key))
+        (.clean this)))
 
     IHash
     (-hash [this] (goog/getUid this))
