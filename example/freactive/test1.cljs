@@ -1,7 +1,7 @@
 (ns freactive.test1
   (:refer-clojure :exclude [atom])
   (:require [freactive.dom :as dom]
-            [freactive.core :refer [atom rx cursor]]
+            [freactive.core :refer [atom cursor]]
             [figwheel.client :as fw])
   (:require-macros
   [freactive.macros :refer [rx debug-rx]]))

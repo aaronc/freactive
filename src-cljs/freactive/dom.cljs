@@ -14,7 +14,6 @@ Can be used to define custom conversions to DOM nodes or text for things such as
 or dates; or can be used to define containers for DOM elements themselves."
   (-get-dom-image [x]
     "Should return either virtual DOM (a vector or string) or an actual DOM node."))
-"))
 
 (extend-protocol IDOMImage
   boolean
@@ -823,3 +822,64 @@ map in vdom."
     (remove! last-child))
   (append-child! element child))
 
+;;; collection binding
+
+;; (deftype ReactiveElementCollection [keyset-cursor element-fn parent keys new-keys]
+;;   Object
+;;   (invalidate [this new-keyset]
+;;     (r/remove-keyset-watch keyset-cursor parent)
+;;     (when-not (.-disposed this)
+;;       (set! (.-new-keyset this) new-keyset)
+;;       (when-not (.-updating this)
+;;         (set! (.-updating this) true)
+;;         (queue-animation (fn [] (.animate this))))))
+;;   (animate [this]
+;;     (let [new-keyset (set new-keyset)]
+;;       (loop [old-key (first keys)
+;;              old-ks (rest keys)
+;;              new-key (first new-keys)
+;;              new-ks (rest new-keys)
+;;              cur-elem head
+;;              elements-to-move {}]
+;;         (let [next-sib (.nextSibling cur-elem)]
+;;           (cond (= old-key new-key)
+;;                 (recur (first old-ks) (rest old-ks) (first new-ks) (rest new-ks)
+;;                        next-sib elements-to-move)
+
+;;                 (contains? new-keyset old-key)
+;;                 (recur (first old-ks) (rest old-ks) new-key new-ks
+;;                        next-sib
+;;                        (assoc elements-to-move old-key (.removeChild parent cur-elem)))
+
+;;                 :default
+;;                 (do
+;;                   (remove! cur-elem)
+;;                   (if )
+                  
+;;                   )
+;;                 ))
+
+;;         ))
+
+;;     )
+;;   (init [this]
+;;     (let [keyset (r/-keyset)
+;;           elements
+;;           (for [k keyset]
+;;             (append-child! parent (element-fn k)))
+;;           head (first elements)
+;;           tail (last elements)
+;;           on-animate*
+;;           (fn [new-keyset]
+;;             (fn []
+;;               ))
+;;           on-update
+;;           (fn [k r new-keyset]
+;;             )]
+;;       (r/add-keyset-watch
+;;        keyset-cursor
+;;        parent
+;;        ))))
+
+;; (defn bind-keys [keyset-cursor element-fn]
+;;   )

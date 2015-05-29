@@ -6,10 +6,12 @@
     [figwheel.client :as fw :include-macros true]
     [freactive.animation :as animation]
     [goog.string :as gstring]
-    [cljs.core.async :refer [chan put! <!]])
+    [cljs.core.async :refer [chan put! <!]]
+    [freactive.core-test])
   (:require-macros
   [cljs.core.async.macros :refer [go go-loop]]
-  [freactive.macros :refer [rx debug-rx]]))
+  [freactive.macros :refer [rx debug-rx]]
+  [cljs.test :refer [run-all-tests]]))
 
 (enable-console-print!)
 
@@ -155,5 +157,9 @@
 
 (dom/mount! (.getElementById js/document "root") (view))
 
-(fw/watch-and-reload)
+(fw/start
+ {:on-jsload
+  (fn []
+    (println "Reloaded")
+    (run-all-tests #"freactive.*-test"))})
 
