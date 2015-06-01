@@ -326,7 +326,7 @@
       (when (.-dirty this)
         (when-let [activate-fn (.-activate-fn this)]
           (activate-fn)
-          (.rawDeref this)
+          (set! state (get-fn))
           (set! (.-dirty this) false))))
     (clean [this]
       (when (identical? 0 watches)
@@ -401,7 +401,7 @@
                           (.updateCursor cur new-val))))))))))
     (rawDeref [this]
       (when (.-dirty this)
-        (.updateCursor this (get-fn)))
+        (set! state (get-fn)))
       state)
     (reactiveDeref [this]
       (register-dep this id fwatch-binding-info)
@@ -482,29 +482,28 @@
     ICursor
     (-cursor-key [this] tkey)
     (-child-cursor [this ckey]
-      (if-let [child-cursor (first (get child-cursors ckey))]
-        (first child-cursors)
-        (let [id (new-reactive-id)
-              cur (Cursor. id this ckey nil
-                           (fn [] (get (.rawDeref this) ckey))
-                           (fn [f & args] (.updateChild this ckey f args))
-                           (get state ckey)
-                           nil nil #js {} 0 nil)
-              activate-fn
-              (fn []
-                (set! child-cursors (update child-cursors ckey conj cur)))]
-          ;; (activate-fn)
-          (set! (.-dirty cur) true)
-          (set! (.-activate-fn cur) activate-fn)
-          (set! (.-clean-fn cur)
+      (or (first (get child-cursors ckey))
+          (let [id (new-reactive-id)
+                cur (Cursor. id this ckey nil
+                             (fn [] (get (.rawDeref this) ckey))
+                             (fn [f & args] (.updateChild this ckey f args))
+                             (get state ckey)
+                             nil nil #js {} 0 nil)
+                activate-fn
                 (fn []
-                  (set! child-cursors
-                        (update child-cursors ckey
-                                (fn [cursors]
-                                  (let [cursors (remove #(= % cur) cursors)]
-                                    (when-not (empty? cursors)
-                                      cursors)))))))
-          cur)))
+                  (set! child-cursors (update child-cursors ckey conj cur)))]
+            ;; (activate-fn)
+            (set! (.-dirty cur) true)
+            (set! (.-activate-fn cur) activate-fn)
+            (set! (.-clean-fn cur)
+                  (fn []
+                    (set! child-cursors
+                          (update child-cursors ckey
+                                  (fn [cursors]
+                                    (let [cursors (remove #(= % cur) cursors)]
+                                      (when-not (empty? cursors)
+                                        cursors)))))))
+            cur)))
     (-parent-cursor [this]
       (when tkey
         parent))
