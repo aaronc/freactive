@@ -13,3 +13,4 @@ pom.xml.asc
 freactive.iml
 out
 .repl/
+figwheel_server.log

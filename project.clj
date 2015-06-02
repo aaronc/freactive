@@ -7,7 +7,7 @@
                  [garden "1.2.5"]]
   :profiles
   {:dev
-    {:plugins [[com.cemerick/austin "0.1.5"]
+   {:plugins [;; [com.cemerick/austin "0.1.5"]
                [lein-cljsbuild "1.0.5"] 
                [lein-figwheel "0.3.3"]]
      :dependencies

@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [atom])
   (:require
    [goog.object]
-   [clojure.set :as set]))
+   [clojure.set :as set]
+   [clojure.data.avl :as avl]))
 
 ;; Core API for reactive binding
 
@@ -284,6 +285,15 @@
                                        *do-trace-captures*)]
      (set! (.-register-dep-fn reactive) (make-register-dep reactive))
      reactive)))
+
+(defn- rapply* [f atom-like args lazy]
+  (rx* (fn [] (apply f @atom-like args))))
+
+(defn rapply [f atom-like & args]
+  (rapply* f atom-like args true))
+
+(defn eager-rapply [f atom-like & args]
+  (rapply* f atom-like args false))
 
 (defn coll-keyset [coll]
   (cond (map? coll)
@@ -597,28 +607,126 @@
   ([parent getter setter]
    (lens-cursor parent getter setter)))
 
-(defn transducing-cursor
-  ([cur xf]
-   (let [xfc (cursor)
-         reducing-fn
-         (xf
-          (fn
-            ([] xfc)
-            ([acc] acc)
-            ([acc [k v :as kvp]]
-             (if (= 1 (count kvp))
-               (dissoc! acc k)
-               (assoc! acc k v)))))
-         get-fn
-         (fn [] (into {} xf (kv-seq @cur)))
-         swap-fn (fn [f & args] (assert false "Read-only cursor"))
-         activate-fn
-         (fn []
-           ;;(add-changes-watch cur (.-id xfc)
-           (fn [k r changes]
-             (doseq [change changes]
-               (reducing-fn xfc change)))
-           ;;)
-           )
-         ]
-     xfc)))
+;; (defn transducing-cursor
+;;   ([cur xf]
+;;    (let [xfc (cursor)
+;;          reducing-fn
+;;          (xf
+;;           (fn
+;;             ([] xfc)
+;;             ([acc] acc)
+;;             ([acc [k v :as kvp]]
+;;              (if (= 1 (count kvp))
+;;                (dissoc! acc k)
+;;                (assoc! acc k v)))))
+;;          get-fn
+;;          (fn [] (into {} xf (kv-seq @cur)))
+;;          swap-fn (fn [f & args] (assert false "Read-only cursor"))
+;;          activate-fn
+;;          (fn []
+;;            ;;(add-changes-watch cur (.-id xfc)
+;;            (fn [k r changes]
+;;              (doseq [change changes]
+;;                (reducing-fn xfc change)))
+;;            ;;)
+;;            )
+;;          ]
+;;      xfc)))
+
+;; Reactive Attributes
+
+;; (deftype ReactiveAttribute [id the-ref binding-info set-fn animate-fn ^:mutable disposed]
+;;   Object
+;;   (dispose [this]
+;;     ((.-remove-watch binding-info) ref id)
+;;     (when-let [clean (.-clean binding-info)] (clean the-ref))
+;;     (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
+;;       (binding-disposed)))
+;;   (invalidate [this]
+;;     ((.-remove-watch binding-info) ref id)
+;;     (animate-fn
+;;      (fn [_]
+;;        (when-not disposed 
+;;          ((.-add-watch binding-info) ref id #(.invalidate this))
+;;          (set-fn ((.-raw-deref binding-info) ref)))))))
+
+;; (defn bind-attr* [the-ref set-fn animate-fn]
+;;   (if (instance? IDeref the-ref)
+;;     (ReactiveAttribute. (new-reactive-id) the-ref (get-binding-fns the-ref) set-fn animate-fn false)
+;;     (set-fn the-ref))
+
+;; ;; Reactive Sequence Projection Protocols
+
+;; (defprotocol IReactiveProjectionTarget
+;;   (-proj-insert-elem [this projected-elem before-idx])
+;;   (-proj-move-elem [this elem-idx before-idx])
+;;   (-proj-remove-elem [this elem-idx])
+;;   (-proj-clear [this]))
+
+;; (defprotocol IReactiveProjection
+;;   (-project-elements [this target]))
+
+;; (defn project-elements [projection target]
+;;   (-project-elements projection target))
+
+;; ;; Reactive Sequence Projection Implementations
+
+;; (deftype KeysetCursorProjection [cur proj-fn opts
+;;                                  ^:mutable avl-map ^:mutable target
+;;                                  ^:mutable filter-fn
+;;                                  ^:mutable offset ^:mutable limit
+;;                                  ^:mutable sort-by
+;;                                  ^:mutable placeholder
+;;                                  ^:mutable placeholder-idx]
+;;   Object
+;;   (dispose [this])
+;;   (updateSortBy [this new-sort-by]
+;;     (when-not (identical? new-sort-by sort-by)
+;;       (-proj-clear target)
+;;       (set! sort-by new-sort0-by)
+;;       (set! avl-map
+;;             (if sort-by
+;;               (avl/sorted-map sort-by)
+;;               (avl/sorted-map)))))
+;;   (updateFilter [this new-filter])
+;;   (rankOf [this key]
+;;     (let [idx
+;;           (let [idx (+ (avl/rank-of avl-map key) offset)]
+;;             (if limit
+;;               (when (<= idx limit)
+;;                 idx)
+;;               idx))]
+;;       (if (and placeholder-idx (>= idx placeholder-idx))
+;;         (inc idx)
+;;         idx)))
+;;   (onUpdates [this updates]
+;;     (doseq [[k v :as update] updates]
+;;       (if-let [cur-idx (.rankOf this k)]
+;;         (if (= (count update) 1)
+;;           (do
+;;             (set! avl-map (dissoc avl-map k))
+;;             (-proj-remove-elem target cur-idx))
+;;           (when (filter update)
+;;             (set! avl-map (assoc avl-map k v))
+;;             (-proj-move-elem target cur-idx (.rankOf this k))))
+;;         (when (filter update)
+;;             (set! avl-map (assoc avl-map k v))
+;;             (-proj-insert-elem target (proj-fn (cursor cur k)) (.rankOf this k))))))
+
+;;   IReactiveProjection
+;;   (-project-elements [this proj-target]
+;;     (let [{:keys [filter sort-by offset limit placeholder-idx placeholder]} opts]
+;;       (bind-attr* filter #(.updateFilter this))
+;;       (bind-attr* sort-by #(.updateSortBy this))
+;;       (bind-attr* offset #(.updateFilter this))
+;;       (bind-attr* limit #(.updateFilter this))
+;;       (bind-attr* placeholder-idx #(.updateFilter this))
+;;       (bind-attr* placeholder #(.updateFilter this)))))
+
+;; (defn rmap
+;;   ([f keyset-cursor]
+;;    (rmap nil f keyset-cursor))
+;;   ([opts f keyset-cursor]
+;;    (KeysetCursorProjection. cur f opts nil nil identity 0 nil)))
+
+
