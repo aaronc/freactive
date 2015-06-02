@@ -97,8 +97,8 @@
        ", mouse at "
        (rx (str @mouse-x ", " @mouse-y))
       ". "]])]
-   (let [ease-x (animation/easer 1.0)
-         ease-y (animation/easer 1.0)
+   (let [ease-x (animation/easer 0.0)
+         ease-y (animation/easer 0.0)
          graph-state (atom nil)
          action-ch (chan)]
      (go-loop []
@@ -162,5 +162,4 @@
     (run-all-tests #"freactive.*-test"))})
 
 (dom/mount! (.getElementById js/document "root") (view))
-;; (println "velem" (type (dom/as-velem [:h1 "Hello World!"])))
-;; (dom/mount! (.getElementById js/document "root") [:h1 "Hello World!!"])
+

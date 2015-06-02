@@ -10,7 +10,8 @@
   (-velem-tail [this])
   (-velem-replace [this cur-velem])
   (-velem-native-element [this])
-  (-velem-simple-element [this]))
+  (-velem-simple-element [this])
+  (-velem-lifecycle-callback [this cb-name]))
 
 (defn velem-native-element [this]
   (-velem-native-element this))
@@ -36,18 +37,24 @@
 (defn velem-replace [this cur-velem]
   (-velem-replace this cur-velem))
 
+(defn velem-lifecycle-callback [this cb-name]
+  (-velem-lifecycle-callback this cb-name))
+
 (deftype ReactiveElement [id the-ref binding-info velem-fn enqueue-fn 
                           ^:mutable parent 
                           ^:mutable cur-velem ^:mutable dirty
                           ^:mutable updating ^:mutable disposed]
   Object
+  (onInitialized [this]
+    (when-let [binding-initialized (get (meta the-ref) :binding/on-initialized)]
+      (binding-initialized the-ref)))
   (dispose [this]
     ((.-remove-watch binding-info) the-ref id)
     (when cur-velem (r/dispose cur-velem))
     (when-let [clean (.-clean binding-info)] (clean the-ref))
     (set! (.-disposed this) true)
-    (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
-      (binding-disposed)))
+    (when-let [binding-disposed (get (meta the-ref) :binding/on-disposed)]
+      (binding-disposed the-ref)))
   (get-new-elem [this]
     (set! dirty false)
     ((.-add-watch binding-info) the-ref id #(.invalidate this))
@@ -66,20 +73,16 @@
     (when-not disposed
       (let [new-velem (.get-new-elem this)]
         (when-not (= new-velem cur-velem)
-          ;; TODO hide transition
-          ;; (velem-replace cur-velem
-          ;;  (fn []
-          ;;    (if disposed
-          ;;      (set! updating false)
-          ;;      (.show-new-elem this (if dirty
-          ;;                             (.get-new-elem this)
-          ;;                             new-velem) nil))))
-          (if disposed
-            (set! updating false)
-            (.show-new-elem this (if dirty
-                                   (.get-new-elem this)
-                                   new-velem) nil)))
-          )))
+          (if-let [on-detaching (velem-lifecycle-callback cur-velem :node/on-detaching)]
+            (on-detaching
+             cur-velem
+             (fn []
+               (if disposed
+                 (set! updating false)
+                 (.show-new-elem this (if dirty
+                                        (.get-new-elem this)
+                                        new-velem) nil))))
+            (.show-new-elem this new-velem nil))))))
   (invalidate [this]
     ((.-remove-watch binding-info) the-ref id)
     (when-not disposed
@@ -102,15 +105,19 @@
   (-velem-simple-element [this] (velem-simple-element cur-velem))
   (-velem-insert [this native-parent native-before]
     (set! (.-parent this) native-parent)
+    (.onInitialized this)
     (.show-new-elem this (.get-new-elem this) native-before)
     this)
   (-velem-remove [this]
     (.dispose this)
     (velem-remove cur-velem))
   (-velem-replace [this elem-to-replace]
+    (.onInitialized this)
     (set! cur-velem (velem-replace (.get-new-elem this) elem-to-replace))
-    (.done-updating this)
-    this))
+    this)
+  (-velem-lifecycle-callback [this cb-name]
+    (when cur-velem
+      (velem-lifecycle-callback cur-velem cb-name))))
 
 (defn reactive-element [the-ref velem-fn enqueue-fn]
   (ReactiveElement.

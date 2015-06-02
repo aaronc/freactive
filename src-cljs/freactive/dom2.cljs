@@ -157,7 +157,8 @@ map in velem."
     (if-let [old-node (ui/velem-native-element old-velem)]
       (dom-simple-replace node old-node)
       (dom-remove-replace node old-velem))
-    this))
+    this)
+  (-velem-lifecycle-callback [this cb-name]))
 
 ;; Managed DOMElement stuff
 
@@ -246,12 +247,7 @@ map in velem."
                  state)
    :class (fn [element cls]
             (set! (.-className element) cls)
-            cls)
-   ;; :value (fn [element v]
-   ;;          (set! (.-value element) v)
-   ;;          v)
-   ;; :id (fn [element id] (set! (.-id element) id))
-   })
+            cls)})
 
 ;; attributes to set directly
 (doseq [a #js ["id" "value"]]
@@ -287,14 +283,24 @@ map in velem."
       (str attr-ns "/" (name kw-or-str))
       (name kw-or-str))))
 
+(defn- dispose-states [states]
+  (goog.object/forEach
+   states
+   (fn [state k _]
+     (when state
+       (r/dispose state)))))
+
 (defn- attr-diff* [node oas attr-map bind-attr]
   (let [nas #js {}]
     (doseq [[k v] attr-map]
       (let [kstr (->str k)]
         (if-let [existing (when oas (aget oas kstr))]
-          (when-let [new-state (existing v)]
-            (aset nas kstr new-state))
+          (do
+            (js-delete oas kstr)
+            (when-let [new-state (existing v)]
+              (aset nas kstr new-state)))
           (aset nas kstr (bind-attr node k v)))))
+    (dispose-states oas)
     nas))
 
 (defn- bind-styles! [node old-state style-map]
@@ -326,14 +332,6 @@ map in velem."
         :default
         (do-bind-attr (get-attr-setter element attr-name) attr-value)))))
 
-(defn- dispose-states [states]
-  (println "states" states)
-  (goog.object/forEach
-   states
-   (fn [state k _]
-     (when state
-       (r/dispose state)))))
-
 
 (deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
                      ^:mutable attr-states ^:mutable events ^:mutable styles]
@@ -354,6 +352,9 @@ map in velem."
       (.updateAttrs this attrs)
       (doseq [child children]
         (ui/velem-insert child node nil))))
+  (onAttached [this]
+    (when-let [on-attached (get attrs :node/on-attached)]
+      (on-attached node)))
   (updateAttrs [this new-attrs]
     (let [{new-events :events new-style :style :as new-attrs} new-attrs]
       (set! events (bind-events! node events new-events))
@@ -365,13 +366,12 @@ map in velem."
   (-velem-parent [this] (.-parentNode node))
   (-velem-head [this] node)
   (-velem-tail [this] node)
-  (-velem-native-element [this]
-    (.ensureNode this)
-    node)
+  (-velem-native-element [this] node)
   (-velem-simple-element [this] this)
   (-velem-insert [this dom-parent dom-before]
     (.ensureNode this)
     (dom-insert dom-parent node dom-before)
+    (.onAttached this)
     this)
   (-velem-remove [this]
     (.dispose this)
@@ -383,7 +383,10 @@ map in velem."
         (dom-simple-replace node old-node)
         (r/dispose old-velem))
       (dom-remove-replace node old-velem))
-    this))
+    (.onAttached this)
+    this)
+  (-velem-lifecycle-callback [this cb-name]
+    (get attrs cb-name)))
 
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
@@ -421,7 +424,8 @@ map in velem."
       (do
         (.ensureNode this)
         (dom-remove-replace node old-velem)))
-    this))
+    this)
+  (-velem-lifecycle-callback [this cb-name]))
 
 ;; Conversion of Clojure(script) DOM images to virtual DOM
 
