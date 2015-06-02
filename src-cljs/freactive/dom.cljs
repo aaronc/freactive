@@ -906,17 +906,17 @@ map in vdom."
   (-vdom-tail [this])
   (-vdom-replace [this new-vdom])
   (-vdom-node [this])
-  (-vdom-element [this]))
+  (-vdom-simple-element [this]))
 
 (defn vdom-node [this]
   (if (dom-node? this)
     this
     (-vdom-node this)))
 
-(defn vdom-element [this]
+(defn vdom-simple-element [this]
   (if (dom-node? this)
     this
-    (-vdom-element this)))
+    (-vdom-simple-element this)))
 
 (defn dom-insert [dom-node dom-parent dom-before]
   (if dom-before
@@ -990,7 +990,7 @@ map in vdom."
       (.removeChild parent dom-node)
       (vdom-insert new-vdom parent next-sib))))
 
-(deftype DOMElement [ns-uri tag attrs events bindings children ^:mutable node]
+(deftype DOMElement [ns-uri tag attrs children ^:mutable node]
   Object
   (ensureNode [this]
     (when-not node
@@ -998,8 +998,9 @@ map in vdom."
             (if xmlns
               (.createElementNS js/document ns-uri tag)
               (.createElement js/document tag)))
+      ;; TODO bind attrs
       (doseq [child children]
-        (-vdom-insert child node nil))))
+        (vdom-insert child node nil))))
 
   IVirtualDOM
   (-vdom-head [this] node)
@@ -1007,18 +1008,19 @@ map in vdom."
   (-vdom-node [this]
     (.ensureNode this)
     node)
-  (-vdom-element [this] this)
+  (-vdom-simple-element [this] this)
   (-vdom-insert [this dom-parent dom-before]
     (.ensureNode this)
     (dom-insert dom-parent node dom-before))
-
   (vdom-remove [this]
     (dom-remove node))
   (-vdom-replace [this new-vdom]
-    (if-let [new-elem (vdom-element new-vdom)]
+    (if-let [new-elem (vdom-simple-element new-vdom)]
       (if (and (instance? DOMElement new-elem)
                (identical? (.-ns-uri new-elem) ns-uri)
-               (identical? (.-tag new-elem) tag))
+               (identical? (.-tag new-elem) tag)
+               false ;; disabled
+               )
         (do
           ;; TODO do diff replace
           this)
@@ -1038,14 +1040,14 @@ map in vdom."
   (-vdom-node [this]
     (.ensureNode this)
     node)
-  (-vdom-element [this] this)
+  (-vdom-simple-element [this] this)
   (-vdom-insert [this dom-parent dom-before]
     (.ensureNode this)
     (dom-insert dom-parent node dom-before))
   (-vdom-remove [this]
     (dom-remove node))
   (-vdom-replace [this new-vdom]
-    (if-let [new-elem (vdom-element new-vdom)]
+    (if-let [new-elem (vdom-simple-element new-vdom)]
       (if (instance? DOMTextNode new-vdom)
         (do
           (.ensureNode this)
@@ -1057,7 +1059,9 @@ map in vdom."
           new-vdom))
       (dom-remove-replace node new-vdom))))
 
-(deftype ReactiveElement [id ^:mutable parent the-ref binding-info ^:mutable cur-vdom ^:mutable dirty
+(deftype ReactiveElement2 [id the-ref binding-info
+                          ^:mutable parent
+                          ^:mutable cur-vdom ^:mutable dirty
                           ^:mutable updating ^:mutable disposed]
   Object
   (dispose [this]
@@ -1107,7 +1111,7 @@ map in vdom."
   (-vdom-head [this] (vdom-head cur-elem))
   (-vdom-tail [this] (vdom-tail cur-elem))
   (-vdom-node [this] (vdom-node cur-elem))
-  (-vdom-element [this] (vdom-element cur-elem))
+  (-vdom-simple-element [this] (vdom-simple-element cur-elem))
   (-vdom-insert [this dom-parent dom-before]
     (set! (.-parent this) dom-parent)
     (.show-new-elem this (.get-new-elem this) dom-before)
@@ -1136,7 +1140,7 @@ map in vdom."
 
   IVirtualDOM
   (-vdom-node [this])
-  (-vdom-element [this])
+  (-vdom-simple-element [this])
   (-vdom-head [this]
     (when (> (.-length elements) 0)
       (vdom-head (aget elements 0))))
@@ -1152,3 +1156,65 @@ map in vdom."
     (set! (.-disposed this) true)
     (doseq [elem elements]
       (vdom-remove elem))))
+
+(defn dom-element [ns-uri tag tail]
+  (let [[_ tag-name id class] (re-matches re-tag tag-name)
+        attrs? (first tail)
+        have-attrs (map? attrs?)
+        attrs (if have-attrs attrs? {})
+        attrs (cond-> attrs
+
+                (and id (not (:id attrs)))
+                (assoc :id id)
+                
+                class
+                (update :class
+                        (fn [cls]
+                          (let [class (.replace class re-dot " ")]
+                            (if cls (str class " " cls) class)))))
+
+        children (if have-attrs (rest tail) tail)]
+    (DOMElement. ns-uri tag attrs children nil)))
+
+(defn as-vdom [elem-spec]
+  (cond
+    (string? elem-spec)
+    (DOMTextNode. elem-spec nil)
+
+    (dom-node? elem-spec)
+    elem-spec
+
+    (vector? elem-spec)
+    (let [tag (first elem-spec)]
+      (cond
+        (keyword? tag)
+        (let [tag-ns (namespace tag)
+              tag-name (name tag)
+              tail (rest elem-spec)]
+          (if tag-ns
+            (if-let [tag-handler (aget node-ns-lookup tag-ns)]
+              (cond
+                (string? tag-handler)
+                (dom-element tag-handler tag tail)
+
+                (fn? tag-handler)
+                (as-vdom (tag-handler tag-name tail))
+
+                :default
+                (.warn js/console "Invalid ns node handler" tag-handler))
+              (.warn js/console "Undefined ns node prefix" tag-ns))
+            (dom-element nil tag tail)))
+
+        :default
+        (assert false "Only know how to handle keyword tags")))
+
+    (satisfies? IDeref elem-spec)
+    (ReactiveElement2. (r/new-reactive-id)
+                      elem-spec
+                      (r/get-binding-fns elem-spec)
+                      nil nil false false false)
+
+    (satisfies? IVirtualDOM elem-spec)
+    elem-spec
+
+    :default (as-vdom (-get-dom-image elem-spec))))
