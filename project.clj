@@ -7,8 +7,7 @@
                  [garden "1.2.5"]]
   :profiles
   {:dev
-   {:plugins [;; [com.cemerick/austin "0.1.5"]
-               [lein-cljsbuild "1.0.5"] 
+   {:plugins [[lein-cljsbuild "1.0.5"] 
                [lein-figwheel "0.3.3" :exclusions [org.cloure/clojure]]]
      :dependencies
      [[org.clojure/clojure "1.7.0-RC1"]
@@ -19,19 +18,17 @@
 
      :cljsbuild {:builds
                  [{:id           "example"
-                   :source-paths ["src-cljs" "example" "test"]
+                   :source-paths ["src" "example" "test"]
                    :compiler     {:output-to     "resources/public/js/compiled/app.js"
                                   :output-dir    "resources/public/js/compiled/out"
                                   :optimizations :none
                                   :pretty-print true
                                   :source-map    true}}
                   {:id           "example-advanced"
-                   :source-paths ["src-cljs" "example" "test"]
+                   :source-paths ["src" "example" "test"]
                    :compiler     {:output-to     "resources/public/js/compiled/advanced.js"
                                   :output-dir    "resources/public/js/compiled/out-adv"
                                   :optimizations :advanced
                                   :main "freactive.dom-perf"}}]}}}
-  :source-paths ["src/clojure" "src-cljs"]
-  :test-paths ["test" "example"]
-  :javac-options ["-Xlint:unchecked"]
-  :java-source-paths ["src/java"])
+  :source-paths ["src"]
+  :test-paths ["test" "example"])
