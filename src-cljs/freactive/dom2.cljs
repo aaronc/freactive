@@ -111,10 +111,8 @@ map in velem."
 
 (def ^:private attr-ns-lookup
   #js
-  {
-   ;; :node bind-lifecycle-callback!
-   :state (fn [_ _ _ v] v) ;; automatically handled in attr map
-   })
+  {:node (fn [_ _ v] v)
+   :state (fn [_ _ v] v)})
 
 (defn register-attr-prefix! [prefix xml-ns-or-handler]
   (aset attr-ns-lookup prefix xml-ns-or-handler))
@@ -146,6 +144,8 @@ map in velem."
   (-velem-parent [this] (.-parentNode node))
   (-velem-head [this] node)
   (-velem-tail [this] node)
+  (-velem-next-sibling [this]
+    (.-nextSibling node))
   (-velem-native-element [this] node)
   (-velem-simple-element [this] this)
   (-velem-insert [this dom-parent dom-before]
@@ -196,11 +196,13 @@ map in velem."
   [element evt-name handler]
   (.removeEventListener  element evt-name handler))
 
-(deftype EventBinding [node event-name handler]
+(deftype EventBinding [node event-name ^:mutable handler]
   IFn
   (-invoke [this new-handler]
     (.unlisten this)
-    (listen! node event-name handler)
+    (set! handler new-handler)
+    (when handler
+      (listen! node event-name handler))
     this)
   Object
   (unlisten [this]
@@ -211,7 +213,7 @@ map in velem."
     (set! (.-disposed this) true)))
 
 (defn- bind-event! [node event-name handler]
-  ((EventBinding. node event-name handler)))
+  ((EventBinding. node (name event-name) nil) handler))
 
 (defn- do-bind-attr [setter val]
   (r/bind-attr* val setter queue-animation))
@@ -318,9 +320,8 @@ map in velem."
           (string? attr-handler)
           (do-bind-attr (get-ns-attr-setter element attr-ns attr-name) attr-value)
 
-          ;; TODO attr handler plugins
-          ;; (fn? attr-handler)
-          ;; (attr-handler element attr-name attr-value)
+          (fn? attr-handler)
+          (attr-handler element attr-name attr-value)
 
           :default
           (.warn js/console "Invalid ns attr handler" attr-handler))
@@ -366,6 +367,9 @@ map in velem."
   (-velem-parent [this] (.-parentNode node))
   (-velem-head [this] node)
   (-velem-tail [this] node)
+  (-velem-next-sibling [this]
+    (when node
+      (.-nextSibling node)))
   (-velem-native-element [this] node)
   (-velem-simple-element [this] this)
   (-velem-insert [this dom-parent dom-before]
@@ -400,6 +404,9 @@ map in velem."
   (-velem-parent [this] (.-parentNode node))
   (-velem-head [this] node)
   (-velem-tail [this] node)
+  (-velem-next-sibling [this]
+    (when node
+      (.-nextSibling node)))
   (-velem-native-element [this]
     (.ensureNode this)
     node)
@@ -570,3 +577,4 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn remove! [dom-element]
   (ensure-unmanaged (.-parentNode dom-element))
   (ui/velem-remove (get-velem-state dom-element)))
+

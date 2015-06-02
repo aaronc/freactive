@@ -8,6 +8,7 @@
   (-velem-parent [this])
   (-velem-head [this])
   (-velem-tail [this])
+  (-velem-next-sibling [this])
   (-velem-replace [this cur-velem])
   (-velem-native-element [this])
   (-velem-simple-element [this])
@@ -27,6 +28,9 @@
 
 (defn velem-tail [this]
   (-velem-tail this))
+
+(defn velem-next-sibling [this]
+  (-velem-next-sibling this))
 
 (defn velem-remove [this]
   (-velem-remove this))
@@ -101,6 +105,8 @@
   (-velem-parent [this] parent)
   (-velem-head [this] (velem-head cur-velem))
   (-velem-tail [this] (velem-tail cur-velem))
+  (-velem-next-sibling [this]
+    (velem-next-sibling cur-velem))
   (-velem-native-element [this] (velem-native-element cur-velem))
   (-velem-simple-element [this] (velem-simple-element cur-velem))
   (-velem-insert [this native-parent native-before]
@@ -130,20 +136,35 @@
 
 (deftype ReactiveElementCollection [projection elements velem-fn enqueue-fn ^:mutable parent ^:mutable before]
   Object
+  (dispose [this]
+    (set! (.-disposed this) true)
+    (r/dispose projection)
+    (doseq [elem elements]
+      (r/dispose elem)))
   (clear [this]
     (doseq [elem elements]
       (velem-remove elem)))
 
   r/IReactiveProjectionTarget
   (-proj-move-elem [this idx before-idx]
-    (.insert this (aget (.splice elements idx 1) 0) before-idx))
+    (r/-proj-insert-elem this (aget (.splice elements idx 1) 0) before-idx))
   (-proj-remove-elem [this idx]
     (velem-remove (aget (.splice elements idx 1) 0)))
   (-proj-insert-elem [this elem before-idx]
-    (let [before-elem (if before-idx (aget elements before-idx) before)]
+    (let [elem (velem-fn elem)
+          len (.-length elements)
+          before-elem
+          (cond
+            (and before-idx (< before-idx len))
+            (velem-head (aget elements before-idx))
+
+            (> len 0)
+            (velem-next-sibling this)
+
+            :default
+            before)]
       (.splice elements (or before-idx (alength elements)) 0 elem)
-      ;; TODO handle append case
-      (velem-insert elem parent (velem-head before-elem))))
+      (velem-insert elem parent before-elem)))
   (-proj-clear [this] (.clear this))
 
   IVirtualElement
@@ -156,6 +177,9 @@
   (-velem-tail [this]
     (when (> (.-length elements) 0)
       (velem-tail (aget elements (dec (.-length elements))))))
+  (-velem-next-sibling [this]
+    (when-let [tail (velem-tail this)]
+      (.-nextSibling tail)))
   (-velem-insert [this native-parent native-before]
     (set! parent native-parent)
     (set! before native-before)
@@ -165,7 +189,13 @@
     (set! (.-disposed this) true)
     (when-let [dispose (.-dispose projection)]
       (dispose projection))
-    (.clear this)))
+    (.clear this))
+  (-velem-replace [this cur-velem]
+    (let [native-parent (velem-parent cur-velem)
+          next-sib (velem-next-sibling cur-velem)]
+      (velem-remove cur-velem)
+      (velem-insert this native-parent next-sib)))
+  (-velem-lifecycle-callback [this cb-name]))
 
 (defn reactive-element-collection [projection velem-fn enqueue-fn]
   (ReactiveElementCollection. projection #js [] velem-fn enqueue-fn nil nil))

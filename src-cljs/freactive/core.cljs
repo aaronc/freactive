@@ -35,12 +35,21 @@
 (defprotocol ICursor
   (-cursor-key [this])
   (-child-cursor [this key])
-  (-parent-cursor [this]))
+  (-parent-cursor [this])
+  (-cursor-keyset [this]))
 
-(defprotocol IKeysetCursor
-  (-keyset [this])
-  (-add-keyset-watch [this key f])
-  (-remove-keyset-watch [this key]))
+(defprotocol IChangeNotifications
+  (-add-change-watch [this key f])
+  (-remove-change-watch [this key]))
+
+(defn cursor-keyset [cursor]
+  (-cursor-keyset cursor))
+
+(defn add-change-watch [cur key f]
+  (-add-change-watch cur key f))
+
+(defn remove-change-watch [cur key]
+  (-remove-change-watch cur key))
 
 (defprotocol IAssociativeCursor
   (-update! [this key f args])
@@ -322,7 +331,7 @@
 
 ;; WIP on new cursor implementation
 
-(deftype Cursor [id parent tkey ^:mutable child-cursors get-fn swap-fn ^:mutable state meta ^:mutable watches ^:mutable fwatches ^:mutable watchers ^:mutable keyset-watches]
+(deftype Cursor [id parent tkey ^:mutable child-cursors get-fn swap-fn ^:mutable state meta ^:mutable watches ^:mutable fwatches ^:mutable watchers ^:mutable change-watches]
     Object
     (equiv [this other]
       (-equiv this other))
@@ -354,12 +363,13 @@
     (resetChild [this child-key new-val]
       (doseq [child (get child-cursors child-key)]
         (.updateCursor child new-val)))
-    (notifyKeysetWatches [this removed added]
-      (doseq [[key f] keyset-watches]
-        (f key this removed added)))
+    (notifyChangeWatches [this changes]
+      (doseq [[key f] change-watches]
+        (f key this changes)))
     (updateCursor [this new-state]
       (when-not (identical? state new-state)
-        (let [old-state state]
+        (let [old-state state
+              has-change-watches (not (empty? change-watches))]
           (set! state new-state)
           (.notifyFWatches this old-state state)
           (if-let [change-ks (.-change-ks this)]
@@ -368,47 +378,58 @@
                                  :conj (dec (count state))
                                  :pop (count state))]
                               change-ks)
-                  [change-key & descendant-ks] change-ks]
-              (when-let [cursors (get child-cursors change-key)]
-                (when-let [cur (first cursors)]
-                  (let [old-val (.-state cur)
-                        new-val (get state change-key)]
-                    (when-not (identical? old-val new-val)
-                      (doseq [cur cursors]
-                        (when descendant-ks
-                          (set! (.-change-ks cur) descendant-ks))
-                        (.updateCursor cur new-val))
-                      (cond
-                        (nil? old-val)
-                        (.notifyKeysetWatches this nil #{change-key})
-                        (nil? new-val)
-                        (.notifyKeysetWatches this #{change-key} nil))))))
-              (set! (.-change-key this) nil))
-            (cond keyset-watches
-                  (let [old-keys (coll-keyset old-state)
-                        new-keys (coll-keyset state)
-                        [removed added both] (diff-set (set old-keys) (set new-keys))]
-                    (when (or (not (empty? removed)) (not (empty? added)))
-                      (.notifyKeysetWatches this removed added))
-                    (doseq [rx removed]
-                      (.resetChild rx nil))
-                    (doseq [ra added]
-                      (.resetChild ra (get state ra)))
-                    (doseq [rc both]
-                      (when-let [cursors (get child-cursors rc)]
-                        (when-let [cur (first cursors)]
-                          (let [old-val (.-state cur)
-                                new-val (get state rc)]
-                            (when-not (identical? old-val new-val)
-                              (doseq [cur cursors]
-                                (.updateCursor cur new-val))))))))
-                  child-cursors
-                  (doseq [[ckey cursors] child-cursors]
-                    (let [old-val (get old-state ckey)
-                          new-val (get state ckey)]
-                      (when-not (identical? old-val new-val)
-                        (doseq [cur cursors]
-                          (.updateCursor cur new-val))))))))))
+                  [change-key & descendant-ks] change-ks
+                  cursors (get child-cursors change-key)]
+              (when (or cursors has-change-watches)
+                (let [cur (first cursors)
+                      old-val (if cur (.-state cur) (get old-state change-key))
+                      new-val (get state change-key)]
+                  (when-not (identical? old-val new-val)
+                    (doseq [cur cursors]
+                      (when descendant-ks
+                        (set! (.-change-ks cur) descendant-ks))
+                      (.updateCursor cur new-val))
+                    (when has-change-watches
+                      (if (nil? new-val)
+                        (.notifyChangeWatches this [[change-key]])
+                        (.notifyChangeWatches this [[change-key new-val]]))))))
+              (set! (.-change-ks this) nil))
+            (cond
+              has-change-watches
+              (let [old-keys (coll-keyset old-state)
+                    new-keys (coll-keyset state)
+                    changes
+                    (loop [[key & more] new-keys
+                           old-keys old-keys
+                           changes []]
+                      (if key
+                        (let [new-val (get new-state key)]
+                          (if (contains? old-keys key)
+                            (let [old-val (get old-state key)
+                                  old-keys (disj old-keys key)]
+                              (if (identical? old-val new-val)
+                                (recur more old-keys changes)
+                                (do
+                                  (.resetChild key new-val)
+                                  (recur more old-keys (conj changes [key new-val])))))
+                            (do
+                              (.resetChild key new-val)
+                              (recur more old-keys (conj changes ^:added [key new-val])))))
+                        (concat changes
+                                (doall
+                                 (for [key old-keys]
+                                   (do
+                                     (.resetChild key nil)
+                                     [key]))))))]
+                (.notifyChangeWatches this changes))
+
+              child-cursors
+              (doseq [[ckey cursors] child-cursors]
+                (let [old-val (get old-state ckey)
+                      new-val (get state ckey)]
+                  (when-not (identical? old-val new-val)
+                    (doseq [cur cursors]
+                      (.updateCursor cur new-val))))))))))
     (rawDeref [this]
       (when (.-dirty this)
         (set! state (get-fn)))
@@ -465,17 +486,6 @@
         (.unregisterOne this))
       this)
 
-    IKeysetCursor
-    (-keyset [this] (coll-keyset state))
-    (-add-keyset-watch [this key f]
-      (when-not (contains? keyset-watches key)
-        (set! (.-keyset-watches this) (assoc keyset-watches key f))
-        (.registerOne this)))
-    (-remove-keyset-watch [this key]
-      (when (contains? keyset-watches key)
-        (set! (.-keyset-watches this) (dissoc keyset-watches key))
-        (.unregisterOne this)))
-
     IHash
     (-hash [this] (goog/getUid this))
 
@@ -516,6 +526,18 @@
     (-parent-cursor [this]
       (when tkey
         parent))
+    (-cursor-keyset [this] (coll-keyset state))
+
+    IChangeNotifications
+    (-add-change-watch [this key f]
+      (when-not (contains? change-watches key)
+        (set! (.-change-watches this) (assoc change-watches key f))
+        (.registerOne this)))
+    (-remove-change-watch [this key]
+      (when (contains? change-watches key)
+        (set! (.-change-watches this) (dissoc change-watches key))
+        (.unregisterOne this)))
+
 
     ITransientCollection
     (-conj! [this val]
@@ -612,37 +634,14 @@
   ([parent getter setter]
    (lens-cursor parent getter setter)))
 
-;; (defn transducing-cursor
-;;   ([cur xf]
-;;    (let [xfc (cursor)
-;;          reducing-fn
-;;          (xf
-;;           (fn
-;;             ([] xfc)
-;;             ([acc] acc)
-;;             ([acc [k v :as kvp]]
-;;              (if (= 1 (count kvp))
-;;                (dissoc! acc k)
-;;                (assoc! acc k v)))))
-;;          get-fn
-;;          (fn [] (into {} xf (kv-seq @cur)))
-;;          swap-fn (fn [f & args] (assert false "Read-only cursor"))
-;;          activate-fn
-;;          (fn []
-;;            ;;(add-changes-watch cur (.-id xfc)
-;;            (fn [k r changes]
-;;              (doseq [change changes]
-;;                (reducing-fn xfc change)))
-;;            ;;)
-;;            )
-;;          ]
-;;      xfc)))
-
 ;; Reactive Attributes
 
 (defn dispose [this]
   (when (.-dispose this)
-    (.dispose this)))
+    (try
+      (.dispose this)
+      (catch :default e
+        (.warn js/console "Error while disposing state" e this)))))
 
 (declare bind-attr*)
 
@@ -706,10 +705,13 @@
                                  ^:mutable placeholder
                                  ^:mutable placeholder-idx]
   Object
-  (dispose [this])
+  (dispose [this]
+    (remove-change-watch cur this))
+  (project [this]
+    (-proj-clear target)
+    (.onUpdates this (for [k (cursor-keyset cur)] [k (get cur k)])))
   (updateSortBy [this new-sort-by]
-    (when-not (identical? new-sort-by sort-by)
-      (-proj-clear target)
+    (when (or (not (identical? new-sort-by sort-by)) (nil? avl-set))
       (set! sort-by
             (when new-sort-by
               (fn [x y]
@@ -719,16 +721,19 @@
               (avl/sorted-set-by sort-by)
               (avl/sorted-set)))))
   (updateFilter [this new-filter])
+  (updateOffset [this new-offset])
+  (updateLimit [this new-limit])
   (rankOf [this key]
-    (let [idx
-          (let [idx (+ (avl/rank-of avl-set key) offset)]
-            (if limit
-              (when (<= idx limit)
-                idx)
-              idx))]
-      (if (and placeholder-idx (>= idx placeholder-idx))
-        (inc idx)
-        idx)))
+    (let [idx (- (avl/rank-of avl-set key) offset)]
+      (when (>= idx 0)
+        (let [idx
+              (if limit
+                (when (<= idx limit)
+                  idx)
+                idx)]
+          (if (and placeholder-idx (>= idx placeholder-idx))
+            (inc idx)
+            idx)))))
   (onUpdates [this updates]
     (doseq [[k v :as update] updates]
       (if-let [cur-idx (.rankOf this k)]
@@ -741,24 +746,28 @@
             (-proj-move-elem target cur-idx (.rankOf this k))))
         (when (filter update)
           (set! avl-set (conj avl-set k))
-          (-proj-insert-elem target (proj-fn (cursor cur k)) (.rankOf this k))))))
+          (-proj-insert-elem target (rx* (fn [] (proj-fn (cursor cur k)))) (.rankOf this k))))))
 
   IReactiveProjection
   (-project-elements [this proj-target enqueue]
     (set! target proj-target)
     (set! enqueue-fn enqueue)
     (let [{:keys [filter sort-by offset limit placeholder-idx placeholder]} opts]
-      (bind-attr* filter #(.updateFilter this) enqueue)
-      (bind-attr* sort-by #(.updateSortBy this) enqueue)
-      (bind-attr* offset #(.updateFilter this) enqueue)
-      (bind-attr* limit #(.updateFilter this) enqueue)
-      (bind-attr* placeholder-idx #(.updateFilter this) enqueue)
-      (bind-attr* placeholder #(.updateFilter this) enqueue))))
+      (when filter (bind-attr* filter #(.updateFilter this %) enqueue))
+      (bind-attr* sort-by #(.updateSortBy this %) enqueue)
+      (when offset (bind-attr* offset #(.updateOffset this %) enqueue))
+      (when limit (bind-attr* limit #(.updateLimit this %) enqueue))
+      ;; (bind-attr* placeholder-idx #(.updatePlaceholderIdx this) enqueue)
+      ;; (bind-attr* placeholder #(.updatePlaceholder this) enqueue)
+      )
+    (add-change-watch cur this
+                      (fn [k r updates] (.onUpdates this updates)))
+    (.project this)))
 
-(defn rmap
-  ([f keyset-cursor]
-   (rmap nil f keyset-cursor))
-  ([opts f keyset-cursor]
-   (KeysetCursorProjection. keyset-cursor f opts nil nil nil identity 0 nil nil nil nil)))
+(defn cmap*
+  [f keyset-cursor opts]
+  (KeysetCursorProjection. keyset-cursor f opts nil nil nil identity 0 nil nil nil nil))
 
-
+(defn cmap
+  [f keyset-cursor & {:as opts}]
+  (cmap* f keyset-cursor opts))

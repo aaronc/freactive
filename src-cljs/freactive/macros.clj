@@ -37,5 +37,7 @@
        (.addInvalidationWatch res# ~id invalidation-cb#)
        res#)))
 
-(defmacro rfor [[bind-sym keyset-cursor & {:as opts}] body]
-  `(freactive.core/rmap ~opts (fn [~bind-sym] ~@body) ~keyset-cursor))
+(defmacro cfor [[bind-sym keyset-cursor & {:as opts}] body]
+  `(freactive.core/cmap*
+    (fn [~bind-sym] ~body)
+    ~keyset-cursor ~opts))

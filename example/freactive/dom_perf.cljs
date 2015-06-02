@@ -10,7 +10,7 @@
    [freactive.core-test])
   (:require-macros
   [cljs.core.async.macros :refer [go go-loop]]
-  [freactive.macros :refer [rx debug-rx]]
+  [freactive.macros :refer [rx debug-rx cfor]]
   [cljs.test :refer [run-all-tests]]))
 
 (enable-console-print!)
@@ -162,4 +162,23 @@
     (run-all-tests #"freactive.*-test"))})
 
 (dom/mount! (.getElementById js/document "root") (view))
+
+;; (def root0 (atom {0 426 2647 1369 3697 4}))
+
+;; (dom/mount!
+;;  (.getElementById js/document "root")
+;;  [:div
+;;   [:button {:on-click (fn [e]
+;;                         (assoc! root0 (rand-int 5000) (rand-int 5000)))}
+;;    "Add Rand!"]
+;;   [:ul
+;;    (cfor [cur root0]
+;;          (let [key (r/cursor-key cur)]
+;;            [:li [:label key
+;;                  [:input {:value cur
+;;                           :on-change (fn [e]
+;;                                        (reset! cur (.-value (.-target e))))}]] 
+;;             [:button {:on-click (fn [e] (dissoc! root0 key))} "Del"]
+;;             ]))]
+;;   [:div (r/rapply pr-str root0)]])
 
