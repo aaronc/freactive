@@ -410,16 +410,16 @@
                               (if (identical? old-val new-val)
                                 (recur more old-keys changes)
                                 (do
-                                  (.resetChild key new-val)
+                                  (.resetChild this key new-val)
                                   (recur more old-keys (conj changes [key new-val])))))
                             (do
-                              (.resetChild key new-val)
+                              (.resetChild this key new-val)
                               (recur more old-keys (conj changes ^:added [key new-val])))))
                         (concat changes
                                 (doall
                                  (for [key old-keys]
                                    (do
-                                     (.resetChild key nil)
+                                     (.resetChild this key nil)
                                      [key]))))))]
                 (.notifyChangeWatches this changes))
 
@@ -735,6 +735,7 @@
             (inc idx)
             idx)))))
   (onUpdates [this updates]
+    (println "updates" updates)
     (doseq [[k v :as update] updates]
       (if-let [cur-idx (.rankOf this k)]
         (if (or (= (count update) 1) (not (filter update)))
@@ -743,7 +744,9 @@
             (-proj-remove-elem target cur-idx))
           (do
             (set! avl-set (conj avl-set k))
-            (-proj-move-elem target cur-idx (.rankOf this k))))
+            (let [new-idx (.rankOf this k)
+              (when-not (identical? cur-idx new-idx)
+                (-proj-move-elem target cur-idx new-idx)))))
         (when (filter update)
           (set! avl-set (conj avl-set k))
           (-proj-insert-elem target (rx* (fn [] (proj-fn (cursor cur k)))) (.rankOf this k))))))
