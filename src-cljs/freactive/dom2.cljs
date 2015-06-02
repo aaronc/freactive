@@ -1,4 +1,4 @@
-(ns freactive.dom
+(ns freactive.dom2
   (:require [freactive.core :as r]
             [goog.object])
   (:require-macros [freactive.macros :refer [rx non-reactively]]))
@@ -7,23 +7,11 @@
 
 (defonce ^:private auto-node-id 0)
 
-(defprotocol IDOMImage
-  "A protocol for things that can be represented as virtual DOM or contain DOM nodes.
-
-Can be used to define custom conversions to DOM nodes or text for things such as numbers
-or dates; or can be used to define containers for DOM elements themselves."
-  (-get-dom-image [x]
-    "Should return either virtual DOM (a vector or string) or an actual DOM node."))
-
-(extend-protocol IDOMImage
-  boolean
-  (-get-dom-image [x] (str x))
-
-  number
-  (-get-dom-image [x] (str x)))
-
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
+
+(defn- text-node? [dom-node]
+  (identical? (.-nodeType dom-node) 3))
 
 (defn- get-dom-image [x]
   (if x
@@ -319,15 +307,6 @@ or dates; or can be used to define containers for DOM elements themselves."
     )
   cb-value)
 
-(def ^:private attr-ns-lookup
-  #js
-  {:node bind-lifecycle-callback!
-   :state (fn [_ _ _ v] v) ;; automatically handled in attr map
-   })
-
-(defn register-attr-prefix! [prefix xml-ns-or-handler]
-  (aset attr-ns-lookup prefix xml-ns-or-handler))
-
 (defn- ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
       ;(println "setting attr" element attr-name attr-value)
@@ -451,9 +430,6 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (declare build)
 
-(defn- text-node? [dom-node]
-  (identical? (.-nodeType dom-node) 3))
-
 (def enable-diffing false)
 
 (defn- register-element-with-parent [parent new-elem]
@@ -526,10 +502,6 @@ or dates; or can be used to define containers for DOM elements themselves."
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
        :private true}
      re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
-
-(def ^:private node-ns-lookup
-  #js
-  {:svg "http://www.w3.org/2000/svg"})
 
 ;; (defn- build* [virtual-dom build-dom-element*]
 ;;   (let [tag (first virtual-dom)
@@ -766,9 +738,6 @@ map in vdom."
 ;;     (when class (set! (.-className node) (.replace class re-dot " ")))
 ;;     node))
 
-(defn register-node-prefix! [prefix xml-ns-or-handler]
-  (aset node-ns-lookup prefix xml-ns-or-handler))
-
 ;; (def ^:dynamic *xml-namespaces* nil)
 
 ;; (defn- get-xml-namespace [kw-ns]
@@ -835,3 +804,503 @@ map in vdom."
   (when-let [last-child (.-lastChild element)]
     (remove! last-child))
   (append-child! element child))
+
+;;; collection binding
+
+;; (deftype ReactiveElementCollection [keyset-cursor element-fn parent keys new-keys]
+;;   Object
+;;   (invalidate [this new-keyset]
+;;     (r/remove-keyset-watch keyset-cursor parent)
+;;     (when-not (.-disposed this)
+;;       (set! (.-new-keyset this) new-keyset)
+;;       (when-not (.-updating this)
+;;         (set! (.-updating this) true)
+;;         (queue-animation (fn [] (.animate this))))))
+;;   (animate [this]
+;;     (let [new-keyset (set new-keyset)]
+;;       (loop [old-key (first keys)
+;;              old-ks (rest keys)
+;;              new-key (first new-keys)
+;;              new-ks (rest new-keys)
+;;              cur-elem head
+;;              elements-to-move {}]
+;;         (let [next-sib (.nextSibling cur-elem)]
+;;           (cond (= old-key new-key)
+;;                 (recur (first old-ks) (rest old-ks) (first new-ks) (rest new-ks)
+;;                        next-sib elements-to-move)
+
+;;                 (contains? new-keyset old-key)
+;;                 (recur (first old-ks) (rest old-ks) new-key new-ks
+;;                        next-sib
+;;                        (assoc elements-to-move old-key (.removeChild parent cur-elem)))
+
+;;                 :default
+;;                 (do
+;;                   (remove! cur-elem)
+;;                   (if )
+                  
+;;                   )
+;;                 ))
+
+;;         ))
+
+;;     )
+;;   (init [this]
+;;     (let [keyset (r/-keyset)
+;;           elements
+;;           (for [k keyset]
+;;             (append-child! parent (element-fn k)))
+;;           head (first elements)
+;;           tail (last elements)
+;;           on-animate*
+;;           (fn [new-keyset]
+;;             (fn []
+;;               ))
+;;           on-update
+;;           (fn [k r new-keyset]
+;;             )]
+;;       (r/add-keyset-watch
+;;        keyset-cursor
+;;        parent
+;;        ))))
+
+;; (defn bind-keys [keyset-cursor element-fn]
+;;   )
+
+
+;; Plugin Support
+
+(def ^:private node-ns-lookup
+  #js
+  {:svg "http://www.w3.org/2000/svg"})
+
+(defn register-node-prefix! [prefix xml-ns-or-handler]
+  (aset node-ns-lookup prefix xml-ns-or-handler))
+
+(def ^:private attr-ns-lookup
+  #js
+  {:node bind-lifecycle-callback!
+   :state (fn [_ _ _ v] v) ;; automatically handled in attr map
+   })
+
+(defn register-attr-prefix! [prefix xml-ns-or-handler]
+  (aset attr-ns-lookup prefix xml-ns-or-handler))
+
+;; Core VDOM and DOM stuff
+
+(defprotocol IVirtualDOM
+  (-vdom-insert [this dom-parent dom-before])
+  (-vdom-remove [this])
+  (-vdom-head [this])
+  (-vdom-tail [this])
+  (-vdom-replace [this new-vdom])
+  (-vdom-node [this])
+  (-vdom-simple-element [this]))
+
+(defn vdom-node [this]
+  (if (dom-node? this)
+    this
+    (-vdom-node this)))
+
+(defn vdom-simple-element [this]
+  (if (dom-node? this)
+    this
+    (-vdom-simple-element this)))
+
+(defn dom-insert [dom-node dom-parent dom-before]
+  (if dom-before
+    (.insertBefore dom-parent dom-node dom-before)
+    (.appendChild dom-parent dom-node)))
+
+(defn dom-remove [dom-node]
+  (when-let [parent (.-parentNode dom-node)]
+    (.removeChild parent dom-node)))
+
+(defn vdom-head [this]
+  (if (dom-node? this)
+    this
+    (-vdom-head this)))
+
+(defn vdom-tail [this]
+  (if (dom-node? this)
+    this
+    (-vdom-tail this)))
+
+(defn vdom-remove [this]
+  (if (dom-node? this)
+    (dom-remove this)
+    (-vdom-remove this)))
+
+(defn vdom-insert [this dom-parent dom-before]
+  (if (dom-node? this)
+    (dom-insert this dom-parent dom-before)
+    (-vdom-insert this dom-parent dom-before)))
+
+(defn dom-replace [dom-node new-vdom]
+  (when-let [parent (.-parentNode dom-node)]
+    (if-let [node (vdom-node new-vdom)]
+      (do
+        (.replaceChild parent node dom-node)
+        new-vdom)
+      (let [next-sib (.-nextSibling dom-node)]
+        (.removeChild parent dom-node)
+        (vdom-insert new-vdom parent next-sib)))))
+
+(defn vdom-replace [this new-vdom]
+  (if (dom-node? this)
+    (dom-replace this new-vdom)
+    (-vdom-replace this new-vdom)))
+
+;; replace scenarios
+;; DOMElement DOMElement -> diff or replace
+;; DOMTextNode DOMTextNode -> simple update
+;; DOMElement DOMTextNode -> replace
+;; DOMElement ReactiveElement -> defer to ReactiveElement
+;; DOMElement ReactiveElementCollection -> remove, insert
+;; ReactiveElement ReactiveElement -> defer to replacing elem
+;; ReactiveElement DOMTextNode -> defer to replacing elem
+;; ReactiveElement ReactiveElementCollection
+;; ReactiveElementCollection DOMTextNode
+;; ReactiveElementCollection ReactiveElementCollection
+
+(defn- vdom-full-replace [this node new-vdom]
+  (let [next-sib (.-nextSibling node)
+        parent (.-parentNode node)]
+    (vdom-remove this)
+    (-vdom-insert new-vdom parent next-sub)))
+
+(defn dom-simple-replace [dom-node new-elem]
+  (when-let [parent (.-parentNode dom-node)]
+    (.replaceChild parent node (vdom-node new-elem))))
+
+(defn dom-remove-replace [dom-node new-vdom]
+  (when-let [parent (.-parentNode dom-node)]
+    (let [next-sib (.-nextSibling dom-node)]
+      (.removeChild parent dom-node)
+      (vdom-insert new-vdom parent next-sib))))
+
+;; Managed DOMElement stuff
+
+(defn- bind-attr! [element attr-key attr-value node-state]
+  (let [attr-ns (namespace attr-key)
+        attr-name (name attr-key)]
+    (if attr-ns
+      (if-let [attr-handler (aget attr-ns-lookup attr-ns)]
+        (cond
+          (string? attr-handler)
+          (bind-prop-attr! (ns-attr-setter element attr-ns attr-name) element
+                           (bind-attr-key attr-key) attr-value node-state)
+
+          (fn? attr-handler)
+
+          (attr-handler element node-state attr-name attr-value)
+
+          :default
+          (.warn js/console "Invalid ns attr handler" attr-handler))
+        (.warn js/console "Undefined ns attr prefix" attr-ns))
+      (cond
+        (identical? 0 (.indexOf attr-name "on-"))
+        (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+
+        (identical? attr-name "events")
+        (bind-event-listeners! element attr-value node-state)
+
+        :default
+        (bind-prop-attr! (get-attr-setter element attr-name) element
+                         (bind-attr-key attr-key) attr-value node-state)))))
+
+(defn- bind-attrs!* [node attrs node-state binder]
+  (let [js-attrs #js {}]
+    (doseq [[k v] attrs]
+      (binder node k v node-state)
+      (aset js-attrs (str k) v))
+    js-attrs))
+
+(deftype DOMElement [ns-uri tag attrs children ^:mutable node]
+  Object
+  (ensureNode [this]
+    (when-not node
+      (set! node
+            (if xmlns
+              (.createElementNS js/document ns-uri tag)
+              (.createElement js/document tag)))
+      (set! (.-freactive-state node) this)
+      ;; TODO bind attrs
+      (doseq [child children]
+        (vdom-insert child node nil)))
+    )
+
+  IVirtualDOM
+  (-vdom-head [this] node)
+  (-vdom-tail [this] node)
+  (-vdom-node [this]
+    (.ensureNode this)
+    node)
+  (-vdom-simple-element [this] this)
+  (-vdom-insert [this dom-parent dom-before]
+    (.ensureNode this)
+    (dom-insert dom-parent node dom-before))
+  (vdom-remove [this]
+    (dom-remove node))
+  (-vdom-replace [this new-vdom]
+    (if-let [new-elem (vdom-simple-element new-vdom)]
+      (if (and (instance? DOMElement new-elem)
+               (identical? (.-ns-uri new-elem) ns-uri)
+               (identical? (.-tag new-elem) tag)
+               false ;; disabled
+               )
+        (do
+          ;; TODO do diff replace
+          this)
+        (do
+          (dom-simple-replace node new-elem)
+          new-vdom))
+      (dom-remove-replace node new-vdom))))
+
+(deftype DOMTextNode [^:mutable text ^:mutable node]
+  Object
+  (ensureNode [this]
+    (when-not node
+      (set! node (.createTextNode js/document text))))
+  IVirtualDOM
+  (-vdom-head [this] node)
+  (-vdom-tail [this] node)
+  (-vdom-node [this]
+    (.ensureNode this)
+    node)
+  (-vdom-simple-element [this] this)
+  (-vdom-insert [this dom-parent dom-before]
+    (.ensureNode this)
+    (dom-insert dom-parent node dom-before))
+  (-vdom-remove [this]
+    (dom-remove node))
+  (-vdom-replace [this new-vdom]
+    (if-let [new-elem (vdom-simple-element new-vdom)]
+      (if (instance? DOMTextNode new-vdom)
+        (do
+          (.ensureNode this)
+          (set! text (.-text new-vdom))
+          (set! (.-textContent node) text)
+          this)
+        (do
+          (dom-simple-replace node new-elem)
+          new-vdom))
+      (dom-remove-replace node new-vdom))))
+
+(deftype ReactiveElement [id the-ref binding-info
+                          ^:mutable parent
+                          ^:mutable cur-vdom ^:mutable dirty
+                          ^:mutable updating ^:mutable disposed]
+  Object
+  (dispose [this]
+    #_(remove-watch* the-ref id)
+    #_(when clean* (clean* child-ref))
+    #_(when-let [binding-disposed (get ref-meta :binding-disposed)]
+      (binding-disposed)))
+  (get-new-elem [this]
+    (set! dirty false)
+    ((.-add-watch binding-info) the-ref id #(.invalidate this))
+    (or ((.-raw-deref binding-info) the-ref) ""))
+
+  (show-new-elem [this new-vdom dom-before]
+    (if cur-elem
+      (set! cur-vdom (-vdom-replace cur-vdom new-vdom))
+      (-vdom-insert new-elem parent before))
+    (set! updating false)
+    (when dirty 
+      (queue-animation #(.animate this))))
+
+  (animate [this]
+    (when-not disposed
+      (let [new-vdom (get-new-elem)]
+        (when-not (= new-vdom cur-vdom)
+          (-vdom-replace cur-vdom
+           (fn []
+             (if disposed
+               (set! updating false)
+               (.show-new-elem this (if dirty
+                                      (get-new-elem)
+                                      new-vdom) nil))))))))
+  (invalidate [this]
+    ((.-remove-watch binding-info) the-ref id)
+    (when-not disposed
+      (set! dirty true)
+      (when-not updating
+        (set! updating true)
+        (queue-animation #(.animate this)))))
+
+  IEquiv
+  (-equiv [this other]
+    (and
+     (instance? ReactiveElement other)
+     (= the-ref (.-the-ref other))))
+  
+  IVirtualDOM
+  (-vdom-head [this] (vdom-head cur-elem))
+  (-vdom-tail [this] (vdom-tail cur-elem))
+  (-vdom-node [this] (vdom-node cur-elem))
+  (-vdom-simple-element [this] (vdom-simple-element cur-elem))
+  (-vdom-insert [this dom-parent dom-before]
+    (set! (.-parent this) dom-parent)
+    (.show-new-elem this (.get-new-elem this) dom-before)
+    this)
+  (-vdom-remove [this]
+    (set! (.-disposed this) true)
+    (vdom-remove cur-elem))
+  (-vdom-replace [this new-vdom]
+    (if (= this new-vdom)
+      this
+      (do
+        (.dispose this)
+        (vdom-replace cur-elem new-vdom)))))
+
+(deftype ReactiveElementCollection [dom-parent elements]
+  Object
+  (move [this idx before-idx]
+    (.insert this (aget (.splice elements idx 1) 0) before-idx))
+  (remove [this idx]
+    (vdom-remove (aget (.splice elements idx 1) 0)))
+  (insert [this elem before-idx]
+    (let [before-elem (when before-idx (aget elements before-idx))]
+      (.splice elements (or before-idx (alength elements)) 0 to-move)
+      ;; TODO handle append case
+      (-vdom-insert to-move dom-parent (vdom-head before-elem))))
+
+  IVirtualDOM
+  (-vdom-node [this])
+  (-vdom-simple-element [this])
+  (-vdom-head [this]
+    (when (> (.-length elements) 0)
+      (vdom-head (aget elements 0))))
+  (-vdom-tail [this]
+    (when (> (.-length elements) 0)
+      (vdom-tail (aget elements (dec (.-length elements))))))
+  (-vdom-insert [this dom-parent dom-before]
+    (loop [dom-before dom-before
+           [elem & more] elements]
+      (when elem
+        (recur (dom-insert dom-parent elem dom-before) more))))
+  (-vdom-remove [this]
+    (set! (.-disposed this) true)
+    (doseq [elem elements]
+      (vdom-remove elem))))
+;; Conversion of Clojure DOM images to virtual DOM
+
+(defprotocol IDOMImage
+  "A protocol for things that can be represented as virtual DOM or contain DOM nodes.
+
+Can be used to define custom conversions to DOM nodes or text for things such as numbers
+or dates; or can be used to define containers for DOM elements themselves."
+  (-get-dom-image [x]
+    "Should return either virtual DOM (a vector or string) or an actual DOM node."))
+
+
+;; (extend-protocol IDOMImage
+;;   boolean
+;;   (-get-dom-image [x] (str x))
+
+;;   number
+;;   (-get-dom-image [x] (str x)))
+
+
+(defn- dom-element [ns-uri tag tail]
+  (let [[_ tag-name id class] (re-matches re-tag tag-name)
+        attrs? (first tail)
+        have-attrs (map? attrs?)
+        attrs (if have-attrs attrs? {})
+        attrs (cond-> attrs
+
+                (and id (not (:id attrs)))
+                (assoc :id id)
+                
+                class
+                (update :class
+                        (fn [cls]
+                          (let [class (.replace class re-dot " ")]
+                            (if cls (str class " " cls) class)))))
+
+        children (if have-attrs (rest tail) tail)]
+    (DOMElement. ns-uri tag attrs children nil)))
+
+(defn- as-vdom [elem-spec]
+  (cond
+    (string? elem-spec)
+    (DOMTextNode. elem-spec nil)
+
+    (dom-node? elem-spec)
+    elem-spec
+
+    (vector? elem-spec)
+    (let [tag (first elem-spec)]
+      (cond
+        (keyword? tag)
+        (let [tag-ns (namespace tag)
+              tag-name (name tag)
+              tail (rest elem-spec)]
+          (if tag-ns
+            (if-let [tag-handler (aget node-ns-lookup tag-ns)]
+              (cond
+                (string? tag-handler)
+                (dom-element tag-handler tag tail)
+
+                (fn? tag-handler)
+                (as-vdom (tag-handler tag-name tail))
+
+                :default
+                (.warn js/console "Invalid ns node handler" tag-handler))
+              (.warn js/console "Undefined ns node prefix" tag-ns))
+            (dom-element nil tag tail)))
+
+        :default
+        (assert false "Only know how to handle keyword tags")))
+
+    (satisfies? IDeref elem-spec)
+    (ReactiveElement2. (r/new-reactive-id)
+                      elem-spec
+                      (r/get-binding-fns elem-spec)
+                      nil nil false false false)
+
+    (satisfies? IVirtualDOM elem-spec)
+    elem-spec
+
+    (boolean? elem-spec) (as-vdom (str elem-spec))
+
+    (number? elem-spec) (as-vdom (str elem-spec))
+
+    :default (as-vdom (-get-dom-image elem-spec))))
+
+;; Helper functions for injecting managed DOM elements into unmanaged DOM and
+;; doing DOM manipulation of top-level managed nodes
+
+(defn- get-vdom-state [elem]
+  (or (.-freactive-state elem) elem))
+
+(defn- ensure-unmanaged [elem]
+  (when (not (get-element-state elem))
+    (throw
+     (ex-info
+      "Can't safely do manual DOM manipulation within the managed element tree. Please do manual DOM manipulation only on top-level managed elements."
+      {:managed-element elem}))))
+
+(defn replace! [dom-element vdom]
+  (ensure-unmanaged (.-parentNode dom-element))
+  (vdom-replace (get-vdom-state dom-element) (as-vdom new-element)))
+
+(defn- append-or-insert! [dom-element vdom before]
+  (ensure-unmanaged dom-element)
+  (vdom-insert (as-vdom new-element) dom-element before))
+
+(defn append! [dom-element vdom]
+  (append-or-insert! dom-element vdom nil))
+
+(defn insert! [dom-element vdom before]
+  (append-or-insert! dom-element vdom before))
+
+(defn mount! [dom-element child]
+  (if-let [last-child (.-lastChild dom-element)]
+    (replace! last-child child)
+    (append! dom-element child)))
+
+(defn remove! [dom-element]
+  (ensure-unmanaged (.-parentNode dom-element))
+  (vdom-remove (get-vdom-state dom-element)))
