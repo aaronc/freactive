@@ -142,8 +142,8 @@ map in velem."
 (deftype UnmanagedDOMNode [node]
   ui/IVirtualElement
   (-velem-parent [this] (.-parentNode node))
-  (-velem-head [this] node)
-  (-velem-tail [this] node)
+  (-velem-head [this] this)
+  (-velem-tail [this] this)
   (-velem-next-sibling [this]
     (.-nextSibling node))
   (-velem-native-element [this] node)
@@ -365,8 +365,8 @@ map in velem."
 
   ui/IVirtualElement
   (-velem-parent [this] (.-parentNode node))
-  (-velem-head [this] node)
-  (-velem-tail [this] node)
+  (-velem-head [this] this)
+  (-velem-tail [this] this)
   (-velem-next-sibling [this]
     (when node
       (.-nextSibling node)))
@@ -402,8 +402,8 @@ map in velem."
       (set! node (.createTextNode js/document text))))
   ui/IVirtualElement
   (-velem-parent [this] (.-parentNode node))
-  (-velem-head [this] node)
-  (-velem-tail [this] node)
+  (-velem-head [this] this)
+  (-velem-tail [this] this)
   (-velem-next-sibling [this]
     (when node
       (.-nextSibling node)))

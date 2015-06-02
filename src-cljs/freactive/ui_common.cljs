@@ -156,7 +156,8 @@
           before-elem
           (cond
             (and before-idx (< before-idx len))
-            (velem-head (aget elements before-idx))
+            (when-let [head (velem-head (aget elements before-idx))]
+              (velem-native-element head))
 
             (> len 0)
             (velem-next-sibling this)
@@ -179,7 +180,7 @@
       (velem-tail (aget elements (dec (.-length elements))))))
   (-velem-next-sibling [this]
     (when-let [tail (velem-tail this)]
-      (.-nextSibling tail)))
+      (velem-next-sibling tail)))
   (-velem-insert [this native-parent native-before]
     (set! parent native-parent)
     (set! before native-before)

@@ -712,10 +712,7 @@
     (.onUpdates this (for [k (cursor-keyset cur)] [k (get cur k)])))
   (updateSortBy [this new-sort-by]
     (when (or (not (identical? new-sort-by sort-by)) (nil? avl-set))
-      (set! sort-by
-            (when new-sort-by
-              (fn [x y]
-                (new-sort-by [x (get cur x)] [y (get cur y)]))))
+      (set! sort-by new-sort-by)
       (set! avl-set
             (if sort-by
               (avl/sorted-set-by sort-by)
@@ -744,7 +741,7 @@
             (-proj-remove-elem target cur-idx))
           (do
             (set! avl-set (conj avl-set k))
-            (let [new-idx (.rankOf this k)
+            (let [new-idx (.rankOf this k)]
               (when-not (identical? cur-idx new-idx)
                 (-proj-move-elem target cur-idx new-idx)))))
         (when (filter update)
