@@ -1,13 +1,13 @@
 (ns freactive.dom-perf
   (:refer-clojure :exclude [atom])
   (:require
-    [freactive.dom :as dom]
-    [freactive.core :refer [atom cursor] :as r]
-    [figwheel.client :as fw :include-macros true]
-    [freactive.animation :as animation]
-    [goog.string :as gstring]
-    [cljs.core.async :refer [chan put! <!]]
-    [freactive.core-test])
+   [freactive.dom2 :as dom]
+   [freactive.core :refer [atom cursor] :as r]
+   [figwheel.client :as fw :include-macros true]
+   [freactive.animation :as animation]
+   [goog.string :as gstring]
+   [cljs.core.async :refer [chan put! <!]]
+   [freactive.core-test])
   (:require-macros
   [cljs.core.async.macros :refer [go go-loop]]
   [freactive.macros :refer [rx debug-rx]]
@@ -97,8 +97,8 @@
        ", mouse at "
        (rx (str @mouse-x ", " @mouse-y))
       ". "]])]
-   (let [ease-x (animation/easer 0.0)
-         ease-y (animation/easer 0.0)
+   (let [ease-x (animation/easer 1.0)
+         ease-y (animation/easer 1.0)
          graph-state (atom nil)
          action-ch (chan)]
      (go-loop []
@@ -155,10 +155,12 @@
               (for [i (range n*) j (range n*)] (circle (nth rights i) (nth tops j)))
               (for [i (range n*) j (range n*)] (circle (nth rights i) (nth bottoms j)))]))]])])
 
-(dom/mount! (.getElementById js/document "root") (view))
-
 (fw/start
  {:on-jsload
   (fn []
     (println "Reloaded")
     (run-all-tests #"freactive.*-test"))})
+
+(dom/mount! (.getElementById js/document "root") (view))
+;; (println "velem" (type (dom/as-velem [:h1 "Hello World!"])))
+;; (dom/mount! (.getElementById js/document "root") [:h1 "Hello World!!"])

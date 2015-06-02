@@ -640,37 +640,44 @@
 
 ;; Reactive Attributes
 
+(defn dispose [this]
+  (when (.-dispose this)
+    (.dispose this)))
+
 (declare bind-attr*)
 
 (deftype ReactiveAttribute [id the-ref binding-info set-fn enqueue-fn ^:mutable disposed]
   IFn
-  (invoke [_ new-val]
+  (-invoke [this new-val]
     (.dispose this)
     (bind-attr* new-val set-fn enqueue-fn))
   Object
+  (set [this]
+    (when-not disposed 
+      ((.-add-watch binding-info) the-ref id #(.invalidate this))
+      (set-fn ((.-raw-deref binding-info) the-ref))))
   (dispose [this]
+    (set! disposed true)
     ((.-remove-watch binding-info) the-ref id)
     (when-let [clean (.-clean binding-info)] (clean the-ref))
     (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
       (binding-disposed)))
   (invalidate [this]
     ((.-remove-watch binding-info) the-ref id)
-    (enqueue-fn
-     (fn [_]
-       (when-not disposed 
-         ((.-add-watch binding-info) the-ref id #(.invalidate this))
-         (set-fn ((.-raw-deref binding-info) the-ref)))))))
+    (enqueue-fn #(.set this))))
 
 (defn bind-attr* [the-ref set-fn enqueue-fn]
-  (if (instance? IDeref the-ref)
-    (ReactiveAttribute. (new-reactive-id) the-ref (get-binding-fns the-ref) set-fn enqueue-fn false)
+  (if (satisfies? IDeref the-ref)
+    (let [binding (ReactiveAttribute. (new-reactive-id) the-ref (get-binding-fns the-ref) set-fn enqueue-fn false)]
+      (.set binding)
+      binding)
     (do
       (set-fn the-ref)
       set-fn)))
 
 (defn attr-binder** [enqueue-fn]
   (fn attr-binder* [set-fn]
-    (fn bind-attr* [value]
+    (fn attr-binder [value]
       (bind-attr* value set-fn enqueue-fn))))
 
 ;; Reactive Sequence Projection Protocols

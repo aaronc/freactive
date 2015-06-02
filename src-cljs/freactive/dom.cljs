@@ -186,21 +186,6 @@ or dates; or can be used to define containers for DOM elements themselves."
     (js-delete (.-style elem) prop-name))
   prop-value)
 
-(deftype ReactiveAttribute [id the-ref binding-info set-fn ^:mutable disposed]
-  Object
-  (dispose [this]
-    ((.-remove-watch binding-info) ref id)
-    (when-let [clean (.-clean binding-info)] (clean the-ref))
-    (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
-      (binding-disposed)))
-  (invalidate [this]
-    ((.-remove-watch binding-info) ref id)
-    (queue-animation
-     (fn [_]
-       (when-not disposed 
-         ((.-add-watch binding-info) ref id #(.invalidate this))
-         (set-fn ((.-raw-deref binding-info) ref)))))))
-
 (defn- bind-attr* [set-fn element state-key ref node-state]
   (let [binding-fns (r/get-binding-fns ref)
         add-watch* (.-add-watch binding-fns)

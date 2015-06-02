@@ -5,9 +5,10 @@
 (defprotocol IVirtualElement
   (-velem-insert [this native-parent native-before])
   (-velem-remove [this])
+  (-velem-parent [this])
   (-velem-head [this])
   (-velem-tail [this])
-  (-velem-replace [this new-velem])
+  (-velem-replace [this cur-velem])
   (-velem-native-element [this])
   (-velem-simple-element [this]))
 
@@ -16,6 +17,9 @@
 
 (defn velem-simple-element [this]
   (-velem-simple-element this))
+
+(defn velem-parent [this]
+  (-velem-parent this))
 
 (defn velem-head [this]
   (-velem-head this))
@@ -29,50 +33,60 @@
 (defn velem-insert [this native-parent native-before]
   (-velem-insert this native-parent native-before))
 
-(defn velem-replace [this new-velem]
-  (-velem-replace this new-velem))
+(defn velem-replace [this cur-velem]
+  (-velem-replace this cur-velem))
 
-(deftype ReactiveElement [id the-ref binding-info
+(deftype ReactiveElement [id the-ref binding-info velem-fn enqueue-fn 
                           ^:mutable parent 
                           ^:mutable cur-velem ^:mutable dirty
                           ^:mutable updating ^:mutable disposed]
   Object
   (dispose [this]
-    #_(remove-watch* the-ref id)
-    #_(when clean* (clean* child-ref))
-    #_(when-let [binding-disposed (get ref-meta :binding-disposed)]
+    ((.-remove-watch binding-info) the-ref id)
+    (when cur-velem (r/dispose cur-velem))
+    (when-let [clean (.-clean binding-info)] (clean the-ref))
+    (set! (.-disposed this) true)
+    (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
       (binding-disposed)))
   (get-new-elem [this]
     (set! dirty false)
     ((.-add-watch binding-info) the-ref id #(.invalidate this))
-    (or ((.-raw-deref binding-info) the-ref) ""))
-
-  (show-new-elem [this new-velem native-before]
-    (if cur-elem
-      (set! cur-velem (-velem-replace cur-velem new-velem))
-      (-velem-insert new-elem parent before))
+    (velem-fn (or ((.-raw-deref binding-info) the-ref) "")))
+  (done-updating [this]
     (set! updating false)
     (when dirty 
-      (queue-animation #(.animate this))))
-
+      (enqueue-fn #(.animate this))))
+  (show-new-elem [this new-velem native-before]
+    (set! cur-velem
+          (if cur-velem
+            (velem-replace new-velem cur-velem)
+            (velem-insert new-velem parent native-before)))
+    (.done-updating this))
   (animate [this]
     (when-not disposed
-      (let [new-velem (get-new-elem)]
+      (let [new-velem (.get-new-elem this)]
         (when-not (= new-velem cur-velem)
-          (-velem-replace cur-velem
-           (fn []
-             (if disposed
-               (set! updating false)
-               (.show-new-elem this (if dirty
-                                      (get-new-elem)
-                                      new-velem) nil))))))))
+          ;; TODO hide transition
+          ;; (velem-replace cur-velem
+          ;;  (fn []
+          ;;    (if disposed
+          ;;      (set! updating false)
+          ;;      (.show-new-elem this (if dirty
+          ;;                             (.get-new-elem this)
+          ;;                             new-velem) nil))))
+          (if disposed
+            (set! updating false)
+            (.show-new-elem this (if dirty
+                                   (.get-new-elem this)
+                                   new-velem) nil)))
+          )))
   (invalidate [this]
     ((.-remove-watch binding-info) the-ref id)
     (when-not disposed
       (set! dirty true)
       (when-not updating
         (set! updating true)
-        (queue-animation #(.animate this)))))
+        (enqueue-fn #(.animate this)))))
 
   IEquiv
   (-equiv [this other]
@@ -81,29 +95,33 @@
      (= the-ref (.-the-ref other))))
   
   IVirtualElement
-  (-velem-head [this] (velem-head cur-elem))
-  (-velem-tail [this] (velem-tail cur-elem))
-  (-velem-native-element [this] (velem-native-element cur-elem))
-  (-velem-simple-element [this] (velem-simple-element cur-elem))
+  (-velem-parent [this] parent)
+  (-velem-head [this] (velem-head cur-velem))
+  (-velem-tail [this] (velem-tail cur-velem))
+  (-velem-native-element [this] (velem-native-element cur-velem))
+  (-velem-simple-element [this] (velem-simple-element cur-velem))
   (-velem-insert [this native-parent native-before]
     (set! (.-parent this) native-parent)
     (.show-new-elem this (.get-new-elem this) native-before)
     this)
   (-velem-remove [this]
-    (set! (.-disposed this) true)
-    (velem-remove cur-elem))
-  (-velem-replace [this new-velem]
-    (if (= this new-velem)
-      this
-      (do
-        (.dispose this)
-        (velem-replace cur-elem new-velem)))))
+    (.dispose this)
+    (velem-remove cur-velem))
+  (-velem-replace [this elem-to-replace]
+    (set! cur-velem (velem-replace (.get-new-elem this) elem-to-replace))
+    (.done-updating this)
+    this))
 
-(defn reactive-element [the-ref]
-  (ReativeElement. (r/new-reactive-id) the-ref (r/get-binding-fns the-ref)
-                   nil nil false false false))
+(defn reactive-element [the-ref velem-fn enqueue-fn]
+  (ReactiveElement.
+   (r/new-reactive-id)
+   the-ref
+   (r/get-binding-fns the-ref)
+   velem-fn
+   enqueue-fn
+   nil nil false false false))
 
-(deftype ReactiveElementCollection [projection elements ^:mutable parent ^:mutable before]
+(deftype ReactiveElementCollection [projection elements velem-fn enqueue-fn ^:mutable parent ^:mutable before]
   Object
   (clear [this]
     (doseq [elem elements]
@@ -116,12 +134,13 @@
     (velem-remove (aget (.splice elements idx 1) 0)))
   (-proj-insert-elem [this elem before-idx]
     (let [before-elem (if before-idx (aget elements before-idx) before)]
-      (.splice elements (or before-idx (alength elements)) 0 to-move)
+      (.splice elements (or before-idx (alength elements)) 0 elem)
       ;; TODO handle append case
-      (velem-insert to-move native-parent (velem-head before-elem))))
+      (velem-insert elem parent (velem-head before-elem))))
   (-proj-clear [this] (.clear this))
 
   IVirtualElement
+  (-velem-parent [this] parent)
   (-velem-native-element [this])
   (-velem-simple-element [this])
   (-velem-head [this]
@@ -133,12 +152,14 @@
   (-velem-insert [this native-parent native-before]
     (set! parent native-parent)
     (set! before native-before)
-    (r/project-elements projection this))
+    (r/project-elements projection this enqueue-fn)
+    this)
   (-velem-remove [this]
     (set! (.-disposed this) true)
     (when-let [dispose (.-dispose projection)]
       (dispose projection))
     (.clear this)))
 
-(defn reactive-element-collection [projection]
-  (ReactiveElementCollection. projection #js [] nil nil))
+(defn reactive-element-collection [projection velem-fn enqueue-fn]
+  (ReactiveElementCollection. projection #js [] velem-fn enqueue-fn nil nil))
+
