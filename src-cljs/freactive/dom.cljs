@@ -52,8 +52,7 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn- init-element-state! [dom-node tag]
   (let [node-id (str auto-node-id)
         state ;;(ElementState. node-id false element-spec nil)
-        #js
-        {:id node-id :disposed false :tag tag}]
+        #js {:id node-id :disposed false :tag tag}]
     (set! auto-node-id (inc auto-node-id))
     (set! (.-freactive-state dom-node) state)
     state))
@@ -186,6 +185,21 @@ or dates; or can be used to define containers for DOM elements themselves."
     (aset (.-style elem) prop-name (normalize-attr-value prop-value))
     (js-delete (.-style elem) prop-name))
   prop-value)
+
+(deftype ReactiveAttribute [id the-ref binding-info set-fn ^:mutable disposed]
+  Object
+  (dispose [this]
+    ((.-remove-watch binding-info) ref id)
+    (when-let [clean (.-clean binding-info)] (clean the-ref))
+    (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
+      (binding-disposed)))
+  (invalidate [this]
+    ((.-remove-watch binding-info) ref id)
+    (queue-animation
+     (fn [_]
+       (when-not disposed 
+         ((.-add-watch binding-info) ref id #(.invalidate this))
+         (set-fn ((.-raw-deref binding-info) ref)))))))
 
 (defn- bind-attr* [set-fn element state-key ref node-state]
   (let [binding-fns (r/get-binding-fns ref)
@@ -883,3 +897,258 @@ map in vdom."
 
 ;; (defn bind-keys [keyset-cursor element-fn]
 ;;   )
+
+
+(defprotocol IVirtualDOM
+  (-vdom-insert [this dom-parent dom-before])
+  (-vdom-remove [this])
+  (-vdom-head [this])
+  (-vdom-tail [this])
+  (-vdom-replace [this new-vdom])
+  (-vdom-node [this])
+  (-vdom-element [this]))
+
+(defn vdom-node [this]
+  (if (dom-node? this)
+    this
+    (-vdom-node this)))
+
+(defn vdom-element [this]
+  (if (dom-node? this)
+    this
+    (-vdom-element this)))
+
+(defn dom-insert [dom-node dom-parent dom-before]
+  (if dom-before
+    (.insertBefore dom-parent dom-node dom-before)
+    (.appendChild dom-parent dom-node)))
+
+(defn dom-remove [dom-node]
+  (when-let [parent (.-parentNode dom-node)]
+    (.removeChild parent dom-node)))
+
+(defn vdom-head [this]
+  (if (dom-node? this)
+    this
+    (-vdom-head this)))
+
+(defn vdom-tail [this]
+  (if (dom-node? this)
+    this
+    (-vdom-tail this)))
+
+(defn vdom-remove [this]
+  (if (dom-node? this)
+    (dom-remove this)
+    (-vdom-remove this)))
+
+(defn vdom-insert [this dom-parent dom-before]
+  (if (dom-node? this)
+    (dom-insert this dom-parent dom-before)
+    (-vdom-insert this dom-parent dom-before)))
+
+(defn dom-replace [dom-node new-vdom]
+  (when-let [parent (.-parentNode dom-node)]
+    (if-let [node (vdom-node new-vdom)]
+      (do
+        (.replaceChild parent node dom-node)
+        new-vdom)
+      (let [next-sib (.-nextSibling dom-node)]
+        (.removeChild parent dom-node)
+        (vdom-insert new-vdom parent next-sib)))))
+
+(defn vdom-replace [this new-vdom]
+  (if (dom-node? this)
+    (dom-replace this new-vdom)
+    (-vdom-replace this new-vdom)))
+
+;; replace scenarios
+;; DOMElement DOMElement -> diff or replace
+;; DOMTextNode DOMTextNode -> simple update
+;; DOMElement DOMTextNode -> replace
+;; DOMElement ReactiveElement -> defer to ReactiveElement
+;; DOMElement ReactiveElementCollection -> remove, insert
+;; ReactiveElement ReactiveElement -> defer to replacing elem
+;; ReactiveElement DOMTextNode -> defer to replacing elem
+;; ReactiveElement ReactiveElementCollection
+;; ReactiveElementCollection DOMTextNode
+;; ReactiveElementCollection ReactiveElementCollection
+
+(defn- vdom-full-replace [this node new-vdom]
+  (let [next-sib (.-nextSibling node)
+        parent (.-parentNode node)]
+    (vdom-remove this)
+    (-vdom-insert new-vdom parent next-sub)))
+
+(defn dom-simple-replace [dom-node new-elem]
+  (when-let [parent (.-parentNode dom-node)]
+    (.replaceChild parent node (vdom-node new-elem))))
+
+(defn dom-remove-replace [dom-node new-vdom]
+  (when-let [parent (.-parentNode dom-node)]
+    (let [next-sib (.-nextSibling dom-node)]
+      (.removeChild parent dom-node)
+      (vdom-insert new-vdom parent next-sib))))
+
+(deftype DOMElement [ns-uri tag attrs events bindings children ^:mutable node]
+  Object
+  (ensureNode [this]
+    (when-not node
+      (set! node
+            (if xmlns
+              (.createElementNS js/document ns-uri tag)
+              (.createElement js/document tag)))
+      (doseq [child children]
+        (-vdom-insert child node nil))))
+
+  IVirtualDOM
+  (-vdom-head [this] node)
+  (-vdom-tail [this] node)
+  (-vdom-node [this]
+    (.ensureNode this)
+    node)
+  (-vdom-element [this] this)
+  (-vdom-insert [this dom-parent dom-before]
+    (.ensureNode this)
+    (dom-insert dom-parent node dom-before))
+
+  (vdom-remove [this]
+    (dom-remove node))
+  (-vdom-replace [this new-vdom]
+    (if-let [new-elem (vdom-element new-vdom)]
+      (if (and (instance? DOMElement new-elem)
+               (identical? (.-ns-uri new-elem) ns-uri)
+               (identical? (.-tag new-elem) tag))
+        (do
+          ;; TODO do diff replace
+          this)
+        (do
+          (dom-simple-replace node new-elem)
+          new-vdom))
+      (dom-remove-replace node new-vdom))))
+
+(deftype DOMTextNode [^:mutable text ^:mutable node]
+  Object
+  (ensureNode [this]
+    (when-not node
+      (set! node (.createTextNode js/document text))))
+  IVirtualDOM
+  (-vdom-head [this] node)
+  (-vdom-tail [this] node)
+  (-vdom-node [this]
+    (.ensureNode this)
+    node)
+  (-vdom-element [this] this)
+  (-vdom-insert [this dom-parent dom-before]
+    (.ensureNode this)
+    (dom-insert dom-parent node dom-before))
+  (-vdom-remove [this]
+    (dom-remove node))
+  (-vdom-replace [this new-vdom]
+    (if-let [new-elem (vdom-element new-vdom)]
+      (if (instance? DOMTextNode new-vdom)
+        (do
+          (.ensureNode this)
+          (set! text (.-text new-vdom))
+          (set! (.-textContent node) text)
+          this)
+        (do
+          (dom-simple-replace node new-elem)
+          new-vdom))
+      (dom-remove-replace node new-vdom))))
+
+(deftype ReactiveElement [id ^:mutable parent the-ref binding-info ^:mutable cur-vdom ^:mutable dirty
+                          ^:mutable updating ^:mutable disposed]
+  Object
+  (dispose [this]
+    #_(remove-watch* the-ref id)
+    #_(when clean* (clean* child-ref))
+    #_(when-let [binding-disposed (get ref-meta :binding-disposed)]
+      (binding-disposed)))
+  (get-new-elem [this]
+    (set! dirty false)
+    ((.-add-watch binding-info) the-ref id #(.invalidate this))
+    (or ((.-raw-deref binding-info) the-ref) ""))
+
+  (show-new-elem [this new-vdom dom-before]
+    (if cur-elem
+      (set! cur-vdom (-vdom-replace cur-vdom new-vdom))
+      (-vdom-insert new-elem parent before))
+    (set! updating false)
+    (when dirty 
+      (queue-animation #(.animate this))))
+
+  (animate [this]
+    (when-not disposed
+      (let [new-vdom (get-new-elem)]
+        (when-not (= new-vdom cur-vdom)
+          (-vdom-replace cur-vdom
+           (fn []
+             (if disposed
+               (set! updating false)
+               (.show-new-elem this (if dirty
+                                      (get-new-elem)
+                                      new-vdom) nil))))))))
+  (invalidate [this]
+    ((.-remove-watch binding-info) the-ref id)
+    (when-not disposed
+      (set! dirty true)
+      (when-not updating
+        (set! updating true)
+        (queue-animation #(.animate this)))))
+
+  IEquiv
+  (-equiv [this other]
+    (and
+     (instance? ReactiveElement other)
+     (= the-ref (.-the-ref other))))
+  
+  IVirtualDOM
+  (-vdom-head [this] (vdom-head cur-elem))
+  (-vdom-tail [this] (vdom-tail cur-elem))
+  (-vdom-node [this] (vdom-node cur-elem))
+  (-vdom-element [this] (vdom-element cur-elem))
+  (-vdom-insert [this dom-parent dom-before]
+    (set! (.-parent this) dom-parent)
+    (.show-new-elem this (.get-new-elem this) dom-before)
+    this)
+  (-vdom-remove [this]
+    (set! (.-disposed this) true)
+    (vdom-remove cur-elem))
+  (-vdom-replace [this new-vdom]
+    (if (= this new-vdom)
+      this
+      (do
+        (.dispose this)
+        (vdom-replace cur-elem new-vdom)))))
+
+(deftype ReactiveElementCollection [dom-parent elements]
+  Object
+  (move [this idx before-idx]
+    (.insert this (aget (.splice elements idx 1) 0) before-idx))
+  (remove [this idx]
+    (vdom-remove (aget (.splice elements idx 1) 0)))
+  (insert [this elem before-idx]
+    (let [before-elem (when before-idx (aget elements before-idx))]
+      (.splice elements (or before-idx (alength elements)) 0 to-move)
+      ;; TODO handle append case
+      (-vdom-insert to-move dom-parent (vdom-head before-elem))))
+
+  IVirtualDOM
+  (-vdom-node [this])
+  (-vdom-element [this])
+  (-vdom-head [this]
+    (when (> (.-length elements) 0)
+      (vdom-head (aget elements 0))))
+  (-vdom-tail [this]
+    (when (> (.-length elements) 0)
+      (vdom-tail (aget elements (dec (.-length elements))))))
+  (-vdom-insert [this dom-parent dom-before]
+    (loop [dom-before dom-before
+           [elem & more] elements]
+      (when elem
+        (recur (dom-insert dom-parent elem dom-before) more))))
+  (-vdom-remove [this]
+    (set! (.-disposed this) true)
+    (doseq [elem elements]
+      (vdom-remove elem))))
