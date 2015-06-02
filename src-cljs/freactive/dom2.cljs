@@ -901,16 +901,16 @@ map in velem."
 
 (defn dom-simple-replace [dom-node new-elem]
   (when-let [parent (.-parentNode dom-node)]
-    (.replaceChild parent node (velem-node new-elem))))
+    (.replaceChild parent node (ui/velem-node new-elem))))
 
 (defn dom-remove-replace [dom-node new-velem]
   (when-let [parent (.-parentNode dom-node)]
     (let [next-sib (.-nextSibling dom-node)]
       (.removeChild parent dom-node)
-      (velem-insert new-velem parent next-sib))))
+      (ui/velem-insert new-velem parent next-sib))))
 
 (deftype UnmanagedDOMNode [node]
-  r/IVirtualElement
+  ui/IVirtualElement
   (-velem-head [this] node)
   (-velem-tail [this] node)
   (-velem-node [this] node)
@@ -920,7 +920,7 @@ map in velem."
   (-velem-remove [this]
     (dom-remove node))
   (-velem-replace [this new-velem]
-    (if-let [new-elem (velem-simple-element new-velem)]
+    (if-let [new-elem (ui/velem-simple-element new-velem)]
       (do
         (dom-simple-replace node new-elem)
         new-velem)
@@ -928,43 +928,81 @@ map in velem."
 
 ;; Managed DOMElement stuff
 
-(defn- bind-attr! [element attr-key attr-value node-state]
+(def ^:private attr-binder* (r/attr-binder** queue-animation))
+
+(deftype EventBinding [node event-name handler]
+  IFn
+  (invoke [this new-handler]
+    (.unlisten this)
+    (listen! element event-name handler)
+    this)
+  Object
+  (unlisten [this]
+    (when handler
+      (unlisten! node event-name handler)))
+  (dispose [this]
+    (.unlisten this)
+    (set! (.-disposed this) true)))
+
+(defn- bind-event! [node event-name handler]
+  ((EventBinding. node event-name handler)))
+
+(defn- bind-style! [node style-kw style-val]
+  (let [style-name (name style-kw)]
+    ((attr-binder* (fn [val] (set-style! node style-name val))) style-val)))
+
+(defn- attr-diff* [node oas attr-map bind-attr]
+  (let [nas #js {}]
+    (doseq [[[k v] & more] attr-map]
+      (let [kstr (->str k)]
+        (if-let [existing (when oas (aget oas kstr))]
+          (when-let [new-state (existing v)]
+            (aset nas kstr new-state))
+          (aset nas kstr (bind-attr node k v)))))))
+
+(defn- bind-style! [node old-state style-map]
+  (attr-diff* node old-state style-map bind-style!))
+
+(defn- bind-events! [node old-state evt-map]
+  (attr-diff* node old-state evt-map bind-event!))
+
+(defn- bind-attr! [node attr-key attr-value]
   (let [attr-ns (namespace attr-key)
         attr-name (name attr-key)]
     (if attr-ns
       (if-let [attr-handler (aget attr-ns-lookup attr-ns)]
         (cond
           (string? attr-handler)
-          (bind-prop-attr! (ns-attr-setter element attr-ns attr-name) element
-                           (bind-attr-key attr-key) attr-value node-state)
+          ((attr-binder* (ns-attr-setter element attr-ns attr-name) attr-value))
 
           (fn? attr-handler)
-
           (attr-handler element node-state attr-name attr-value)
 
           :default
           (.warn js/console "Invalid ns attr handler" attr-handler))
         (.warn js/console "Undefined ns attr prefix" attr-ns))
-      (cond
-        (identical? 0 (.indexOf attr-name "on-"))
-        (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
+      ((attr-binder* (get-attr-setter element attr-name) attr-value)))))
 
-        (identical? attr-name "events")
-        (bind-event-listeners! element attr-value node-state)
+(defn- handle-legacy-events [attrs]
+  (loop [[[k v :as kvp] & more] attrs
+         evts {}
+         res {}]
+    (if kvp 
+      (if (identical? 0 (.indexOf k "on-"))
+        (recur more (assoc evts (.substring k 3) v) res)
+        (recur more evts (assoc res k v)))
+      (assoc res :events (merge evts (:events res))))))
 
-        :default
-        (bind-prop-attr! (get-attr-setter element attr-name) element
-                         (bind-attr-key attr-key) attr-value node-state)))))
-
-(defn- bind-attrs!* [node attrs node-state binder]
-  (let [js-attrs #js {}]
-    (doseq [[k v] attrs]
-      (binder node k v node-state)
-      (aset js-attrs (str k) v))
-    js-attrs))
-
-(deftype DOMElement [ns-uri tag attrs children ^:mutable node]
+(deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node ^:mutable attr-states ^:mutable events ^:mutable style]
   Object
+  (dispose [this]
+    (goog.object/forEach attr-states
+                         (fn [state k _]
+                           (when-let [dispose (.-dispose state)]
+                             (dispose state))))
+    (doseq [child childen]
+      (when-let [dispose (.-dispose child)]
+        (dispose child))))
   (ensureNode [this]
     (when-not node
       (set! node
@@ -972,12 +1010,18 @@ map in velem."
               (.createElementNS js/document ns-uri tag)
               (.createElement js/document tag)))
       (set! (.-freactive-state node) this)
-      ;; TODO bind attrs
+      (.updateAttrs this attrs)
       (doseq [child children]
-        (velem-insert child node nil)))
-    )
+        (ui/velem-insert child node nil))))
+  (updateAttrs [this new-attrs]
+    (let [{new-events :events new-style :style :as new-attrs}
+          (handle-legacy-events new-attrs)]
+      (set! events (bind-events! node events new-events))
+      (set! style (bind-style! node style new-style))
+      (set! attr-states (attr-diff* node attr-states (dissoc new-attrs :events :style) bind-attr!))
+      (set! attrs new-attrs)))
 
-  r/IVirtualElement
+  ui/IVirtualElement
   (-velem-head [this] node)
   (-velem-tail [this] node)
   (-velem-node [this]
@@ -987,10 +1031,10 @@ map in velem."
   (-velem-insert [this dom-parent dom-before]
     (.ensureNode this)
     (dom-insert dom-parent node dom-before))
-  (velem-remove [this]
+  (ui/velem-remove [this]
     (dom-remove node))
   (-velem-replace [this new-velem]
-    (if-let [new-elem (velem-simple-element new-velem)]
+    (if-let [new-elem (ui/velem-simple-element new-velem)]
       (if (and (instance? DOMElement new-elem)
                (identical? (.-ns-uri new-elem) ns-uri)
                (identical? (.-tag new-elem) tag)
@@ -1009,7 +1053,7 @@ map in velem."
   (ensureNode [this]
     (when-not node
       (set! node (.createTextNode js/document text))))
-  r/IVirtualElement
+  ui/IVirtualElement
   (-velem-head [this] node)
   (-velem-tail [this] node)
   (-velem-node [this]
@@ -1022,7 +1066,7 @@ map in velem."
   (-velem-remove [this]
     (dom-remove node))
   (-velem-replace [this new-velem]
-    (if-let [new-elem (velem-simple-element new-velem)]
+    (if-let [new-elem (ui/velem-simple-element new-velem)]
       (if (instance? DOMTextNode new-velem)
         (do
           (.ensureNode this)
@@ -1052,7 +1096,6 @@ or dates; or can be used to define containers for DOM elements themselves."
 ;;   number
 ;;   (-get-dom-image [x] (str x)))
 
-
 (defn- dom-element [ns-uri tag tail]
   (let [[_ tag-name id class] (re-matches re-tag tag-name)
         attrs? (first tail)
@@ -1070,7 +1113,7 @@ or dates; or can be used to define containers for DOM elements themselves."
                             (if cls (str class " " cls) class)))))
 
         children (if have-attrs (rest tail) tail)]
-    (DOMElement. ns-uri tag attrs children nil)))
+    (DOMElement. ns-uri tag attrs children nil nil)))
 
 (defn- as-velem [elem-spec]
   (cond
@@ -1107,7 +1150,7 @@ or dates; or can be used to define containers for DOM elements themselves."
     (satisfies? IDeref elem-spec)
     (r/reactive-element elem-spec)
 
-    (satisfies? r/IVirtualElement elem-spec)
+    (satisfies? ui/IVirtualElement elem-spec)
     elem-spec
 
     (satisfies? IReactiveProjection elem-spec)
@@ -1134,11 +1177,11 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (defn replace! [dom-element velem]
   (ensure-unmanaged (.-parentNode dom-element))
-  (velem-replace (get-velem-state dom-element) (as-velem new-element)))
+  (ui/velem-replace (get-velem-state dom-element) (as-velem new-element)))
 
 (defn- append-or-insert! [dom-element velem before]
   (ensure-unmanaged dom-element)
-  (velem-insert (as-velem new-element) dom-element before))
+  (ui/velem-insert (as-velem new-element) dom-element before))
 
 (defn append! [dom-element velem]
   (append-or-insert! dom-element velem nil))
@@ -1153,4 +1196,4 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (defn remove! [dom-element]
   (ensure-unmanaged (.-parentNode dom-element))
-  (velem-remove (get-velem-state dom-element)))
+  (ui/velem-remove (get-velem-state dom-element)))

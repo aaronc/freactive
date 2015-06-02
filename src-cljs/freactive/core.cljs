@@ -470,8 +470,7 @@
     (-add-keyset-watch [this key f]
       (when-not (contains? keyset-watches key)
         (set! (.-keyset-watches this) (assoc keyset-watches key f))
-        (.registerOne this))
-      )
+        (.registerOne this)))
     (-remove-keyset-watch [this key]
       (when (contains? keyset-watches key)
         (set! (.-keyset-watches this) (dissoc keyset-watches key))
@@ -537,6 +536,12 @@
     (-pop! [this]
       (set! (.-change-ks this) :pop)
       (swap-fn pop))
+
+    ILookup
+    (-lookup [this key]
+      (get (.rawDeref this) key))
+    (-lookup [this key not-found]
+      (or (get (.rawDeref this) key) not-found))
 
     IAssociativeCursor
     (-update! [this key f args] (.updateChild this key f args))
@@ -635,98 +640,118 @@
 
 ;; Reactive Attributes
 
-;; (deftype ReactiveAttribute [id the-ref binding-info set-fn animate-fn ^:mutable disposed]
-;;   Object
-;;   (dispose [this]
-;;     ((.-remove-watch binding-info) ref id)
-;;     (when-let [clean (.-clean binding-info)] (clean the-ref))
-;;     (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
-;;       (binding-disposed)))
-;;   (invalidate [this]
-;;     ((.-remove-watch binding-info) ref id)
-;;     (animate-fn
-;;      (fn [_]
-;;        (when-not disposed 
-;;          ((.-add-watch binding-info) ref id #(.invalidate this))
-;;          (set-fn ((.-raw-deref binding-info) ref)))))))
+(declare bind-attr*)
 
-;; (defn bind-attr* [the-ref set-fn animate-fn]
-;;   (if (instance? IDeref the-ref)
-;;     (ReactiveAttribute. (new-reactive-id) the-ref (get-binding-fns the-ref) set-fn animate-fn false)
-;;     (set-fn the-ref))
+(deftype ReactiveAttribute [id the-ref binding-info set-fn enqueue-fn ^:mutable disposed]
+  IFn
+  (invoke [_ new-val]
+    (.dispose this)
+    (bind-attr* new-val set-fn enqueue-fn))
+  Object
+  (dispose [this]
+    ((.-remove-watch binding-info) the-ref id)
+    (when-let [clean (.-clean binding-info)] (clean the-ref))
+    (when-let [binding-disposed (get (meta the-ref) :binding-disposed)]
+      (binding-disposed)))
+  (invalidate [this]
+    ((.-remove-watch binding-info) the-ref id)
+    (enqueue-fn
+     (fn [_]
+       (when-not disposed 
+         ((.-add-watch binding-info) the-ref id #(.invalidate this))
+         (set-fn ((.-raw-deref binding-info) the-ref)))))))
 
-;; ;; Reactive Sequence Projection Protocols
+(defn bind-attr* [the-ref set-fn enqueue-fn]
+  (if (instance? IDeref the-ref)
+    (ReactiveAttribute. (new-reactive-id) the-ref (get-binding-fns the-ref) set-fn enqueue-fn false)
+    (do
+      (set-fn the-ref)
+      set-fn)))
 
-;; (defprotocol IReactiveProjectionTarget
-;;   (-proj-insert-elem [this projected-elem before-idx])
-;;   (-proj-move-elem [this elem-idx before-idx])
-;;   (-proj-remove-elem [this elem-idx])
-;;   (-proj-clear [this]))
+(defn attr-binder** [enqueue-fn]
+  (fn attr-binder* [set-fn]
+    (fn bind-attr* [value]
+      (bind-attr* value set-fn enqueue-fn))))
 
-;; (defprotocol IReactiveProjection
-;;   (-project-elements [this target]))
+;; Reactive Sequence Projection Protocols
 
-;; (defn project-elements [projection target]
-;;   (-project-elements projection target))
+(defprotocol IReactiveProjectionTarget
+  (-proj-insert-elem [this projected-elem before-idx])
+  (-proj-get-elem [this elem-idx])
+  (-proj-move-elem [this elem-idx before-idx])
+  (-proj-remove-elem [this elem-idx])
+  (-proj-clear [this]))
 
-;; ;; Reactive Sequence Projection Implementations
+(defprotocol IReactiveProjection
+  (-project-elements [this target enqueue-fn]))
 
-;; (deftype KeysetCursorProjection [cur proj-fn opts
-;;                                  ^:mutable avl-map ^:mutable target
-;;                                  ^:mutable filter-fn
-;;                                  ^:mutable offset ^:mutable limit
-;;                                  ^:mutable sort-by
-;;                                  ^:mutable placeholder
-;;                                  ^:mutable placeholder-idx]
-;;   Object
-;;   (dispose [this])
-;;   (updateSortBy [this new-sort-by]
-;;     (when-not (identical? new-sort-by sort-by)
-;;       (-proj-clear target)
-;;       (set! sort-by new-sort0-by)
-;;       (set! avl-map
-;;             (if sort-by
-;;               (avl/sorted-map sort-by)
-;;               (avl/sorted-map)))))
-;;   (updateFilter [this new-filter])
-;;   (rankOf [this key]
-;;     (let [idx
-;;           (let [idx (+ (avl/rank-of avl-map key) offset)]
-;;             (if limit
-;;               (when (<= idx limit)
-;;                 idx)
-;;               idx))]
-;;       (if (and placeholder-idx (>= idx placeholder-idx))
-;;         (inc idx)
-;;         idx)))
-;;   (onUpdates [this updates]
-;;     (doseq [[k v :as update] updates]
-;;       (if-let [cur-idx (.rankOf this k)]
-;;         (if (= (count update) 1)
-;;           (do
-;;             (set! avl-map (dissoc avl-map k))
-;;             (-proj-remove-elem target cur-idx))
-;;           (when (filter update)
-;;             (set! avl-map (assoc avl-map k v))
-;;             (-proj-move-elem target cur-idx (.rankOf this k))))
-;;         (when (filter update)
-;;             (set! avl-map (assoc avl-map k v))
-;;             (-proj-insert-elem target (proj-fn (cursor cur k)) (.rankOf this k))))))
+(defn project-elements [projection target enqueue-fn]
+  (-project-elements projection target enqueue-fn))
 
-;;   IReactiveProjection
-;;   (-project-elements [this proj-target]
-;;     (let [{:keys [filter sort-by offset limit placeholder-idx placeholder]} opts]
-;;       (bind-attr* filter #(.updateFilter this))
-;;       (bind-attr* sort-by #(.updateSortBy this))
-;;       (bind-attr* offset #(.updateFilter this))
-;;       (bind-attr* limit #(.updateFilter this))
-;;       (bind-attr* placeholder-idx #(.updateFilter this))
-;;       (bind-attr* placeholder #(.updateFilter this)))))
+;; Reactive Sequence Projection Implementations
 
-;; (defn rmap
-;;   ([f keyset-cursor]
-;;    (rmap nil f keyset-cursor))
-;;   ([opts f keyset-cursor]
-;;    (KeysetCursorProjection. cur f opts nil nil identity 0 nil)))
+(deftype KeysetCursorProjection [cur proj-fn opts
+                                 ^:mutable avl-set ^:mutable target
+                                 ^:mutable enqueue-fn
+                                 ^:mutable filter-fn
+                                 ^:mutable offset ^:mutable limit
+                                 ^:mutable sort-by
+                                 ^:mutable placeholder
+                                 ^:mutable placeholder-idx]
+  Object
+  (dispose [this])
+  (updateSortBy [this new-sort-by]
+    (when-not (identical? new-sort-by sort-by)
+      (-proj-clear target)
+      (set! sort-by
+            (when new-sort-by
+              (fn [x y]
+                (new-sort-by [x (get cur x)] [y (get cur y)]))))
+      (set! avl-set
+            (if sort-by
+              (avl/sorted-set-by sort-by)
+              (avl/sorted-set)))))
+  (updateFilter [this new-filter])
+  (rankOf [this key]
+    (let [idx
+          (let [idx (+ (avl/rank-of avl-set key) offset)]
+            (if limit
+              (when (<= idx limit)
+                idx)
+              idx))]
+      (if (and placeholder-idx (>= idx placeholder-idx))
+        (inc idx)
+        idx)))
+  (onUpdates [this updates]
+    (doseq [[k v :as update] updates]
+      (if-let [cur-idx (.rankOf this k)]
+        (if (or (= (count update) 1) (not (filter update)))
+          (do
+            (set! avl-set (disj avl-set k))
+            (-proj-remove-elem target cur-idx))
+          (do
+            (set! avl-set (conj avl-set k))
+            (-proj-move-elem target cur-idx (.rankOf this k))))
+        (when (filter update)
+          (set! avl-set (conj avl-set k))
+          (-proj-insert-elem target (proj-fn (cursor cur k)) (.rankOf this k))))))
+
+  IReactiveProjection
+  (-project-elements [this proj-target enqueue]
+    (set! target proj-target)
+    (set! enqueue-fn enqueue)
+    (let [{:keys [filter sort-by offset limit placeholder-idx placeholder]} opts]
+      (bind-attr* filter #(.updateFilter this) enqueue)
+      (bind-attr* sort-by #(.updateSortBy this) enqueue)
+      (bind-attr* offset #(.updateFilter this) enqueue)
+      (bind-attr* limit #(.updateFilter this) enqueue)
+      (bind-attr* placeholder-idx #(.updateFilter this) enqueue)
+      (bind-attr* placeholder #(.updateFilter this) enqueue))))
+
+(defn rmap
+  ([f keyset-cursor]
+   (rmap nil f keyset-cursor))
+  ([opts f keyset-cursor]
+   (KeysetCursorProjection. keyset-cursor f opts nil nil nil identity 0 nil nil nil nil)))
 
 
