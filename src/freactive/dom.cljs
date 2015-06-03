@@ -1,105 +1,8 @@
 (ns freactive.dom
-  (:require [freactive.core :as r]
-            [goog.object])
-  (:require-macros [freactive.macros :refer [rx non-reactively]]))
-
-;; ## Core Defintions
-
-(defonce ^:private auto-node-id 0)
-
-(defprotocol IDOMImage
-  "A protocol for things that can be represented as virtual DOM or contain DOM nodes.
-
-Can be used to define custom conversions to DOM nodes or text for things such as numbers
-or dates; or can be used to define containers for DOM elements themselves."
-  (-get-dom-image [x]
-    "Should return either virtual DOM (a vector or string) or an actual DOM node."))
-
-(extend-protocol IDOMImage
-  boolean
-  (-get-dom-image [x] (str x))
-
-  number
-  (-get-dom-image [x] (str x)))
-
-(defn- dom-node? [x]
-  (and x (> (.-nodeType x) 0)))
-
-(defn- get-dom-image [x]
-  (if x
-    (cond
-      (dom-node? x) x
-
-      (string? x) x
-
-      (vector? x) x
-
-      (satisfies? IDeref x) x
-
-      :default (-get-dom-image x))
-
-    ;; nil values treated as empty "placeholder" text nodes
-    ""))
-
-(defn- get-element-state [x]
-  (.-freactive-state x))
-
-(defn- reset-element-state! [state]
-  (when-let [on-disposed (.-disposed-callback state)]
-    (on-disposed)
-    (set! (.-disposed-callback state) nil)))
-
-(defn- init-element-state! [dom-node tag]
-  (let [node-id (str auto-node-id)
-        state ;;(ElementState. node-id false element-spec nil)
-        #js {:id node-id :disposed false :tag tag}]
-    (set! auto-node-id (inc auto-node-id))
-    (set! (.-freactive-state dom-node) state)
-    state))
-
-(defn- register-with-parent-state [parent-state child-key state]
-  (let [child-states (or (.-child-states parent-state)
-                        (set! (.-child-states parent-state) #js {}))]
-    (aset child-states child-key state)))
-
-(defn- unregister-from-parent-state [parent-state child-key]
-  (when-let [child-states (.-child-states parent-state)]
-    (js-delete child-states child-key)))
-
-(defn- dispose-state [state]
-  (set! (.-disposed state) true)
-     (when-let [disposed-callback (.-disposed-callback state)]
-       (disposed-callback)))
-
-(defn- dispose-node
-  ([dom-node]
-   ;; (println "disposing" dom-node)
-   (when-let [state                                       ;;(aget element-state-lookup node-id)
-              (get-element-state dom-node)]
-     (let [node-id (.-id state)]
-       (dispose-node node-id state)
-       (when-let [parent-state (.-parent-state state)]
-         (when-let [child-states (.-child-states parent-state)]
-           (js-delete child-states node-id))))))
-  ([child-key state]
-   ;; (println "disposing" child-key)
-   (when state
-     (dispose-state state)
-     (when-not (identical? (aget child-key 0) "-")
-       ;; (js-delete element-state-lookup child-key)
-       (goog.object/forEach (.-child-states state)
-                            (fn [state child-key _]
-                              (dispose-node child-key state)))))))
-
-(defn- remove-dom-node [dom-node]
-  ;(println "removing dom node")
-  (dispose-node dom-node)
-  (when-let [parent (.-parentNode dom-node)]
-    (.removeChild parent dom-node)))
-
-(defn remove! [x]
-  (assert (dom-node? x) "remove! only implemented for DOM nodes currently")
-  (remove-dom-node x))
+  (:require
+   [freactive.core :as r]
+   [freactive.ui-common :as ui]
+   [goog.object]))
 
 ;; ## Polyfills
 
@@ -162,10 +65,96 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 ;; ## Attributes, Styles & Events
 
+;; TODO lifecycle callbacks
+
+;; (defn- on-moving [state node cb]
+;;   (if-let [node-moving (get-state-attr state ":node/on-moving")]
+;;     (node-moving node cb)
+;;     (cb)))
+
+;; (defn- on-moved [state node]
+;;   (when-let [node-moved (get-state-attr state ":node/on-moved")]
+;;     (node-moved node)))
+
+(defn update-attrs
+  "Convenience function to update the attrs in a virtual dom vector.
+Works like Clojure's update function but f (and its args) only modify the attrs
+map in velem."
+  ([velem f & args]
+   (let [tag (first velem)
+         attrs? (second velem)
+         attrs (when (map? attrs?) attrs?)]
+     (concat [tag (apply f attrs args)] (if attrs (nnext velem) (next velem))))))
+
+;; Plugin Support
+
+(def ^:private node-ns-lookup
+  #js
+  {:svg "http://www.w3.org/2000/svg"})
+
+(defn register-node-prefix! [prefix xml-ns-or-handler]
+  (aset node-ns-lookup prefix xml-ns-or-handler))
+
+(def ^:private attr-ns-lookup
+  #js
+  {:node (fn [_ _ v] v)
+   :state (fn [_ _ v] v)})
+
+(defn register-attr-prefix! [prefix xml-ns-or-handler]
+  (aset attr-ns-lookup prefix xml-ns-or-handler))
+
+;; Core DOM stuff
+
+(defn- get-element-state [x]
+  (.-freactive-state x))
+
+(defn dom-insert [dom-parent dom-node dom-before]
+  (if dom-before
+    (.insertBefore dom-parent dom-node dom-before)
+    (.appendChild dom-parent dom-node)))
+
+(defn dom-remove [dom-node]
+  (when-let [parent (.-parentNode dom-node)]
+    (.removeChild parent dom-node)))
+
+(defn dom-simple-replace [new-node old-node]
+  (when-let [parent (.-parentNode old-node)]
+    (.replaceChild parent new-node old-node)))
+
+(defn dom-remove-replace [new-node old-velem]
+  (let [tail (ui/velem-tail old-velem)
+        next-sib (when tail (.-nextSibling tail))
+        parent (ui/velem-parent old-velem)]
+    (ui/velem-remove old-velem)
+    (dom-insert parent new-node next-sib)))
+
+(deftype UnmanagedDOMNode [node]
+  ui/IVirtualElement
+  (-velem-parent [this] (.-parentNode node))
+  (-velem-head [this] this)
+  (-velem-tail [this] this)
+  (-velem-next-sibling [this]
+    (.-nextSibling node))
+  (-velem-native-element [this] node)
+  (-velem-simple-element [this] this)
+  (-velem-insert [this dom-parent dom-before]
+    (dom-insert dom-parent node dom-before)
+    this)
+  (-velem-remove [this]
+    (dom-remove node))
+  (-velem-replace [this old-velem]
+    (if-let [old-node (ui/velem-native-element old-velem)]
+      (dom-simple-replace node old-node)
+      (dom-remove-replace node old-velem))
+    this)
+  (-velem-lifecycle-callback [this cb-name]))
+
+;; Managed DOMElement stuff
+
 (defprotocol IDOMAttrValue
   (-get-attr-value [value]))
 
-(defn normalize-attr-value [value]
+(defn- normalize-attr-value [value]
   (cond
     (.-substring value) value
     (keyword? value) (name value)
@@ -179,51 +168,12 @@ or dates; or can be used to define containers for DOM elements themselves."
     (.setAttribute element attr-name (normalize-attr-value attr-value))
     (.removeAttribute element attr-name)))
 
-(defn- set-style-prop! [elem prop-name prop-value]
+(defn- set-style! [elem prop-name prop-value]
   ;(println "set-style-prop!" elem prop-name prop-value)
   (if prop-value
     (aset (.-style elem) prop-name (normalize-attr-value prop-value))
     (js-delete (.-style elem) prop-name))
   prop-value)
-
-(defn- bind-attr* [set-fn element state-key ref node-state]
-  (let [binding-fns (r/get-binding-fns ref)
-        add-watch* (.-add-watch binding-fns)
-        remove-watch* (.-remove-watch binding-fns)
-        clean* (.-clean binding-fns)
-        raw-deref* (.-raw-deref binding-fns)
-        ref-meta (meta ref)]
-    (when (and add-watch* remove-watch*)
-      (let [key (r/new-reactive-id)
-            attr-state #js {:disposed false
-                            :disposed_callback
-                            (fn []
-                              (remove-watch* ref key)
-                              (when clean* (clean* ref))
-                              (when-let [binding-disposed (get ref-meta :binding-disposed)]
-                                (binding-disposed)))}
-            invalidate
-            (fn on-value-ref-invalidated []
-               (remove-watch* ref key)
-               (queue-animation
-                (fn [_]
-                  (when-not (.-disposed attr-state)
-                    (add-watch* ref key on-value-ref-invalidated)
-                    (set-fn (raw-deref* ref))))))]
-        (register-with-parent-state node-state state-key attr-state)
-        (add-watch* ref key invalidate)))
-    (set-fn (raw-deref* ref))))
-
-(defn- bind-style-prop-key [attr-key] (str "-style:" attr-key))
-
-(defn- bind-style-prop! [element attr-key attr-value node-state]
-  (let [attr-name (name attr-key)
-        setter (fn [v]
-                 (set-style-prop! element attr-name v))]
-    (if (satisfies? cljs.core/IDeref attr-value)
-      (bind-attr* setter element (bind-style-prop-key attr-key)
-                  attr-value node-state)
-      (setter attr-value))))
 
 (defn ^:dynamic ^:pluggable listen!
   "Adds an event handler. Can be replaced by a plugin such as goog.events."
@@ -235,17 +185,43 @@ or dates; or can be used to define containers for DOM elements themselves."
   [element evt-name handler]
   (.removeEventListener  element evt-name handler))
 
+(deftype EventBinding [node event-name ^:mutable handler]
+  IFn
+  (-invoke [this new-handler]
+    (.unlisten this)
+    (set! handler new-handler)
+    (when handler
+      (listen! node event-name handler))
+    this)
+  Object
+  (unlisten [this]
+    (when handler
+      (unlisten! node event-name handler)))
+  (dispose [this]
+    (.unlisten this)
+    (set! (.-disposed this) true)))
+
+(defn- bind-event! [node event-name handler]
+  ((EventBinding. node (name event-name) nil) handler))
+
+(defn- do-bind-attr [setter val]
+  (r/bind-attr* val setter queue-animation))
+
+(defn- bind-style! [node style-kw style-val]
+  (let [style-name (name style-kw)]
+    (do-bind-attr (fn [val] (set-style! node style-name val)) style-val)))
+
 (defn- do-set-data-state! [element state]
   (set-attr! element "data-state" state))
 
-(defn get-data-state [element]
+(defn- get-data-state [element]
   (.getAttribute element "data-state"))
 
 (defn- get-state-attr [state attr-str]
   (when-let [attrs (when state (.-attrs state))]
     (aget attrs attr-str)))
 
-(defn set-data-state!
+(defn- set-data-state!
   ([element state]
     (let [cur-state (get-data-state element)
           node-state (get-element-state element)
@@ -255,24 +231,6 @@ or dates; or can be used to define containers for DOM elements themselves."
         (when-let [enter-transition (get-state-attr node-state (str ":state/on-" state))]
           (enter-transition element cur-state state))))))
 
-(defn- bind-attr-key [attr-key] (str "-attr:" attr-key))
-
-(defn- bind-prop-attr! [set-fn element attr-key attr-value node-state]
-  (if (satisfies? cljs.core/IDeref attr-value)
-    (bind-attr* set-fn element (bind-attr-key attr-key) attr-value node-state)
-    (set-fn attr-value)))
-
-(defn- bind-event-listener! [element event-name handler node-state]
-  (let [attr-state #js {:disposed false :handler handler
-                        :disposed_callback
-                        (let [unlisten!* unlisten!]
-                          (fn []
-                            (unlisten!* element event-name handler)))}]
-    (register-with-parent-state node-state (bind-attr-key (str ":on-" event-name))
-                                attr-state)
-    (listen! element event-name handler))
-  handler)
-
 (def ^:private attr-setters
   #js
   {:data-state (fn [element state]
@@ -280,12 +238,7 @@ or dates; or can be used to define containers for DOM elements themselves."
                  state)
    :class (fn [element cls]
             (set! (.-className element) cls)
-            cls)
-   ;; :value (fn [element v]
-   ;;          (set! (.-value element) v)
-   ;;          v)
-   ;; :id (fn [element id] (set! (.-id element) id))
-   })
+            cls)})
 
 ;; attributes to set directly
 (doseq [a #js ["id" "value"]]
@@ -297,6 +250,7 @@ or dates; or can be used to define containers for DOM elements themselves."
     (fn [attr-value]
       (set-attr! element attr-name attr-value))))
 
+;; TODO
 (defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
   (when (identical? cb-name "on-disposed")
     (set! (.-disposed-callback node-state) cb-value)
@@ -304,16 +258,7 @@ or dates; or can be used to define containers for DOM elements themselves."
     )
   cb-value)
 
-(def ^:private attr-ns-lookup
-  #js
-  {:node bind-lifecycle-callback!
-   :state (fn [_ _ _ v] v) ;; automatically handled in attr map
-   })
-
-(defn register-attr-prefix! [prefix xml-ns-or-handler]
-  (aset attr-ns-lookup prefix xml-ns-or-handler))
-
-(defn- ns-attr-setter [element attr-ns attr-name]
+(defn- get-ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
       ;(println "setting attr" element attr-name attr-value)
       (if attr-value
@@ -329,444 +274,199 @@ or dates; or can be used to define containers for DOM elements themselves."
       (str attr-ns "/" (name kw-or-str))
       (name kw-or-str))))
 
-(defn- bind-event-listeners! [element listener-map node-state]
-  (doseq [[k v] listener-map]
-    (bind-event-listener!
-     element
-     (->str k)
-     v node-state)))
+(defn- dispose-states [states]
+  (goog.object/forEach
+   states
+   (fn [state k _]
+     (when state
+       (r/dispose state)))))
 
-(defn- bind-attr! [element attr-key attr-value node-state]
+(defn- attr-diff* [node oas attr-map bind-attr]
+  (let [nas #js {}]
+    (doseq [[k v] attr-map]
+      (let [kstr (->str k)]
+        (if-let [existing (when oas (aget oas kstr))]
+          (do
+            (js-delete oas kstr)
+            (when-let [new-state (existing v)]
+              (aset nas kstr new-state)))
+          (aset nas kstr (bind-attr node k v)))))
+    (dispose-states oas)
+    nas))
+
+(defn- bind-styles! [node old-state style-map]
+  (attr-diff* node old-state style-map bind-style!))
+
+(defn- bind-events! [node old-state evt-map]
+  (attr-diff* node old-state evt-map bind-event!))
+
+(defn- bind-attr! [element attr-key attr-value]
   (let [attr-ns (namespace attr-key)
         attr-name (name attr-key)]
     (if attr-ns
       (if-let [attr-handler (aget attr-ns-lookup attr-ns)]
         (cond
           (string? attr-handler)
-          (bind-prop-attr! (ns-attr-setter element attr-ns attr-name) element
-                           (bind-attr-key attr-key) attr-value node-state)
+          (do-bind-attr (get-ns-attr-setter element attr-ns attr-name) attr-value)
 
           (fn? attr-handler)
-          (attr-handler element node-state attr-name attr-value)
+          (attr-handler element attr-name attr-value)
 
           :default
           (.warn js/console "Invalid ns attr handler" attr-handler))
         (.warn js/console "Undefined ns attr prefix" attr-ns))
       (cond
         (identical? 0 (.indexOf attr-name "on-"))
-        (bind-event-listener! element (.substring attr-name 3) attr-value node-state)
-
-        (identical? attr-name "events")
-        (bind-event-listeners! element attr-value node-state)
+        (bind-event! element (.substring attr-name 3) attr-value)
 
         :default
-        (bind-prop-attr! (get-attr-setter element attr-name) element
-                         (bind-attr-key attr-key) attr-value node-state)))))
+        (do-bind-attr (get-attr-setter element attr-name) attr-value)))))
 
-(defn- bind-attrs!* [node attrs node-state binder]
-  (let [js-attrs #js {}]
-    (doseq [[k v] attrs]
-      (binder node k v node-state)
-      (aset js-attrs (str k) v))
-    js-attrs))
 
-(defn- bind-attrs! [node attrs node-state]
-  (let [style (:style attrs)
-        js-attrs (bind-attrs!* node (dissoc attrs :style) node-state bind-attr!)
-        js-style (bind-attrs!* node style node-state bind-style-prop!)]
-    (set! (.-attrs node-state) js-attrs)
-    (set! (.-style node-state) js-style)))
+(deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
+                     ^:mutable attr-states ^:mutable events ^:mutable styles]
+  Object
+  (dispose [this]
+    (dispose-states attr-states)
+    (dispose-states events)
+    (dispose-states styles)
+    (doseq [i (range (.-length children))]
+      (r/dispose (aget children i))))
+  (ensureNode [this]
+    (when-not node
+      (set! node
+            (if ns-uri
+              (.createElementNS js/document ns-uri tag)
+              (.createElement js/document tag)))
+      (set! (.-freactive-state node) this)
+      (.updateAttrs this attrs)
+      (doseq [child children]
+        (ui/velem-insert child node nil))))
+  (onAttached [this]
+    (when-let [on-attached (get attrs :node/on-attached)]
+      (on-attached node)))
+  (updateAttrs [this new-attrs]
+    (let [{new-events :events new-style :style :as new-attrs} new-attrs]
+      (set! events (bind-events! node events new-events))
+      (set! styles (bind-styles! node styles new-style))
+      (set! attr-states (attr-diff* node attr-states (dissoc new-attrs :events :style) bind-attr!))
+      (set! attrs new-attrs)))
 
-(defn- dispose-child-state [child-states child-key]
-  (when child-states
-    (when-let [state (aget child-states child-key)]
-      (dispose-state state)
-      (js-delete child-states child-key))))
-
-(defn- set-attrs!* [node attrs node-state binder js-attrs binder-state-key-fn]
-  (let [child-states (.-child-states node-state)]
-    (doseq [[k v] attrs]
-      (dispose-child-state child-states (binder-state-key-fn k))
-      (binder node k v node-state)
-      (aset js-attrs (str k) v))))
-
-(defn set-attrs! [node attrs]
-  (let [node-state (get-element-state node)
-        style (:style attrs)
-        js-attrs (.-attrs node-state)
-        js-style (.-style node-state)]
-    (set-attrs!* node (dissoc attrs :style) node-state bind-attr! js-attrs bind-attr-key)
-    (set-attrs!* node style node-state bind-style-prop! js-style bind-style-prop-key)))
-
-(defn- replace-attrs!* [node node-state old-attrs new-attrs rebinder]
-  (let [new-attrs-js #js {}]
-    (doseq [[k new-val] new-attrs]
-      (js-delete old-attrs (str k))
-      (rebinder node k new-val node-state)
-      (aset new-attrs-js (str k) new-val))
-    (goog.object/forEach old-attrs
-      (fn [_ attr-str _]
-        (rebinder node (keyword (.substring attr-str 1)) nil node-state)))
-    new-attrs-js))
-
-(defn- dispose-attrs [state]
-  (let [child-states (.-child-states state)]
-    (goog.object/forEach
-     child-states
-     (fn [child-state child-key _]
-       (when (identical? (aget child-key 0) "-")
-         (dispose-state child-state)
-         (js-delete child-states child-key))))))
-
-(defn- replace-attrs! [node node-state new-attrs]
-  (let [old-attrs (.-attrs node-state)
-        old-style (.-style node-state)
-        new-style (:style new-attrs)]
-    (dispose-attrs node-state)
-    (set! (.-attrs node-state)
-          (replace-attrs!* node node-state
-                           old-attrs
-                           (dissoc new-attrs :style)
-                           bind-attr!))
-    (set! (.-style node-state)
-          (replace-attrs!* node node-state
-                           old-style
-                           new-style
-                           bind-style-prop!))))
-
-(declare build)
+  ui/IVirtualElement
+  (-velem-parent [this] (.-parentNode node))
+  (-velem-head [this] this)
+  (-velem-tail [this] this)
+  (-velem-next-sibling [this]
+    (when node
+      (.-nextSibling node)))
+  (-velem-native-element [this] node)
+  (-velem-simple-element [this] this)
+  (-velem-insert [this dom-parent dom-before]
+    (.ensureNode this)
+    (dom-insert dom-parent node dom-before)
+    (.onAttached this)
+    this)
+  (-velem-remove [this]
+    (.dispose this)
+    (dom-remove node))
+  (-velem-replace [this old-velem]
+    (.ensureNode this)
+    (if-let [old-node (ui/velem-native-element old-velem)]
+      (do
+        (dom-simple-replace node old-node)
+        (r/dispose old-velem))
+      (dom-remove-replace node old-velem))
+    (.onAttached this)
+    this)
+  (-velem-lifecycle-callback [this cb-name]
+    (get attrs cb-name)))
 
 (defn- text-node? [dom-node]
   (identical? (.-nodeType dom-node) 3))
 
-(def enable-diffing false)
-
-(defn- register-element-with-parent [parent new-elem]
-  (when-not (text-node? new-elem)
-    (let [parent-state (get-element-state parent)
-          parent-state (or parent-state
-                           (init-element-state! parent nil))]
-      (let [state (get-element-state new-elem)]
-        (set! (.-parent-state state) parent-state)
-        (register-with-parent-state parent-state (.-id state) state)
-        state))))
-
-(defn- on-attached [state node]
-  (when-let [node-attached (get-state-attr state ":node/on-attached")]
-    (node-attached node)))
-
-(defn- on-moving [state node cb]
-  (if-let [node-moving (get-state-attr state ":node/on-moving")]
-    (node-moving node cb)
-    (cb)))
-
-(defn- on-moved [state node]
-  (when-let [node-moved (get-state-attr state ":node/on-moved")]
-    (node-moved node)))
-
-(defn- insert-node* [parent new-elem insert-fn]
-  (let [state (register-element-with-parent parent new-elem)]
-    (insert-fn)
-    (on-attached state new-elem)))
-
-(defn- move-node* [node move-fn]
-  (on-moving (get-element-state node) node move-fn))
-
-(defn- do-replace-node [parent new-elem cur-dom-node]
-  (insert-node* parent new-elem 
-                  (fn [] (.replaceChild parent new-elem cur-dom-node))))
-
-(defn- replace-node-completely [parent new-elem-spec cur-dom-node top-level]
-  (let [new-elem
-        (if top-level
+(deftype DOMTextNode [^:mutable text ^:mutable node]
+  Object
+  (ensureNode [this]
+    (when-not node
+      (set! node (.createTextNode js/document text))))
+  ui/IVirtualElement
+  (-velem-parent [this] (.-parentNode node))
+  (-velem-head [this] this)
+  (-velem-tail [this] this)
+  (-velem-next-sibling [this]
+    (when node
+      (.-nextSibling node)))
+  (-velem-native-element [this]
+    (.ensureNode this)
+    node)
+  (-velem-simple-element [this] this)
+  (-velem-insert [this dom-parent dom-before]
+    (.ensureNode this)
+    (dom-insert dom-parent node dom-before)
+    this)
+  (-velem-remove [this]
+    (dom-remove node))
+  (-velem-replace [this old-velem]
+    (if-let [old-node (ui/velem-native-element old-velem)]
+      (do
+        (r/dispose old-node)
+        (if (text-node? old-node)
           (do
-            ;(println "build")
-            (build new-elem-spec))
-          (build new-elem-spec))]
-    (dispose-node cur-dom-node)
-    (do-replace-node parent new-elem cur-dom-node)
-    new-elem))
+            (set! node old-node)
+            (set! (.-textContent node) text))
+          (do
+            (.ensureNode this)
+            (dom-simple-replace node (ui/velem-native-element old-velem)))))
+      (do
+        (.ensureNode this)
+        (dom-remove-replace node old-velem)))
+    this)
+  (-velem-lifecycle-callback [this cb-name]))
 
-(declare replace-child)
-(declare append-child!)
-(declare append-children!)
+;; Conversion of Clojure(script) DOM images to virtual DOM
 
-(defn- try-diff-subseq [parent cur-child new-children]
-  (loop [cur-child cur-child
-         [new-child & more :as new-children] new-children]
-    (if new-child
-      (if cur-child
-        (if (and (sequential? new-child) (not (keyword? (first new-child))))
-          (let [cur-child (try-diff-subseq parent cur-child new-child)]
-            (recur cur-child more))
-          (let [next-sib (.-nextSibling cur-child)]
-            (replace-child parent new-child cur-child false)
-            (recur next-sib more)))
-        (do
-          (append-children! parent new-children)
-          nil))
-      cur-child)))
+(defprotocol IDOMImage
+  "A protocol for things that can be represented as virtual DOM or contain DOM nodes.
+
+Can be used to define custom conversions to DOM nodes or text for things such as numbers
+or dates; or can be used to define containers for DOM elements themselves."
+  (-get-dom-image [x]
+    "Should return either virtual DOM (a vector or string) or an actual DOM node."))
+
+(extend-protocol IDOMImage
+  nil
+  (-get-dom-image [x] "")
+
+  boolean
+  (-get-dom-image [x] (str x))
+
+  number
+  (-get-dom-image [x] (str x)))
 
 ;; From hiccup.compiler:
 (def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
        :private true}
      re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
 
-(def ^:private node-ns-lookup
-  #js
-  {:svg "http://www.w3.org/2000/svg"})
-
-;; (defn- build* [virtual-dom build-dom-element*]
-;;   (let [tag (first virtual-dom)
-;;         tag-ns (namespace tag)
-;;         tag-name (name tag)
-;;         tail (rest virtual-dom)]
-;;     (if tag-ns
-;;       (if-let [tag-handler (aget node-ns-lookup tag-ns)]
-;;         (cond
-;;           (string? tag-handler)
-;;           (build-dom-element tag elem-spec tag-handler tag-name tail)
-
-;;           (fn? tag-handler)
-;;           (tag-handler tag-name tail)
-
-;;           :default
-;;           (.warn js/console "Invalid ns node handler" tag-handler))
-;;         (.warn js/console "Undefined ns node prefix" tag-ns))
-;;       (build-dom-element tag elem-spec nil tag-name tail))))
-
-(defn- try-diff [parent spec vdom cur-dom-node top-level]
-  (let [cur-state (get-element-state cur-dom-node)
-        cur-tag (.-tag cur-state)
-        ;; [_ tag-name id class] (re-matches re-tag (first vdom))
-        new-tag (first vdom)
-        ]
-    (if (keyword-identical? new-tag cur-tag)
-      (do
-        ;; (println "diff hit" (first vdom) (.-id cur-state))
-        (let [                                            ;;old-attrs (.-attrs cur-state)
-              new-attrs? (second vdom)
-              new-attrs (when (map? new-attrs?) new-attrs?)]
-          (reset-element-state! cur-state)
-          (replace-attrs! cur-dom-node
-                          cur-state
-                          new-attrs)
-          (let [new-children (if new-attrs (nnext vdom) (next vdom))
-                dangling-child (try-diff-subseq cur-dom-node (.-firstChild cur-dom-node) new-children)]
-            (loop [cur-child dangling-child]
-              (when cur-child
-                (let [next-sib (.-nextSibling cur-child)]
-                  (remove-dom-node cur-child)
-                  (recur next-sib)))))
-          (on-attached cur-state cur-dom-node)
-          cur-dom-node))
-      (do
-        ;; (println "build hit" (first vdom) (first cur-vdom))
-        (replace-node-completely parent vdom cur-dom-node top-level)))))
-
-(declare bind-child)
-
-(defn- replace-child [parent new-elem-spec cur-dom-node top-level]
-  (let [new-virtual-dom (get-dom-image new-elem-spec)]
-    (cond
-      (and (string? new-virtual-dom)
-           (text-node? cur-dom-node))
-      (do
-        (set! (.-textContent cur-dom-node) new-virtual-dom)
-        cur-dom-node)
-
-      (satisfies? IDeref new-virtual-dom)
-      (do
-        (bind-child parent new-virtual-dom nil cur-dom-node))
-
-      (dom-node? new-virtual-dom)
-      (do-replace-node parent new-virtual-dom cur-dom-node)
-
-      :default
-      (if (and enable-diffing (not (text-node? cur-dom-node)))
-        (if top-level
-          (do
-            ;; (println "starting diff replace")
-            (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
-          (try-diff parent new-elem-spec new-virtual-dom cur-dom-node top-level))
-
-        (replace-node-completely
-          parent new-elem-spec cur-dom-node top-level)))))
-
-(defn- do-append-or-insert-child [parent node before]
-  (if before
-    (.insertBefore parent node before)
-    (.appendChild parent node)))
-
-(defn- append-or-insert-child [parent vdom before]
-  (cond
-    (and  (dom-node? vdom) (.-parentNode vdom))
-    (move-node* vdom
-       (fn [] (do-append-or-insert-child parent vdom before)))
-
-    (satisfies? IDeref vdom)
-    (bind-child parent vdom before nil)
-
-    :default
-    (let [new-elem (build vdom)]
-      (insert-node*
-       parent new-elem
-       (fn [] (do-append-or-insert-child parent new-elem before))) 
-      new-elem)))
-
-;; Reactive Element Handling
-
-(deftype ReactiveElement [id parent ref cur-element dirty updating disposed
-                          animate invalidate]
-  IDOMImage
-  (-get-dom-image [_] (get-dom-image cur-element)))
-
-(defn- bind-child* [parent child-ref before cur insert-child* replace-child* remove*]
-  (let [binding-fns (r/get-binding-fns child-ref)
-        add-watch* (.-add-watch binding-fns)
-        remove-watch* (.-remove-watch binding-fns)
-        raw-deref* (.-raw-deref binding-fns)
-        clean* (.-clean binding-fns)]
-    (if (and add-watch* remove-watch*)
-      (let [id (r/new-reactive-id)
-
-            state (ReactiveElement. id parent child-ref nil false false false nil nil)
-
-            ref-meta (meta child-ref)
-
-            get-new-elem (fn get-new-elem-fn []
-                           (set! (.-dirty state) false)
-                           (add-watch* child-ref id (.-invalidate state))
-                           (or (raw-deref* child-ref) ""))
-
-            show-new-elem (fn show-new-elem-fn [new-elem cur]
-                            (let [cur
-                                  (loop [cur cur]
-                                    (if (instance? ReactiveElement cur)
-                                      (let [cur-elem (.-cur-element cur)]
-                                        (set! (.-disposed cur) true)
-                                        (set! (.-cur-element cur) nil)
-                                        (recur cur-elem))
-                                      cur))]
-                              (if-let [parent (if cur (.-parentNode cur) parent)]
-                                (let [new-node (if cur
-                                                 (replace-child* parent new-elem cur true)
-                                                 (insert-child* parent new-elem before))]
-                                  (set! (.-cur-element state) new-node)
-                                  (set! (.-updating state) false)
-                                  (when (.-dirty state)
-                                    (queue-animation (.-animate state))))
-                                (do
-                                  (set! (.-disposed state) true)))))
-
-            animate
-            (fn animate [x]
-              (when-not (.-disposed state)
-                (let [new-elem (get-new-elem)
-                      cur (.-cur-element state)
-                      node-state (get-element-state cur)]
-                  (when-not (= (get-dom-image cur) (get-dom-image new-elem))
-                    (if-let [hide (get-state-attr node-state ":node/on-detaching")]
-                      (hide cur
-                            (fn []
-                              (if (.-disposed state)
-                                (do
-                                  ;;(remove* cur)
-                                  (set! (.-updating cur) false))
-                                (let [new-elem (if (.-dirty state)
-                                                 (get-new-elem)
-                                                 new-elem)]
-                                  (show-new-elem new-elem cur)))))
-                      (show-new-elem new-elem cur))))))
-
-            invalidate
-            (fn on-child-ref-invalidated []
-              (remove-watch* child-ref id)
-              ;; (when clean* (clean* child-ref))
-              (when-not (.-disposed state)
-                (set! (.-dirty state) true)
-                (when-not (.-updating state)
-                  (set! (.-updating state) true)
-                  (queue-animation animate))))
-
-            binding-invalidated (:binding-invalidated ref-meta)
-
-            invalidate (if binding-invalidated
-                         (fn []
-                           (when-not (keyword-identical? :cancel (binding-invalidated (.-cur-element state) child-ref))
-                             (invalidate)))
-                         invalidate)]
-        (set! (.-animate state) animate)
-        (set! (.-invalidate state) invalidate)
-        (set! (.-disposed-callback state)
-              (fn []
-                ;; (println "cleaning node binding")
-                (remove-watch* child-ref id)
-                (when clean* (clean* child-ref))
-                (when-let [binding-disposed (get ref-meta :binding-disposed)]
-                  (binding-disposed))))
-        (when-let [parent-state (get-element-state parent)]
-          (register-with-parent-state parent-state id state))
-        (when-let [binding-initialized (get ref-meta :binding-initialized)]
-          (binding-initialized))
-        (set! (.-updating state) false)
-        (show-new-elem (get-new-elem) cur)
-        (.-cur-element state))
-      (do
-        (insert-child* (raw-deref* child-ref) before)))))
-
-(defn- bind-child [parent child before cur]
-  (bind-child* parent child before cur append-or-insert-child replace-child remove-dom-node))
-
-;; Building Elements
-
-(defn insert-before! [parent child before]
-  (append-or-insert-child parent child before))
-
-(defn append-child! [parent child]
-  (append-or-insert-child parent child nil))
-
-(defn- append-children! [elem children]
-  (doseq [ch children]
-    (if (sequential? ch)
-      (if (keyword? (first ch))
-        (append-child! elem ch)
-        (append-children! elem ch))
-      (append-child! elem ch))))
-
-(defn update-attrs
-  "Convenience function to update the attrs in a virtual dom vector.
-Works like Clojure's update function but f (and its args) only modify the attrs
-map in vdom."
-  ([vdom f & args]
-   (let [tag (first vdom)
-         attrs? (second vdom)
-         attrs (when (map? attrs?) attrs?)]
-     (concat [tag (apply f attrs args)] (if attrs (nnext vdom) (next vdom))))))
-
-;; (defn- create-dom-node [xmlns tag-name]
-;;   (let [
-;;         node ]
-;;     (when id (set! (.-id node) id))
-;;     (when class (set! (.-className node) (.replace class re-dot " ")))
-;;     node))
-
-(defn register-node-prefix! [prefix xml-ns-or-handler]
-  (aset node-ns-lookup prefix xml-ns-or-handler))
-
-;; (def ^:dynamic *xml-namespaces* nil)
-
-;; (defn- get-xml-namespace [kw-ns]
-;;   (let [xmlns (get *xml-namespaces* kw-ns)]
-;;     (assert xmlns (str "Don't know how to handle namespace " kw-ns))))
-
 (def ^:private re-dot (js/RegExp. "\\." "g"))
 
-(defn- build-dom-element [tag elem-spec xmlns tag-name tail]
-  (let [[_ tag-name id class] (re-matches re-tag tag-name)
-        node (if xmlns
-               (.createElementNS js/document xmlns tag-name)
-               (.createElement js/document tag-name))
+(declare as-velem)
+
+(defn- append-children* [ch* children]
+  (doseq [ch children]
+    (if (sequential? ch)
+      (let [head (first ch)]
+        (cond
+          (or (keyword? head) (fn? head))
+          (.push ch* (as-velem ch))
+
+          :default
+          (append-children* ch* ch)))
+      (.push ch* (as-velem ch))))
+  ch*)
+
+(defn- dom-element [ns-uri tag tail]
+  (let [[_ tag-name id class] (re-matches re-tag tag)
         attrs? (first tail)
         have-attrs (map? attrs?)
         attrs (if have-attrs attrs? {})
@@ -781,42 +481,134 @@ map in vdom."
                           (let [class (.replace class re-dot " ")]
                             (if cls (str class " " cls) class)))))
 
-        state (init-element-state! node tag-name)
-        children (if have-attrs (rest tail) tail)]
-    (bind-attrs! node attrs state)
-    (when children
-      (append-children! node children))
-    node))
+        children (if have-attrs (rest tail) tail)
+        children* (append-children* #js [] children)]
+    (DOMElement. ns-uri tag attrs children* nil nil nil nil)))
 
-(defn build [elem-spec]
-  (let [virtual-dom (get-dom-image elem-spec)]
-    (cond
-      (string? virtual-dom)
-      (.createTextNode js/document virtual-dom)
+(defn- dom-node? [x]
+  (and x (> (.-nodeType x) 0)))
 
-      (dom-node? virtual-dom)
-      virtual-dom
+(defn- as-velem [elem-spec]
+  (cond
+    (string? elem-spec)
+    (DOMTextNode. elem-spec nil)
 
-      :default
-      (let [tag (first virtual-dom)
-            tag-ns (namespace tag)
-            tag-name (name tag)
-            tail (rest virtual-dom)]
-        (if tag-ns
-          (if-let [tag-handler (aget node-ns-lookup tag-ns)]
-            (cond
-             (string? tag-handler)
-             (build-dom-element tag elem-spec tag-handler tag-name tail)
+    (dom-node? elem-spec)
+    (UnmanagedDOMNode. elem-spec)
 
-             (fn? tag-handler)
-             (tag-handler tag-name tail)
+    (vector? elem-spec)
+    (let [tag (first elem-spec)]
+      (cond
+        (keyword? tag)
+        (let [tag-ns (namespace tag)
+              tag-name (name tag)
+              tail (rest elem-spec)]
+          (if tag-ns
+            (if-let [tag-handler (aget node-ns-lookup tag-ns)]
+              (cond
+                (string? tag-handler)
+                (dom-element tag-handler tag-name tail)
 
-             :default
-             (.warn js/console "Invalid ns node handler" tag-handler))
-            (.warn js/console "Undefined ns node prefix" tag-ns))
-          (build-dom-element tag elem-spec nil tag-name tail))))))
+                (fn? tag-handler)
+                (as-velem (tag-handler tag-name tail))
 
-(defn mount! [element child]
-  (when-let [last-child (.-lastChild element)]
-    (remove! last-child))
-  (append-child! element child))
+                :default
+                (.warn js/console "Invalid ns node handler" tag-handler))
+              (.warn js/console "Undefined ns node prefix" tag-ns))
+            (dom-element nil tag-name tail)))
+
+        :default
+        (assert false "Only know how to handle keyword tags")))
+
+    (satisfies? IDeref elem-spec)
+    (ui/reactive-element elem-spec as-velem queue-animation)
+
+    (satisfies? ui/IVirtualElement elem-spec)
+    elem-spec
+
+    (satisfies? r/IReactiveProjection elem-spec)
+    (ui/reactive-element-collection elem-spec as-velem queue-animation)
+
+    :default (as-velem (-get-dom-image elem-spec))))
+
+;; Helper functions for injecting managed DOM elements into unmanaged DOM and
+;; doing DOM manipulation of top-level managed nodes
+
+(defn- get-velem-state [elem]
+  (or (get-element-state elem) elem))
+
+(defn- get-managed-dom-element [elem]
+  (let [velem (velem-simple-element (get-velem-state elem))]
+    (assert (instance? DOMElement velem) "Not a managed DOM element.")
+    velem))
+
+(defn- ensure-unmanaged [elem]
+  (assert (dom-node? dom-element))
+  (when (get-element-state elem)
+    (throw
+     (ex-info
+      "Can't safely do manual DOM manipulation within the managed element tree. Please do manual DOM manipulation only on top-level managed elements."
+      {:managed-element elem}))))
+
+(defn- get-top-level-element [elem]
+  (assert elem)
+  (let [velem (as-velem (get-velem-state elem))]
+    (ensure-unmanaged (velem-parent velem))
+    velem))
+
+(defn- append-or-insert! [dom-element elem-image before]
+  (ensure-unmanaged dom-element)
+  (when before (assert (dom-node? before)))
+  (ui/velem-insert (as-velem velem) dom-element before))
+
+;; Public API
+
+(defn set-attrs!
+  "Sets the attributes on a managed element to the new-attrs map
+(unsetting previous values if not present in the new map)."
+  [elem new-attrs]
+  (let [velem (get-managed-dom-element elem)]
+    (.updateAttrs velem new-attrs)))
+
+(defn merge-attrs! [elem attrs]
+  "Merges the attrs map with a managed element's existing attribute map. A nil
+value will unset any attribute."
+  (let [velem (get-managed-dom-element elem)]
+    (.updateAttrs velem (merge (.-attrs velem) attrs))))
+
+(defn update-attrs! [elem f & args]
+  "Updates a managed element's attributes by applying f and optionally args to
+the existing attribute map."
+  (let [velem (get-managed-dom-element elem)]
+    (.updateAttrs velem (apply f (.-attrs velem) args))))
+
+(defn replace!
+  "Manually replace the existing unmanaged DOM node or top-level managed elment
+with the new element image initializing a new managed element root."
+  [elem elem-image]
+  (ui/velem-replace (as-velem elem-image) (get-top-level-element elem)))
+
+(defn append-child! [dom-element velem]
+  "Appends the new element image to an un-managed DOM node initializing a new
+managed element root."
+  (append-or-insert! dom-element velem nil))
+
+(defn insert-before! [dom-element velem before]
+  "Inserts the new element image as a child of an un-managed DOM node before
+specified sibling, initializing a new managed element root."
+  (append-or-insert! dom-element velem before))
+
+(defn mount! [dom-element child]
+  "Inserts the new element image as the last child of an un-managed DOM node,
+replacing the existing last child (if one exists), initializing a new managed
+element root."
+  (assert (dom-node? dom-element))
+  (if-let [last-child (.-lastChild dom-element)]
+    (replace! last-child child)
+    (append! dom-element child)))
+
+(defn remove! [elem]
+  "Removes the specified top-level managed element or un-managed DOM node from
+the DOM, disposing of the managed element root if one existed."
+  (ui/velem-remove (get-top-level-element elem)))
+
