@@ -3,7 +3,8 @@
   :url "https://github.com/aaronc/freactive"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[garden "1.2.5"]]
+  :dependencies [[org.clojure/data.avl "0.0.12"]
+                 [garden "1.2.5"]]
   :profiles
   {:dev
    {:plugins [[lein-cljsbuild "1.0.5"] 

@@ -538,12 +538,12 @@ or dates; or can be used to define containers for DOM elements themselves."
   (or (get-element-state elem) elem))
 
 (defn- get-managed-dom-element [elem]
-  (let [velem (velem-simple-element (get-velem-state elem))]
+  (let [velem (ui/velem-simple-element (get-velem-state elem))]
     (assert (instance? DOMElement velem) "Not a managed DOM element.")
     velem))
 
 (defn- ensure-unmanaged [elem]
-  (assert (dom-node? dom-element))
+  (assert (dom-node? elem))
   (when (get-element-state elem)
     (throw
      (ex-info
@@ -553,13 +553,13 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn- get-top-level-element [elem]
   (assert elem)
   (let [velem (as-velem (get-velem-state elem))]
-    (ensure-unmanaged (velem-parent velem))
+    (ensure-unmanaged (ui/velem-parent velem))
     velem))
 
 (defn- append-or-insert! [dom-element elem-image before]
   (ensure-unmanaged dom-element)
   (when before (assert (dom-node? before)))
-  (ui/velem-insert (as-velem velem) dom-element before))
+  (ui/velem-insert (as-velem elem-image) dom-element before))
 
 ;; Public API
 
@@ -605,7 +605,7 @@ element root."
   (assert (dom-node? dom-element))
   (if-let [last-child (.-lastChild dom-element)]
     (replace! last-child child)
-    (append! dom-element child)))
+    (append-child! dom-element child)))
 
 (defn remove! [elem]
   "Removes the specified top-level managed element or un-managed DOM node from
