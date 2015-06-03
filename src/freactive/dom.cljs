@@ -123,8 +123,8 @@ map in velem."
     (.replaceChild parent new-node old-node)))
 
 (defn- dom-remove-replace [new-node old-velem]
-  (let [next-sib (ui/velem-next-sibling old-velem)
-        parent (ui/velem-parent old-velem)]
+  (let [parent (ui/velem-parent old-velem)
+        next-sib (ui/velem-next-sibling-of parent old-velem)]
     (ui/velem-remove old-velem)
     (dom-insert (ui/native-parent parent) new-node next-sib)))
 
@@ -341,10 +341,6 @@ map in velem."
               (.createElement js/document tag)))
       (set! (.-freactive-state node) this)
       (.updateAttrs this attrs)
-      ;; (loop [i (dec (.-length children))]
-      ;;   (when (>= i 0)
-      ;;     (ui/velem-insert (aget children i) node (.-lastChild node))
-      ;;     (recur (dec i))))
       (doseq [child children]
         (ui/velem-insert child this nil))))
   (onAttached [this]
@@ -554,17 +550,17 @@ or dates; or can be used to define containers for DOM elements themselves."
       "Can't safely do manual DOM manipulation within the managed element tree. Please do manual DOM manipulation only on top-level managed elements."
       {:managed-element elem}))))
 
-;; (defn- get-top-level-element [elem]
-;;   (assert elem)
-;;   (let [velem (as-velem (get-velem-state elem))]
-;;     (assert (ui/velem-simple-element velem))
-;;     (ensure-unmanaged (ui/native-parent (ui/velem-parent velem)))
-;;     velem))
+(deftype RootElement [^:mutable root])
 
-;; (defn- append-or-insert! [dom-element elem-image before]
-;;   (ensure-unmanaged dom-element)
-;;   (when before (assert (dom-node? before)))
-;;   (ui/velem-insert (as-velem elem-image) dom-element before))
+(defn- create-or-find-root-node [id]
+  (if-let [root-node (.getElementById js/document id)]
+    root-node
+    (let [root-node (.createElement js/document "div")]
+      (set! (.-id root-node) id)
+      (.appendChild (.-body js/document) root-node))))
+
+(defn- configure-root! [vroot root-node vdom]
+  (set! (.-root vroot) (ui/velem-insert (as-velem vdom) (as-velem root-node) nil)))
 
 ;; Public API
 
@@ -587,54 +583,36 @@ the existing attribute map."
   (let [velem (get-managed-dom-element elem)]
     (.updateAttrs velem (apply f (.-attrs velem) args))))
 
-;; (defn- replace!
-;;   "Manually replace the existing unmanaged DOM node or top-level managed elment
-;; with the new element image initializing a new managed element root."
-;;   [elem elem-image]
-;;   (ui/velem-replace (as-velem elem-image) (get-top-level-element elem)))
-
-;; (defn- append-child! [dom-element velem]
-;;   "Appends the new element image to an un-managed DOM node initializing a new
-;; managed element root."
-;;   (append-or-insert! dom-element velem nil))
-
-;; (defn- insert-before! [dom-element velem before]
-;;   "Inserts the new element image as a child of an un-managed DOM node before
-;; specified sibling, initializing a new managed element root."
-;;   (append-or-insert! dom-element velem before))
-
 (defn remove! [elem]
   "Removes the specified top-level managed element or un-managed DOM node from
 the DOM, disposing of the managed element root if one existed."
-  (ui/velem-remove elem))
+  (ui/velem-remove (as-velem (get-velem-state elem))))
 
-(defn- initialize-root [id]
-  (if-let [root (.getElementById js/document "root")]
-    root
-    (let [root (.createElement js/document "div")]
-      (set! (.-id root) id)
-      (.appendChild (.-body js/document) root))))
-
-(defn mount! [root vdom]
-  "Makes the specified root element the root of a managed element tree, replacing
+(defn mount! [mount-point vdom]
+  "Makes the specified mount-point the root of a managed element tree, replacing
 all of its content with the managed content specified by vdom.
-root may also be a string specifying the ID of the DOM element to mount at.
-In the case that an element with ID root does not already exist,
-a div with the specified ID will be appended to the document body."
-  (let [root (cond
-               (dom-node? root)
-               root
+mount-point may be an unmanaged DOM element or a string specifying the id of one.
+If a string id is passed and no matching node is found, one will be appended to the
+document body."
+  (let [root-node
+        (cond
+          (dom-node? mount-point)
+          mount-point
 
-               (string? root)
-               (initialize-root id))]
-    (ensure-unmanaged root)
-    (loop []
-      (let [last-child (.-lastChild root)]
-        (when last-child
-          (remove! last-child)
-          (recur))))
-    (ui/velem-insert (as-velem vdom) (as-velem root) nil)))
-      
-      
-
-
+          (string? mount-point)
+          (create-or-find-root-node mount-point))]
+    (if-let [vroot (.-freactive-root root-node)]
+      (do
+        (remove! (.-root vroot))
+        (configure-root! vroot root-node vdom))
+      (do
+        (ensure-unmanaged root-node)
+        (loop []
+          (let [last-child (.-lastChild root-node)]
+            (when last-child
+              (remove! last-child)
+              (recur))))
+        (let [vroot (RootElement. nil)]
+          (set! (.-freactive-root root-node) vroot)
+          (configure-root! vroot root-node vdom))))
+    root)) 

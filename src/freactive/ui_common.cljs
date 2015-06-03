@@ -216,12 +216,6 @@ elements.")
       (velem-insert elem parent before-elem)))
   (-proj-clear [this] (.clear this))
 
-  ;; IVirtualElementContainer
-  ;; (-velem-container-next-sibiling [this child]
-  ;;   (let [idx (.indexOf elements child)]
-  ;;     (when (and (>= idx 0) (< (dec (.-length elements))))
-  ;;       (aget elements (inc idx)))))
-
   IVirtualElement
   (-velem-parent [this] parent)
   (-velem-native-element [this])
