@@ -732,7 +732,6 @@
             (inc idx)
             idx)))))
   (onUpdates [this updates]
-    (println "updates" updates)
     (doseq [[k v :as update] updates]
       (if-let [cur-idx (.rankOf this k)]
         (if (or (= (count update) 1) (not (filter update)))

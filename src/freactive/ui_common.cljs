@@ -6,9 +6,9 @@
   "Warning: this is currently an internal API subject to change or sudden removal.
 
 A simple element is any element which directly wraps exactly one native element."
-  (-velem-insert [this native-parent native-before]
-    "Inserts this virtual element into a native element tree. When native-before
-is nil, the element is appended.")
+  (-velem-insert [this vparent vnext-sibling]
+    "Inserts this virtual element into a native element tree. vnext-sibling
+is the next sibling virtual element if any.")
   (-velem-replace [this cur-velem]
     "Replaces cur-velem (making sure to dispose it) with this virtual element.")
   (-velem-remove [this]
@@ -21,8 +21,11 @@ element sequence. Same as -velem-simple-element for simple elements.")
   (-velem-tail [this]
     "Returns a simple virtual element (or nil) representing the tail of an
 element sequence. Same as -velem-simple-element for simple elements.")
-  (-velem-next-sibling [this]
-    "Returns the native next sibling element to this element or nil when this
+  ;; (-velem-index-of [this vchild])
+  ;; (-velem-vchild-at [this idx])
+  ;; (-velem-next-sibling [this] [this child])
+  (-velem-next-sibling-of [this child]
+    "Returns the next virtual sibling element to this element or nil when this
 is the last child.")
   (-velem-native-element [this]
     "Returns the native element wrapped by this simple element or nil for
@@ -49,14 +52,36 @@ elements.")
 (defn velem-tail [this]
   (-velem-tail this))
 
-(defn velem-next-sibling [this]
-  (-velem-next-sibling this))
+(defn velem-next-sibling-of [this child]
+  (-velem-next-sibling-of this child))
+
+(defn next-native-sibling [vnext]
+  (when vnext
+    (if-let [head (velem-head vnext)]
+      (velem-native-element head)
+      (let [parent (velem-parent vnext)]
+        (loop [vnext vnext]
+          (let [vnnext (velem-next-sibling-of parent vnext)]
+            (if vnnext
+              (if-let [head (velem-head vnnext)]
+                (velem-native-element head)
+                (recur (velem-next-sibling-of parent vnnext)))
+              (when-not (velem-simple-element parent)
+                (let [pparent (velem-parent parent)]
+                  (next-native-sibling (velem-next-sibling-of pparent parent)))))))))))
+
+(defn native-parent [vparent]
+  (loop [parent vparent]
+    (when parent
+      (if-let [native-parent (velem-native-element parent)]
+        native-parent
+        (recur (velem-parent parent))))))
 
 (defn velem-remove [this]
   (-velem-remove this))
 
-(defn velem-insert [this native-parent native-before]
-  (-velem-insert this native-parent native-before))
+(defn velem-insert [this vparent vnext-sibling]
+  (-velem-insert this vparent vnext-sibling))
 
 (defn velem-replace [this cur-velem]
   (-velem-replace this cur-velem))
@@ -65,7 +90,7 @@ elements.")
   (-velem-lifecycle-callback this cb-name))
 
 (deftype ReactiveElement [id the-ref binding-info velem-fn enqueue-fn 
-                          ^:mutable parent 
+                          ^:mutable parent ^:mutable vnext
                           ^:mutable cur-velem ^:mutable dirty
                           ^:mutable updating ^:mutable disposed]
   Object
@@ -87,11 +112,11 @@ elements.")
     (set! updating false)
     (when dirty 
       (enqueue-fn #(.animate this))))
-  (show-new-elem [this new-velem native-before]
+  (show-new-elem [this new-velem]
     (set! cur-velem
           (if cur-velem
             (velem-replace new-velem cur-velem)
-            (velem-insert new-velem parent native-before)))
+            (velem-insert new-velem parent vnext)))
     (.done-updating this))
   (animate [this]
     (when-not disposed
@@ -105,8 +130,8 @@ elements.")
                  (set! updating false)
                  (.show-new-elem this (if dirty
                                         (.get-new-elem this)
-                                        new-velem) nil))))
-            (.show-new-elem this new-velem nil))))))
+                                        new-velem)))))
+            (.show-new-elem this new-velem))))))
   (invalidate [this]
     ((.-remove-watch binding-info) the-ref id)
     (when-not disposed
@@ -125,14 +150,15 @@ elements.")
   (-velem-parent [this] parent)
   (-velem-head [this] (velem-head cur-velem))
   (-velem-tail [this] (velem-tail cur-velem))
-  (-velem-next-sibling [this]
-    (velem-next-sibling cur-velem))
+  (-velem-next-sibling-of [this child]
+    (velem-next-sibling-of cur-velem child))
   (-velem-native-element [this] (velem-native-element cur-velem))
   (-velem-simple-element [this] (velem-simple-element cur-velem))
-  (-velem-insert [this native-parent native-before]
-    (set! (.-parent this) native-parent)
+  (-velem-insert [this vparent vnext-sibling]
+    (set! (.-parent this) vparent)
+    (set! (.-vnext this) vnext-sibling)
     (.onInitialized this)
-    (.show-new-elem this (.get-new-elem this) native-before)
+    (.show-new-elem this (.get-new-elem this))
     this)
   (-velem-remove [this]
     (.dispose this)
@@ -152,9 +178,18 @@ elements.")
    (r/get-binding-fns the-ref)
    velem-fn
    enqueue-fn
-   nil nil false false false))
+   nil nil nil false false false))
 
-(deftype ReactiveElementCollection [projection elements velem-fn enqueue-fn ^:mutable parent ^:mutable before]
+;; (defprotocol IVirtualElementContainer
+;;   (-velem-container-insert [this child before])
+;;   (-velem-container-remove [this child]))
+
+(defn array-next-sibling-of [elements child]
+  (let [idx (.indexOf elements child)]
+    (when (and (>= idx 0) (< (dec (.-length elements))))
+      (aget elements (inc idx)))))
+
+(deftype ReactiveElementCollection [projection elements velem-fn enqueue-fn ^:mutable parent]
   Object
   (dispose [this]
     (set! (.-disposed this) true)
@@ -174,19 +209,18 @@ elements.")
     (let [elem (velem-fn elem)
           len (.-length elements)
           before-elem
-          (cond
-            (and before-idx (< before-idx len))
-            (when-let [head (velem-head (aget elements before-idx))]
-              (velem-native-element head))
-
-            (> len 0)
-            (velem-next-sibling this)
-
-            :default
-            before)]
+          (if (and before-idx (< before-idx len))
+            (aget elements before-idx)
+            (velem-next-sibling-of parent this))]
       (.splice elements (or before-idx (alength elements)) 0 elem)
       (velem-insert elem parent before-elem)))
   (-proj-clear [this] (.clear this))
+
+  ;; IVirtualElementContainer
+  ;; (-velem-container-next-sibiling [this child]
+  ;;   (let [idx (.indexOf elements child)]
+  ;;     (when (and (>= idx 0) (< (dec (.-length elements))))
+  ;;       (aget elements (inc idx)))))
 
   IVirtualElement
   (-velem-parent [this] parent)
@@ -198,12 +232,10 @@ elements.")
   (-velem-tail [this]
     (when (> (.-length elements) 0)
       (velem-tail (aget elements (dec (.-length elements))))))
-  (-velem-next-sibling [this]
-    (when-let [tail (velem-tail this)]
-      (velem-next-sibling tail)))
-  (-velem-insert [this native-parent native-before]
-    (set! parent native-parent)
-    (set! before native-before)
+  (-velem-next-sibling-of [this child]
+    (array-next-sibling-of elements child))
+  (-velem-insert [this vparent vnext-sibling]
+    (set! parent vparent)
     (r/project-elements projection this enqueue-fn)
     this)
   (-velem-remove [this]
@@ -212,12 +244,11 @@ elements.")
       (dispose projection))
     (.clear this))
   (-velem-replace [this cur-velem]
-    (let [native-parent (velem-parent cur-velem)
-          next-sib (velem-next-sibling cur-velem)]
+    (let [vparent (velem-parent cur-velem)
+          next-sib (velem-next-sibling-of vparent cur-velem)]
       (velem-remove cur-velem)
-      (velem-insert this native-parent next-sib)))
+      (velem-insert this vparent next-sib)))
   (-velem-lifecycle-callback [this cb-name]))
 
 (defn reactive-element-collection [projection velem-fn enqueue-fn]
-  (ReactiveElementCollection. projection #js [] velem-fn enqueue-fn nil nil))
-
+  (ReactiveElementCollection. projection #js [] velem-fn enqueue-fn nil))
