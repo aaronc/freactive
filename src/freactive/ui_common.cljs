@@ -3,16 +3,35 @@
    [freactive.core :as r]))
 
 (defprotocol IVirtualElement
-  (-velem-insert [this native-parent native-before])
-  (-velem-remove [this])
-  (-velem-parent [this])
-  (-velem-head [this])
-  (-velem-tail [this])
-  (-velem-next-sibling [this])
-  (-velem-replace [this cur-velem])
-  (-velem-native-element [this])
-  (-velem-simple-element [this])
-  (-velem-lifecycle-callback [this cb-name]))
+  "Warning: this is currently an internal API subject to change or sudden removal.
+
+A simple element is any element which directly wraps exactly one native element."
+  (-velem-insert [this native-parent native-before]
+    "Inserts this virtual element into a native element tree. When native-before
+is nil, the element is appended.")
+  (-velem-replace [this cur-velem]
+    "Replaces cur-velem (making sure to dispose it) with this virtual element.")
+  (-velem-remove [this]
+    "Removes and disposes this virtual element.")
+  (-velem-parent [this]
+    "Returns the native parent element")
+  (-velem-head [this]
+    "Returns a simple virtual element (or nil) representing the head of an
+element sequence. Same as -velem-simple-element for simple elements.")
+  (-velem-tail [this]
+    "Returns a simple virtual element (or nil) representing the tail of an
+element sequence. Same as -velem-simple-element for simple elements.")
+  (-velem-next-sibling [this]
+    "Returns the native next sibling element to this element or nil when this
+is the last child.")
+  (-velem-native-element [this]
+    "Returns the native element wrapped by this simple element or nil for
+sequence elements.")
+  (-velem-simple-element [this]
+    "Returns the simplest virtual element (one directly wrapping a native
+element) wrapped by this virtual element or nil for sequence elements.")
+  (-velem-lifecycle-callback [this cb-name]
+    "Gets a lifecycle callback fn (if any) for the keyword cb-name."))
 
 (defn velem-native-element [this]
   (-velem-native-element this))
