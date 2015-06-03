@@ -29,7 +29,8 @@ is the last child.")
 sequence elements.")
   (-velem-simple-element [this]
     "Returns the simplest virtual element (one directly wrapping a native
-element) wrapped by this virtual element or nil for sequence elements.")
+element) wrapped by this virtual element (or itself), or nil for sequence
+elements.")
   (-velem-lifecycle-callback [this cb-name]
     "Gets a lifecycle callback fn (if any) for the keyword cb-name."))
 
