@@ -531,20 +531,22 @@ or dates; or can be used to define containers for DOM elements themselves."
 
     :default (as-velem (-get-dom-image elem-spec))))
 
-;; Helper functions for injecting managed DOM elements into unmanaged DOM and
-;; doing DOM manipulation of top-level managed nodes
+;; Public API
 
 (defn- get-velem-state [elem]
   (or (get-element-state elem) elem))
 
 (defn- get-managed-dom-element [elem]
-  (let [velem (ui/velem-simple-element (get-velem-state elem))]
+  (let [velem (ui/velem-simple-element (get-element-state elem))]
     (assert (instance? DOMElement velem) "Not a managed DOM element.")
     velem))
 
+(defn managed? [elem]
+  (or (get-element-state elem) (.-freactive-root elem)))
+
 (defn- ensure-unmanaged [elem]
   (assert (dom-node? elem))
-  (when (get-element-state elem)
+  (when (managed? elem) 
     (throw
      (ex-info
       "Can't safely do manual DOM manipulation within the managed element tree. Please do manual DOM manipulation only on top-level managed elements."
@@ -561,8 +563,6 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (defn- configure-root! [vroot root-node vdom]
   (set! (.-root vroot) (ui/velem-insert (as-velem vdom) (as-velem root-node) nil)))
-
-;; Public API
 
 (defn set-attrs!
   "Sets the attributes on a managed element to the new-attrs map
