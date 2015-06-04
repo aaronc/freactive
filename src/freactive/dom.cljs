@@ -128,7 +128,12 @@ map in velem."
     (ui/velem-remove old-velem)
     (dom-insert (ui/native-parent parent) new-node next-sib)))
 
-(deftype UnmanagedDOMNode [node ^:mutable parent]
+(deftype UnmanagedDOMNode [node on-dispose ^:mutable parent]
+  Object
+  (dispose [this]
+    (when on-dispose
+      (on-dispose this)))
+
   ui/IVirtualElement
   (-velem-parent [this] parent)
   (-velem-head [this] this)
@@ -488,13 +493,29 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
 
+(defn managed? [elem]
+  (if (get-element-state elem) true false))
+
+(defn- ensure-unmanaged [elem]
+  (assert (dom-node? elem))
+  (assert (not (managed? elem)))
+  elem)
+
+(defn wrap-unmanaged-node [dom-node on-dispose]
+  (ensure-unmanaged dom-node)
+  (let [state (UnmanagedDOMNode. dom-node on-dispose nil)]
+    (set! (.-freactive-state dom-node) state)
+    state))
+
 (defn- as-velem [elem-spec]
   (cond
     (string? elem-spec)
     (DOMTextNode. elem-spec nil nil)
 
     (dom-node? elem-spec)
-    (UnmanagedDOMNode. elem-spec nil)
+    (if-let [state (get-element-state elem-spec)]
+      state
+      (UnmanagedDOMNode. elem-spec nil nil))
 
     (vector? elem-spec)
     (let [tag (first elem-spec)]
@@ -541,29 +562,6 @@ or dates; or can be used to define containers for DOM elements themselves."
     (assert (instance? DOMElement velem) "Not a managed DOM element.")
     velem))
 
-(defn managed? [elem]
-  (or (get-element-state elem) (.-freactive-root elem)))
-
-(defn- ensure-unmanaged [elem]
-  (assert (dom-node? elem))
-  (when (managed? elem) 
-    (throw
-     (ex-info
-      "Can't safely do manual DOM manipulation within the managed element tree. Please do manual DOM manipulation only on top-level managed elements."
-      {:managed-element elem}))))
-
-(deftype RootElement [^:mutable root])
-
-(defn- create-or-find-root-node [id]
-  (if-let [root-node (.getElementById js/document id)]
-    root-node
-    (let [root-node (.createElement js/document "div")]
-      (set! (.-id root-node) id)
-      (.appendChild (.-body js/document) root-node))))
-
-(defn- configure-root! [vroot root-node vdom]
-  (set! (.-root vroot) (ui/velem-insert (as-velem vdom) (as-velem root-node) nil)))
-
 (defn set-attrs!
   "Sets the attributes on a managed element to the new-attrs map
 (unsetting previous values if not present in the new map)."
@@ -583,10 +581,20 @@ the existing attribute map."
   (let [velem (get-managed-dom-element elem)]
     (.updateAttrs velem (apply f (.-attrs velem) args))))
 
-(defn remove! [elem]
-  "Removes the specified top-level managed element or un-managed DOM node from
-the DOM, disposing of the managed element root if one existed."
-  (ui/velem-remove (as-velem (get-velem-state elem))))
+(defn- find-by-id [id]
+  (.getElementById js/document id))
+
+(defn- create-or-find-root-node [id]
+  (if-let [root-node (find-by-id id)]
+    root-node
+    (let [root-node (.createElement js/document "div")]
+      (set! (.-id root-node) id)
+      (.appendChild (.-body js/document) root-node))))
+
+(defn- configure-root! [vroot vdom]
+  (let [root (ui/velem-insert (as-velem vdom) vroot nil)]
+    (set! (.-root vroot) root)
+    (set! (.-on-dispose vroot) (fn [] (r/dispose root)))))
 
 (defn mount! [mount-point vdom]
   "Makes the specified mount-point the root of a managed element tree, replacing
@@ -601,18 +609,30 @@ document body."
 
           (string? mount-point)
           (create-or-find-root-node mount-point))]
-    (if-let [vroot (.-freactive-root root-node)]
+    (if-let [vroot (get-element-state root-node)]
       (do
-        (remove! (.-root vroot))
-        (configure-root! vroot root-node vdom))
+        (assert (.-root vroot) "Can only remount at a previous mount point")
+        (r/dispose vroot)
+        (configure-root! vroot vdom))
       (do
-        (ensure-unmanaged root-node)
         (loop []
           (let [last-child (.-lastChild root-node)]
             (when last-child
-              (remove! last-child)
+              (ui/velem-remove (as-velem (get-velem-state last-child)))
               (recur))))
-        (let [vroot (RootElement. nil)]
-          (set! (.-freactive-root root-node) vroot)
-          (configure-root! vroot root-node vdom))))
-    root)) 
+        (let [vroot (wrap-unmanaged-node root-node nil)]
+          (configure-root! vroot vdom))))
+    root-node)) 
+
+(defn unmount! [mount-point]
+  (let [root-node
+        (cond
+          (dom-node? mount-point)
+          mount-point
+
+          (string? mount-point)
+          (find-by-id mount-point))
+        vroot (get-element-state root-node)]
+    (assert (and root-node vroot (.-root vroot)) "Can't find mount point")
+    (r/dispose vroot)
+    root-node))
