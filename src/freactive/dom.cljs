@@ -37,7 +37,7 @@
 
 (defonce frame-time (r/atom nil))
 
-(def ^:private *animating* nil)
+(def ^:private ^:dynamic *animating* nil)
 
 (defonce
   render-loop
@@ -208,10 +208,11 @@ map in velem."
 (deftype EventBinding [node event-name ^:mutable handler]
   IFn
   (-invoke [this new-handler]
-    (.unlisten this)
-    (set! handler new-handler)
-    (when handler
-      (listen! node event-name handler))
+    (when-not (identical? new-handler handler)
+      (.unlisten this)
+      (set! handler new-handler)
+      (when handler
+        (listen! node event-name handler)))
     this)
   Object
   (unlisten [this]
@@ -569,8 +570,8 @@ or dates; or can be used to define containers for DOM elements themselves."
     (satisfies? ui/IVirtualElement elem-spec)
     elem-spec
 
-    (satisfies? r/IReactiveProjection elem-spec)
-    (ui/reactive-element-collection elem-spec as-velem queue-animation)
+    (satisfies? r/IProjection elem-spec)
+    (ui/reactive-element-sequence elem-spec as-velem queue-animation)
 
     :default (as-velem (-get-dom-image elem-spec))))
 

@@ -196,7 +196,7 @@ elements.")
     (when (and (>= idx 0) (< (dec (.-length elements))))
       (aget elements (inc idx)))))
 
-(deftype ReactiveElementCollection [projection elements velem-fn enqueue-fn ^:mutable parent]
+(deftype ReactiveElementSequence [projection elements velem-fn enqueue-fn ^:mutable src ^:mutable parent]
   Object
   (dispose [this]
     (set! (.-disposed this) true)
@@ -207,30 +207,31 @@ elements.")
     (doseq [elem elements]
       (velem-remove elem)))
 
-  r/IReactiveProjectionTarget
-  (-proj-move-elem [this idx before-idx]
-    (enqueue-fn
-     (fn []
-       (r/-proj-insert-elem this (aget (.splice elements idx 1) 0) before-idx))))
-  (-proj-remove-elem [this idx]
-    (enqueue-fn
-     (fn []
-       (velem-remove (aget (.splice elements idx 1) 0)))))
-  (-proj-insert-elem [this elem before-idx]
-    (enqueue-fn
-     (fn []
-       (let [elem (velem-fn elem)
-             len (.-length elements)
-             before-elem
-             (if (and before-idx (< before-idx len))
-               (aget elements before-idx)
-               (velem-next-sibling-of parent this))]
-         (.splice elements (or before-idx (alength elements)) 0 elem)
-         (velem-insert elem parent before-elem)))))
-  (-proj-clear [this]
-    (enqueue-fn
-     (fn []
-       (.clear this))))
+  r/IProjectionTarget
+  (-target-init [this source]
+    (set! src source))
+  (-target-peek [this idx]
+    (aget elements idx))
+  (-target-take [this idx]
+    (let [elem (aget (.splice elements idx 1) 0)]
+      (velem-take elem)
+      elem))
+  (-target-count [this] (.-length elements))
+  (-target-move [this idx before-idx]
+    (r/-target-insert this (aget (.splice elements idx 1) 0) before-idx))
+  (-target-remove [this idx]
+    (velem-remove (aget (.splice elements idx 1) 0)))
+  (-target-insert [this elem before-idx]
+    (let [elem (velem-fn elem)
+          len (.-length elements)
+          before-elem
+          (if (and before-idx (< before-idx len))
+            (aget elements before-idx)
+            (velem-next-sibling-of parent this))]
+      (.splice elements (or before-idx (alength elements)) 0 elem)
+      (velem-insert elem parent before-elem)))
+  (-target-clear [this]
+    (.clear this))
 
   IVirtualElement
   (-velem-parent [this] parent)
@@ -246,7 +247,7 @@ elements.")
     (array-next-sibling-of elements child))
   (-velem-insert [this vparent vnext-sibling]
     (set! parent vparent)
-    (r/project-elements projection this enqueue-fn)
+    (r/project projection this enqueue-fn)
     this)
   (-velem-take [this]
     (doseq [elem elements]
@@ -263,5 +264,5 @@ elements.")
       (velem-insert this vparent next-sib)))
   (-velem-lifecycle-callback [this cb-name]))
 
-(defn reactive-element-collection [projection velem-fn enqueue-fn]
-  (ReactiveElementCollection. projection #js [] velem-fn enqueue-fn nil))
+(defn reactive-element-sequence [projection velem-fn enqueue-fn]
+  (ReactiveElementSequence. projection #js [] velem-fn enqueue-fn nil nil))
