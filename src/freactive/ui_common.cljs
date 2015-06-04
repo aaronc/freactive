@@ -11,6 +11,8 @@ A simple element is any element which directly wraps exactly one native element.
 is the next sibling virtual element if any.")
   (-velem-replace [this cur-velem]
     "Replaces cur-velem (making sure to dispose it) with this virtual element.")
+  (-velem-take [this]
+    "Removes the virtual element from the element tree without disposing it.")
   (-velem-remove [this]
     "Removes and disposes this virtual element.")
   (-velem-parent [this]
@@ -76,6 +78,9 @@ elements.")
       (if-let [native-parent (velem-native-element parent)]
         native-parent
         (recur (velem-parent parent))))))
+
+(defn velem-take [this]
+  (-velem-take this))
 
 (defn velem-remove [this]
   (-velem-remove this))

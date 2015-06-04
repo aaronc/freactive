@@ -138,7 +138,7 @@ map in velem."
   (-velem-parent [this] parent)
   (-velem-head [this] this)
   (-velem-tail [this] this)
-  (-velem-next-sibling-of [this])
+  (-velem-next-sibling-of [this child])
   (-velem-native-element [this] node)
   (-velem-simple-element [this] this)
   (-velem-insert [this vparent vnext-sibling]
@@ -596,6 +596,12 @@ the existing attribute map."
     (set! (.-root vroot) root)
     (set! (.-on-dispose vroot) (fn [] (r/dispose root)))))
 
+(defn- do-unmount! [vroot]
+  (let [root (.-root vroot)]
+    (when-not (= :unmounted root)
+      (ui/velem-remove root)
+      (set! (.-root vroot) :unmounted))))
+
 (defn mount! [mount-point vdom]
   "Makes the specified mount-point the root of a managed element tree, replacing
 all of its content with the managed content specified by vdom.
@@ -612,7 +618,7 @@ document body."
     (if-let [vroot (get-element-state root-node)]
       (do
         (assert (.-root vroot) "Can only remount at a previous mount point")
-        (r/dispose vroot)
+        (do-unmount! vroot)
         (configure-root! vroot vdom))
       (do
         (loop []
@@ -634,5 +640,5 @@ document body."
           (find-by-id mount-point))
         vroot (get-element-state root-node)]
     (assert (and root-node vroot (.-root vroot)) "Can't find mount point")
-    (r/dispose vroot)
+    (do-unmount! vroot)
     root-node))
