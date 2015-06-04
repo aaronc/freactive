@@ -37,31 +37,36 @@
 
 (defonce frame-time (r/atom nil))
 
+(def ^:private *animating* nil)
+
 (defonce
   render-loop
   (request-animation-frame
     (fn render[frame-ms]
-      (reset! frame-time frame-ms)
-      (when enable-fps-instrumentation
-        (if (identical? instrumentation-i 14)
-          (do
-            (reset! fps (* 1000 (/ 15 (- frame-ms last-instrumentation-time))))
-            (set! instrumentation-i 0))
-          (set! instrumentation-i (inc instrumentation-i)))
-        (when (identical? 0 instrumentation-i)
-          (set! last-instrumentation-time frame-ms)) )
-      (let [queue render-queue
-            n (alength queue)]
-        (when (> n 0)
-          (set! render-queue #js [])
-          (loop [i 0]
-            (when (< i n)
-              ((aget queue i))
-              (recur (inc i))))))
-      (request-animation-frame render)) ))
+      (binding [*animating* true]
+        (reset! frame-time frame-ms)
+        (when enable-fps-instrumentation
+          (if (identical? instrumentation-i 14)
+            (do
+              (reset! fps (* 1000 (/ 15 (- frame-ms last-instrumentation-time))))
+              (set! instrumentation-i 0))
+            (set! instrumentation-i (inc instrumentation-i)))
+          (when (identical? 0 instrumentation-i)
+            (set! last-instrumentation-time frame-ms)))
+        (let [queue render-queue
+              n (alength queue)]
+          (when (> n 0)
+            (set! render-queue #js [])
+            (loop [i 0]
+              (when (< i n)
+                ((aget queue i))
+                (recur (inc i)))))))
+      (request-animation-frame render))))
 
 (defn queue-animation [f]
-  (.push render-queue f))
+  (if *animating*
+    (f)
+    (.push render-queue f)))
 
 ;; ## Attributes, Styles & Events
 
@@ -110,9 +115,17 @@ map in velem."
 
 (defn- dom-insert [parent dom-node vnext-sibling]
   (let [dom-parent (ui/native-parent parent)]
+    ;; (when vnext-sibling (println "vnext" (type vnext-sibling)))
     (if-let [dom-before (ui/next-native-sibling vnext-sibling)] 
-      (.insertBefore dom-parent dom-node dom-before)
-      (.appendChild dom-parent dom-node))))
+      (do
+        ;; (println "insert" (goog/getUid dom-node)
+        ;;          "dom-parent" dom-parent (goog/getUid dom-parent)
+        ;;          "dom-before" dom-before (goog/getUid dom-before))
+        (.insertBefore dom-parent dom-node dom-before))
+      (do
+        ;; (println "append" (goog/getUid dom-node)
+        ;;          "dom-parent" dom-parent (goog/getUid dom-parent))
+        (.appendChild dom-parent dom-node)))))
 
 (defn- dom-remove [dom-node]
   (when-let [parent (.-parentNode dom-node)]
@@ -145,6 +158,8 @@ map in velem."
     (set! parent vparent)
     (dom-insert vparent node vnext-sibling)
     this)
+  (-velem-take [this]
+    (dom-remove node))
   (-velem-remove [this]
     (dom-remove node))
   (-velem-replace [this old-velem]
@@ -331,6 +346,9 @@ map in velem."
 (deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
                      ^:mutable parent ^:mutable attr-states ^:mutable events
                      ^:mutable styles]
+  IHash
+  (-hash [this] (goog/getUid this))
+
   Object
   (dispose [this]
     (dispose-states attr-states)
@@ -372,6 +390,8 @@ map in velem."
     (dom-insert parent node vnext-sibling)
     (.onAttached this)
     this)
+  (-velem-take [this]
+    (dom-remove node))
   (-velem-remove [this]
     (.dispose this)
     (dom-remove node))
@@ -409,6 +429,8 @@ map in velem."
     (set! parent vparent)
     (dom-insert parent node vnext-sibling)
     this)
+  (-velem-take [this]
+    (dom-remove node))
   (-velem-remove [this]
     (dom-remove node))
   (-velem-replace [this old-velem]
@@ -488,7 +510,7 @@ or dates; or can be used to define containers for DOM elements themselves."
 
         children (if have-attrs (rest tail) tail)
         children* (append-children* #js [] children)]
-    (DOMElement. ns-uri tag attrs children* nil nil nil nil nil)))
+    (DOMElement. ns-uri tag-name attrs children* nil nil nil nil nil)))
 
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))

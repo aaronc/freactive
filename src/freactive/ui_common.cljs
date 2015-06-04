@@ -72,18 +72,18 @@ elements.")
                 (let [pparent (velem-parent parent)]
                   (next-native-sibling (velem-next-sibling-of pparent parent)))))))))))
 
-(defn native-parent [vparent]
-  (loop [parent vparent]
-    (when parent
-      (if-let [native-parent (velem-native-element parent)]
-        native-parent
-        (recur (velem-parent parent))))))
+(defn native-parent [parent]
+  (when parent
+    (or (velem-native-element parent)
+        (native-parent (velem-parent parent)))))
 
 (defn velem-take [this]
   (-velem-take this))
 
 (defn velem-remove [this]
-  (-velem-remove this))
+  ;; (-velem-remove this)
+  (velem-take this)
+  (r/dispose this))
 
 (defn velem-insert [this vparent vnext-sibling]
   (-velem-insert this vparent vnext-sibling))
@@ -165,6 +165,8 @@ elements.")
     (.onInitialized this)
     (.show-new-elem this (.get-new-elem this))
     this)
+  (-velem-take [this]
+    (velem-take cur-velem))
   (-velem-remove [this]
     (.dispose this)
     (velem-remove cur-velem))
@@ -207,19 +209,28 @@ elements.")
 
   r/IReactiveProjectionTarget
   (-proj-move-elem [this idx before-idx]
-    (r/-proj-insert-elem this (aget (.splice elements idx 1) 0) before-idx))
+    (enqueue-fn
+     (fn []
+       (r/-proj-insert-elem this (aget (.splice elements idx 1) 0) before-idx))))
   (-proj-remove-elem [this idx]
-    (velem-remove (aget (.splice elements idx 1) 0)))
+    (enqueue-fn
+     (fn []
+       (velem-remove (aget (.splice elements idx 1) 0)))))
   (-proj-insert-elem [this elem before-idx]
-    (let [elem (velem-fn elem)
-          len (.-length elements)
-          before-elem
-          (if (and before-idx (< before-idx len))
-            (aget elements before-idx)
-            (velem-next-sibling-of parent this))]
-      (.splice elements (or before-idx (alength elements)) 0 elem)
-      (velem-insert elem parent before-elem)))
-  (-proj-clear [this] (.clear this))
+    (enqueue-fn
+     (fn []
+       (let [elem (velem-fn elem)
+             len (.-length elements)
+             before-elem
+             (if (and before-idx (< before-idx len))
+               (aget elements before-idx)
+               (velem-next-sibling-of parent this))]
+         (.splice elements (or before-idx (alength elements)) 0 elem)
+         (velem-insert elem parent before-elem)))))
+  (-proj-clear [this]
+    (enqueue-fn
+     (fn []
+       (.clear this))))
 
   IVirtualElement
   (-velem-parent [this] parent)
@@ -237,6 +248,9 @@ elements.")
     (set! parent vparent)
     (r/project-elements projection this enqueue-fn)
     this)
+  (-velem-take [this]
+    (doseq [elem elements]
+      (velem-take elem)))
   (-velem-remove [this]
     (set! (.-disposed this) true)
     (when-let [dispose (.-dispose projection)]
