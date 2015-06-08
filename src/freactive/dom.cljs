@@ -378,7 +378,6 @@ map in velem."
   ui/IVirtualElement
   (-velem-parent [this] parent)
   (-velem-head [this] this)
-  (-velem-tail [this] this)
   (-velem-next-sibling-of [this child]
     (ui/array-next-sibling-of children child))
   (-velem-native-element [this] node)
@@ -414,7 +413,6 @@ map in velem."
   ui/IVirtualElement
   (-velem-parent [this] parent)
   (-velem-head [this] this)
-  (-velem-tail [this] this)
   (-velem-next-sibling-of [this child])
   (-velem-native-element [this]
     (.ensureNode this)

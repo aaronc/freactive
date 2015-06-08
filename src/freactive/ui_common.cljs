@@ -18,15 +18,6 @@ is the next sibling virtual element if any.")
   (-velem-head [this]
     "Returns a simple virtual element (or nil) representing the head of an
 element sequence. Same as -velem-simple-element for simple elements.")
-  (-velem-tail [this]
-    "Returns a simple virtual element (or nil) representing the tail of an
-element sequence. Same as -velem-simple-element for simple elements.")
-  ;; (-velem-index-of [this vchild])
-  ;; (-velem-vchild-at [this idx])
-  ;; (-velem-next-sibling [this] [this child])
-  (-velem-next-sibling-of [this child]
-    "Returns the next virtual sibling element to this element or nil when this
-is the last child.")
   (-velem-native-element [this]
     "Returns the native element wrapped by this simple element or nil for
 sequence elements.")
@@ -48,9 +39,6 @@ elements.")
 
 (defn velem-head [this]
   (-velem-head this))
-
-(defn velem-tail [this]
-  (-velem-tail this))
 
 (defn velem-next-sibling-of [this child]
   (-velem-next-sibling-of this child))
@@ -151,7 +139,6 @@ elements.")
   IVirtualElement
   (-velem-parent [this] parent)
   (-velem-head [this] (velem-head cur-velem))
-  (-velem-tail [this] (velem-tail cur-velem))
   (-velem-next-sibling-of [this child]
     (velem-next-sibling-of cur-velem child))
   (-velem-native-element [this] (velem-native-element cur-velem))
@@ -230,10 +217,7 @@ elements.")
   (-velem-simple-element [this])
   (-velem-head [this]
     (when (> (.-length elements) 0)
-      (velem-head (aget elements 0))))
-  (-velem-tail [this]
-    (when (> (.-length elements) 0)
-      (velem-tail (aget elements (dec (.-length elements))))))
+      (velem-head (aget elements 0)))) 
   (-velem-next-sibling-of [this child]
     (array-next-sibling-of elements child))
   (-velem-insert [this vparent vnext-sibling]
