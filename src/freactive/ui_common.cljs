@@ -192,8 +192,6 @@ elements.")
       (velem-remove elem)))
 
   r/IProjectionTarget
-  (-target-init [this source]
-    (set! src source))
   (-target-peek [this idx]
     (aget elements idx))
   (-target-take [this idx]
@@ -225,7 +223,7 @@ elements.")
     (array-next-sibling-of elements child))
   (-velem-insert [this vparent vnext-sibling]
     (set! parent vparent)
-    (r/project projection this enqueue-fn)
+    (set! src (r/project projection this enqueue-fn))
     this)
   (-velem-take [this]
     (doseq [elem elements]
