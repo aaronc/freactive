@@ -18,6 +18,9 @@ is the next sibling virtual element if any.")
   (-velem-head [this]
     "Returns a simple virtual element (or nil) representing the head of an
 element sequence. Same as -velem-simple-element for simple elements.")
+  (-velem-next-sibling-of [this child]
+    "Returns the next virtual sibling element to this element or nil when this
+is the last child.")
   (-velem-native-element [this]
     "Returns the native element wrapped by this simple element or nil for
 sequence elements.")
@@ -217,7 +220,7 @@ elements.")
   (-velem-simple-element [this])
   (-velem-head [this]
     (when (> (.-length elements) 0)
-      (velem-head (aget elements 0)))) 
+      (velem-head (aget elements 0))))
   (-velem-next-sibling-of [this child]
     (array-next-sibling-of elements child))
   (-velem-insert [this vparent vnext-sibling]

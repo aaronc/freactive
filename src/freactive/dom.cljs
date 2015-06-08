@@ -150,7 +150,6 @@ map in velem."
   ui/IVirtualElement
   (-velem-parent [this] parent)
   (-velem-head [this] this)
-  (-velem-tail [this] this)
   (-velem-next-sibling-of [this child])
   (-velem-native-element [this] node)
   (-velem-simple-element [this] this)
@@ -531,12 +530,12 @@ or dates; or can be used to define containers for DOM elements themselves."
       state
       (UnmanagedDOMNode. elem-spec nil nil))
 
-    (vector? elem-spec)
-    (let [tag (first elem-spec)]
+    (sequential? elem-spec)
+    (let [head (first elem-spec)]
       (cond
-        (keyword? tag)
-        (let [tag-ns (namespace tag)
-              tag-name (name tag)
+        (keyword? head)
+        (let [tag-ns (namespace head)
+              tag-name (name head)
               tail (rest elem-spec)]
           (if tag-ns
             (if-let [tag-handler (aget node-ns-lookup tag-ns)]
@@ -552,8 +551,11 @@ or dates; or can be used to define containers for DOM elements themselves."
               (.warn js/console "Undefined ns node prefix" tag-ns))
             (dom-element nil tag-name tail)))
 
+        (fn? head)
+        (r/rx* (fn [] (apply head (rest elem-spec))))
+
         :default
-        (assert false "Only know how to handle keyword tags")))
+        (as-velem (r/seq-projection elem-spec))))
 
     (satisfies? IDeref elem-spec)
     (ui/reactive-element elem-spec as-velem queue-animation)
