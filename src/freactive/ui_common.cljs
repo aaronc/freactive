@@ -13,9 +13,7 @@ is the next sibling virtual element if any.")
     "Replaces cur-velem (making sure to dispose it) with this virtual element.")
   (-velem-take [this]
     "Removes the virtual element from the element tree without disposing it.")
-  (-velem-remove [this]
-    "Removes and disposes this virtual element.")
-  (-velem-parent [this]
+(-velem-parent [this]
     "Returns the native parent element")
   (-velem-head [this]
     "Returns a simple virtual element (or nil) representing the head of an
@@ -81,7 +79,6 @@ elements.")
   (-velem-take this))
 
 (defn velem-remove [this]
-  ;; (-velem-remove this)
   (velem-take this)
   (r/dispose this))
 
@@ -167,9 +164,6 @@ elements.")
     this)
   (-velem-take [this]
     (velem-take cur-velem))
-  (-velem-remove [this]
-    (.dispose this)
-    (velem-remove cur-velem))
   (-velem-replace [this elem-to-replace]
     (.onInitialized this)
     (set! cur-velem (velem-replace (.get-new-elem this) elem-to-replace))
@@ -219,8 +213,6 @@ elements.")
   (-target-count [this] (.-length elements))
   (-target-move [this idx before-idx]
     (r/-target-insert this (aget (.splice elements idx 1) 0) before-idx))
-  (-target-remove [this idx]
-    (velem-remove (aget (.splice elements idx 1) 0)))
   (-target-insert [this elem before-idx]
     (let [elem (velem-fn elem)
           len (.-length elements)
@@ -230,8 +222,7 @@ elements.")
             (velem-next-sibling-of parent this))]
       (.splice elements (or before-idx (alength elements)) 0 elem)
       (velem-insert elem parent before-elem)))
-  (-target-clear [this]
-    (.clear this))
+  
 
   IVirtualElement
   (-velem-parent [this] parent)
@@ -251,12 +242,7 @@ elements.")
     this)
   (-velem-take [this]
     (doseq [elem elements]
-      (velem-take elem)))
-  (-velem-remove [this]
-    (set! (.-disposed this) true)
-    (when-let [dispose (.-dispose projection)]
-      (dispose projection))
-    (.clear this))
+      (velem-take elem))) 
   (-velem-replace [this cur-velem]
     (let [vparent (velem-parent cur-velem)
           next-sib (velem-next-sibling-of vparent cur-velem)]

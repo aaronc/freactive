@@ -159,9 +159,7 @@ map in velem."
     (dom-insert vparent node vnext-sibling)
     this)
   (-velem-take [this]
-    (dom-remove node))
-  (-velem-remove [this]
-    (dom-remove node))
+    (dom-remove node)) 
   (-velem-replace [this old-velem]
     (if-let [old-node (ui/velem-native-element old-velem)]
       (dom-simple-replace node old-node)
@@ -392,10 +390,7 @@ map in velem."
     (.onAttached this)
     this)
   (-velem-take [this]
-    (dom-remove node))
-  (-velem-remove [this]
-    (.dispose this)
-    (dom-remove node))
+    (dom-remove node)) 
   (-velem-replace [this old-velem]
     (.ensureNode this)
     (if-let [old-node (ui/velem-native-element old-velem)]
@@ -431,9 +426,7 @@ map in velem."
     (dom-insert parent node vnext-sibling)
     this)
   (-velem-take [this]
-    (dom-remove node))
-  (-velem-remove [this]
-    (dom-remove node))
+    (dom-remove node)) 
   (-velem-replace [this old-velem]
     (if-let [old-node (ui/velem-native-element old-velem)]
       (do
