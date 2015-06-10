@@ -255,7 +255,7 @@ map in velem."
                  (set-data-state! element state)
                  state)
    :class (fn [element cls]
-            (set! (.-className element) cls)
+            (set! (.-className element) (if (nil? cls) "" cls))
             cls)})
 
 ;; attributes to set directly
