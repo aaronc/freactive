@@ -552,7 +552,7 @@ or dates; or can be used to define containers for DOM elements themselves."
             (dom-element nil tag-name tail)))
 
         (fn? head)
-        (r/rx* (fn [] (apply head (rest elem-spec))))
+        (as-velem (r/rx* (fn [] (apply head (rest elem-spec)))))
 
         :default
         (as-velem (r/seq-projection elem-spec))))
