@@ -255,7 +255,7 @@ map in velem."
                  (set-data-state! element state)
                  state)
    :class (fn [element cls]
-            (set! (.-className element) cls)
+            (set! (.-className element) (if (nil? cls) "" cls))
             cls)})
 
 ;; attributes to set directly
@@ -552,7 +552,7 @@ or dates; or can be used to define containers for DOM elements themselves."
             (dom-element nil tag-name tail)))
 
         (fn? head)
-        (r/rx* (fn [] (apply head (rest elem-spec))))
+        (as-velem (r/rx* (fn [] (apply head (rest elem-spec)))))
 
         :default
         (as-velem (r/seq-projection elem-spec))))
@@ -576,6 +576,9 @@ or dates; or can be used to define containers for DOM elements themselves."
 (defn- get-velem-state [elem]
   (or (get-element-state elem) elem))
 
+(defn- find-by-id [id]
+  (.getElementById js/document id))
+
 (defn- get-managed-dom-element [elem]
   (let [velem (ui/velem-simple-element (get-element-state elem))]
     (assert (instance? DOMElement velem) "Not a managed DOM element.")
@@ -592,16 +595,13 @@ or dates; or can be used to define containers for DOM elements themselves."
   "Merges the attrs map with a managed element's existing attribute map. A nil
 value will unset any attribute."
   (let [velem (get-managed-dom-element elem)]
-    (.updateAttrs velem (merge (.-attrs velem) attrs))))
+    (.updateAttrs velem (merge-with merge (.-attrs velem) attrs))))
 
 (defn update-attrs! [elem f & args]
   "Updates a managed element's attributes by applying f and optionally args to
 the existing attribute map."
   (let [velem (get-managed-dom-element elem)]
     (.updateAttrs velem (apply f (.-attrs velem) args))))
-
-(defn- find-by-id [id]
-  (.getElementById js/document id))
 
 (defn- create-or-find-root-node [id]
   (if-let [root-node (find-by-id id)]
