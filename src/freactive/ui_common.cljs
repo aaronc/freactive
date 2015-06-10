@@ -180,6 +180,27 @@ elements.")
     (when (and (>= idx 0) (< (dec (.-length elements))))
       (aget elements (inc idx)))))
 
+(deftype ElementSequence [elements velem-fn ^:mutable parent]
+  Object
+  (peek [this idx]
+    (aget elements idx))
+  (take [this idx]
+    (let [elem (aget (.splice elements idx 1) 0)]
+      (velem-take elem)
+      elem))
+  (count [this] (.-length elements))
+  (move [this idx before-idx]
+    (.insert this (aget (.splice elements idx 1) 0) before-idx))
+  (insert [this elem before-idx]
+    (let [elem (velem-fn elem)
+          len (.-length elements)
+          before-elem
+          (if (and before-idx (< before-idx len))
+            (aget elements before-idx)
+            (velem-next-sibling-of parent this))]
+      (.splice elements (or before-idx (alength elements)) 0 elem)
+      (velem-insert elem parent before-elem))))
+
 (deftype ReactiveElementSequence [projection elements velem-fn enqueue-fn ^:mutable src ^:mutable parent]
   Object
   (dispose [this]
@@ -223,7 +244,7 @@ elements.")
     (array-next-sibling-of elements child))
   (-velem-insert [this vparent vnext-sibling]
     (set! parent vparent)
-    (set! src (r/project projection this enqueue-fn))
+    (set! src (r/project projection this enqueue-fn velem-fn))
     this)
   (-velem-take [this]
     (doseq [elem elements]

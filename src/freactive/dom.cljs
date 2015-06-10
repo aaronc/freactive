@@ -566,6 +566,9 @@ or dates; or can be used to define containers for DOM elements themselves."
     (satisfies? r/IProjection elem-spec)
     (ui/reactive-element-sequence elem-spec as-velem queue-animation)
 
+    (satisfies? r/IAsVirtualElement elem-spec)
+    (as-velem (r/-as-velem elem-spec as-velem))
+
     :default (as-velem (-get-dom-image elem-spec))))
 
 ;; Public API
