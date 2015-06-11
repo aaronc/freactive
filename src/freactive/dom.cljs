@@ -95,18 +95,18 @@ map in velem."
 
 (def ^:private node-ns-lookup
   #js
-  {:svg "http://www.w3.org/2000/svg"})
+  {"svg" "http://www.w3.org/2000/svg"})
 
 (defn register-node-prefix! [prefix xml-ns-or-handler]
-  (aset node-ns-lookup prefix xml-ns-or-handler))
+  (aset node-ns-lookup (name prefix) xml-ns-or-handler))
 
 (def ^:private attr-ns-lookup
   #js
-  {:node (fn [_ _ v] v)
-   :state (fn [_ _ v] v)})
+  {"node" (fn [_ _ _])
+   "state" (fn [_ _ _])})
 
 (defn register-attr-prefix! [prefix xml-ns-or-handler]
-  (aset attr-ns-lookup prefix xml-ns-or-handler))
+  (aset attr-ns-lookup (name prefix) xml-ns-or-handler))
 
 ;; Core DOM stuff
 
@@ -617,7 +617,7 @@ the existing attribute map."
 
 (defn- do-unmount! [vroot]
   (let [root (.-root vroot)]
-    (when-not (= :unmounted root)
+    (when-not (keyword-identical? :unmounted root)
       (ui/velem-remove root)
       (set! (.-root vroot) :unmounted))))
 
