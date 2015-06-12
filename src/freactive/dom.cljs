@@ -322,14 +322,6 @@ map in velem."
     (fn [attr-value]
       (set-attr! element attr-name attr-value))))
 
-;; TODO
-;; (defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
-;;   (when (identical? cb-name "on-disposed")
-;;     (set! (.-disposed-callback node-state) cb-value)
-;;     ;; other callbacks automatically included in attr map
-;;     )
-;;   cb-value)
-
 (defn- get-ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
       ;(println "setting attr" element attr-name attr-value)
@@ -367,32 +359,7 @@ map in velem."
           :default
           (do-bind-attr (get-attr-setter element attr-name) attr-value))))))
 
-;; (defn- bind-styles! [node old-state style-map]
-;;   (attr-diff* node old-state style-map bind-style!))
-
-;; (defn- bind-events! [node old-state evt-map]
-;;   (attr-diff* node old-state evt-map bind-event!))
-
 (def ^:private bind-attrs! (wrap-attr-map-binder bind-attr!))
-
-(def ^:private enable-diffing false)
-
-(defn enable-diffing!
-  "Enables experimental diffing support."
-  ([] (enable-diffing! true))
-  ([enable] (set! enable-diffing enable)))
-
-(def ^:private ^:dynamic *diff-head* nil)
-
-(defn- get-diff-head* []
-  (when-let [head *diff-head*]
-    (set! *diff-head* (.-nextSibling head))
-    head))
-
-(defn- get-diff-head []
-  (when-let [head (get-diff-head*)]
-    (or (get-element-state head)
-        (UnmanagedDOMNode. head nil nil))))
 
 (deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
                      ^:mutable parent ^:mutable attr-binder]
@@ -401,8 +368,8 @@ map in velem."
 
   Object
   (dispose [this]
-    (when attr-binder (r/dispose attr-binder))
-    (dotimes [i (.-length children)]
+    (r/dispose attr-binder)
+    (doseq [i (range (.-length children))]
       (r/dispose (aget children i))))
   (ensureNode [this]
     (when-not node
@@ -420,30 +387,6 @@ map in velem."
   (updateAttrs [this new-attrs]
     (set! attr-binder (attr-binder node new-attrs))
     (set! attrs new-attrs))
-  (diffReplace [this old]
-    (when (and
-           enable-diffing
-           (not node)
-           (instance? DOMElement old)
-           (identical? (.-ns-uri old) ns-uri)
-           (identical? (.-tag old) tag))
-      (set! node (.-node old))
-      (if-let [binder (.-attr-binder old)]
-        (do
-          (set! attr-binder binder)
-          (set! (.-attr-binder old) nil)
-          (when (.-clean binder) (.clean binder))
-          (binder attrs))
-        (set! attr-binder (bind-attrs! node attrs)))
-      (binding [*diff-head* (.-firstChild node)]
-        (doseq [child children]
-          (ui/velem-insert child this nil))
-        (loop []
-          (when-let [head (get-diff-head*)]
-            (dom-remove head)
-            (recur))))
-      (r/dispose old)
-      true))
 
   ui/IVirtualElement
   (-velem-parent [this] parent)
@@ -454,24 +397,19 @@ map in velem."
   (-velem-simple-element [this] this)
   (-velem-insert [this vparent vnext-sibling]
     (set! parent vparent)
-    (if-let [diff-head (get-diff-head)]
-      (ui/velem-replace this diff-head)
-      (do
-        (.ensureNode this)
-        (dom-insert parent node vnext-sibling)
-        (.onAttached this)))
+    (.ensureNode this)
+    (dom-insert parent node vnext-sibling)
+    (.onAttached this)
     this)
   (-velem-take [this]
     (dom-remove node)) 
   (-velem-replace [this old-velem]
-    (if-let [old-simple (ui/velem-simple-element old-velem)]
-      (when-not (.diffReplace this old-simple)
-        (.ensureNode this)
-        (dom-simple-replace node (ui/velem-native-element old-simple))
-        (r/dispose old-velem))
+    (.ensureNode this)
+    (if-let [old-node (ui/velem-native-element old-velem)]
       (do
-        (.ensureNode this)
-        (dom-remove-replace node old-velem)))
+        (dom-simple-replace node old-node)
+        (r/dispose old-velem))
+      (dom-remove-replace node old-velem))
     (.onAttached this)
     this)
   (-velem-lifecycle-callback [this cb-name]
@@ -494,12 +432,9 @@ map in velem."
     node)
   (-velem-simple-element [this] this)
   (-velem-insert [this vparent vnext-sibling]
-    (if-let [diff-head (get-diff-head)]
-      (ui/velem-replace this diff-head)
-      (do
-        (.ensureNode this)
-        (set! parent vparent)
-        (dom-insert parent node vnext-sibling)))
+    (.ensureNode this)
+    (set! parent vparent)
+    (dom-insert parent node vnext-sibling)
     this)
   (-velem-take [this]
     (dom-remove node)) 
