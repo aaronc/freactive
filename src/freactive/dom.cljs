@@ -271,8 +271,7 @@ map in velem."
     (when handler
       (unlisten! node event-name handler)))
   (dispose [this]
-    (.unlisten this)
-    (set! (.-disposed this) true)))
+    (.unlisten this)))
 
 (defn- bind-event! [node event-name handler]
   ((EventBinding. node (name event-name) nil) handler))
@@ -376,6 +375,25 @@ map in velem."
 
 (def ^:private bind-attrs! (wrap-attr-map-binder bind-attr!))
 
+(def ^:private enable-diffing false)
+
+(defn enable-diffing!
+  "Enables experimental diffing support."
+  ([] (enable-diffing! true))
+  ([enable] (set! enable-diffing enable)))
+
+(def ^:private ^:dynamic *diff-head* nil)
+
+(defn- get-diff-head* []
+  (when-let [head *diff-head*]
+    (set! *diff-head* (.-nextSibling head))
+    head))
+
+(defn- get-diff-head []
+  (when-let [head (get-diff-head*)]
+    (or (get-element-state head)
+        (UnmanagedDOMNode. head nil nil))))
+
 (deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
                      ^:mutable parent ^:mutable attr-binder]
   IHash
@@ -383,11 +401,8 @@ map in velem."
 
   Object
   (dispose [this]
-    (r/dispose attr-binder)
-    ;; (dispose-states attr-states)
-    ;; (dispose-states events)
-    ;; (dispose-states styles)
-    (doseq [i (range (.-length children))]
+    (when attr-binder (r/dispose attr-binder))
+    (dotimes [i (.-length children)]
       (r/dispose (aget children i))))
   (ensureNode [this]
     (when-not node
@@ -403,14 +418,32 @@ map in velem."
     (when-let [on-attached (get attrs :node/on-attached)]
       (on-attached node)))
   (updateAttrs [this new-attrs]
-    ;; (let [{new-events :events new-style :style :as new-attrs} new-attrs]
-    ;;   (set! events (bind-events! node events new-events))
-    ;;   (set! styles (bind-styles! node styles new-style))
-    ;;   (set! attr-states (attr-diff* node attr-states (dissoc new-attrs :events :style) bind-attr!))
-    ;;   (set! attrs new-attrs))
-    ;; (set! attr-states (attr-diff* node attr-states new-addts bind-attr!))
     (set! attr-binder (attr-binder node new-attrs))
     (set! attrs new-attrs))
+  (diffReplace [this old]
+    (when (and
+           enable-diffing
+           (not node)
+           (instance? DOMElement old)
+           (identical? (.-ns-uri old) ns-uri)
+           (identical? (.-tag old) tag))
+      (set! node (.-node old))
+      (if-let [binder (.-attr-binder old)]
+        (do
+          (set! attr-binder binder)
+          (set! (.-attr-binder old) nil)
+          (when (.-clean binder) (.clean binder))
+          (binder attrs))
+        (set! attr-binder (bind-attrs! node attrs)))
+      (binding [*diff-head* (.-firstChild node)]
+        (doseq [child children]
+          (ui/velem-insert child this nil))
+        (loop []
+          (when-let [head (get-diff-head*)]
+            (dom-remove head)
+            (recur))))
+      (r/dispose old)
+      true))
 
   ui/IVirtualElement
   (-velem-parent [this] parent)
@@ -421,19 +454,24 @@ map in velem."
   (-velem-simple-element [this] this)
   (-velem-insert [this vparent vnext-sibling]
     (set! parent vparent)
-    (.ensureNode this)
-    (dom-insert parent node vnext-sibling)
-    (.onAttached this)
+    (if-let [diff-head (get-diff-head)]
+      (ui/velem-replace this diff-head)
+      (do
+        (.ensureNode this)
+        (dom-insert parent node vnext-sibling)
+        (.onAttached this)))
     this)
   (-velem-take [this]
     (dom-remove node)) 
   (-velem-replace [this old-velem]
-    (.ensureNode this)
-    (if-let [old-node (ui/velem-native-element old-velem)]
-      (do
-        (dom-simple-replace node old-node)
+    (if-let [old-simple (ui/velem-simple-element old-velem)]
+      (when-not (.diffReplace this old-simple)
+        (.ensureNode this)
+        (dom-simple-replace node (ui/velem-native-element old-simple))
         (r/dispose old-velem))
-      (dom-remove-replace node old-velem))
+      (do
+        (.ensureNode this)
+        (dom-remove-replace node old-velem)))
     (.onAttached this)
     this)
   (-velem-lifecycle-callback [this cb-name]
@@ -456,9 +494,12 @@ map in velem."
     node)
   (-velem-simple-element [this] this)
   (-velem-insert [this vparent vnext-sibling]
-    (.ensureNode this)
-    (set! parent vparent)
-    (dom-insert parent node vnext-sibling)
+    (if-let [diff-head (get-diff-head)]
+      (ui/velem-replace this diff-head)
+      (do
+        (.ensureNode this)
+        (set! parent vparent)
+        (dom-insert parent node vnext-sibling)))
     this)
   (-velem-take [this]
     (dom-remove node)) 
