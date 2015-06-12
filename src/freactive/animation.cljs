@@ -12,6 +12,21 @@
     (r/register-dep this id r/fwatch-binding-info)
     state)
   (clean [_])
+  (addFWatch [this key f]
+    (when-not (aget (.-fwatches this) key)
+      (set! (.-watchers this) (inc (.-watchers this)))
+      (aset (.-fwatches this) key f)))
+  (removeFWatch [this key]
+    (when (aget (.-fwatches this) key)
+      (set! (.-watchers this) (dec (.-watchers this)))
+      (js-delete (.-fwatches this) key)))
+  (notifyFWatches [this oldVal newVal]
+    (goog.object/forEach
+     (.-fwatches this)
+     (fn [f key _]
+       (f key this oldVal newVal)))
+    (doseq [[key f] (.-watches this)]
+      (f key this oldVal newVal)))
 
   r/IReactive
   (-get-binding-fns [this] r/fwatch-binding-info)
@@ -28,8 +43,6 @@
 
   IDeref
   (-deref [this] (.reactiveDeref this)))
-
-(r/apply-js-mixin AnimationEaser r/fwatch-mixin)
 
 (defn easer [init-state]
   (AnimationEaser. (r/new-reactive-id) init-state nil false nil nil #js {}))
