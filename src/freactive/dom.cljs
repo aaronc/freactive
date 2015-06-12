@@ -166,6 +166,61 @@ map in velem."
     this)
   (-velem-lifecycle-callback [this cb-name]))
 
+;; Attribute Map Stuff
+
+(defn- ->str [kw-or-str]
+  (if (string? kw-or-str)
+    kw-or-str
+    (if-let [attr-ns (namespace kw-or-str)]
+      (str attr-ns "/" (name kw-or-str))
+      (name kw-or-str))))
+
+(defn- dispose-states [states]
+  )
+
+(defn- attr-diff* [node oas attr-map bind-attr]
+  (let [nas #js {}]
+    (doseq [[k v] attr-map]
+      (let [kstr (->str k)]
+        (if-let [existing (when oas (aget oas kstr))]
+          (do
+            (js-delete oas kstr)
+            (when-let [new-state (existing v)]
+              (aset nas kstr new-state)))
+          (aset nas kstr (bind-attr node k v)))))
+    (dispose-states oas)
+    nas))
+
+(deftype AttrMapBinder [bind-fn clean-fn element ^:mutable states]
+  IFn
+  (-invoke [this new-value]
+    (set! states (attr-diff* element states new-value bind-fn))
+    this)
+  Object
+  (clean [this]
+    (when clean-fn (clean-fn))
+    (when states
+      (goog.object/forEach
+       states
+       (fn [state k _]
+         (when state
+           (when (.-clean state)
+             (.clean state)))))))
+  (dispose [this]
+    (when states
+      (goog.object/forEach
+       states
+       (fn [state k _]
+         (when state
+           (r/dispose state)))))))
+
+(defn- wrap-attr-map-binder
+  ([bind-fn]
+   (wrap-attr-map-binder bind-fn nil))
+  ([bind-fn clean-fn]
+   (fn [element value]
+     ((AttrMapBinder. bind-fn clean-fn element nil) value))))
+
 ;; Managed DOMElement stuff
 
 (defprotocol IDOMAttrValue
@@ -269,12 +324,12 @@ map in velem."
       (set-attr! element attr-name attr-value))))
 
 ;; TODO
-(defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
-  (when (identical? cb-name "on-disposed")
-    (set! (.-disposed-callback node-state) cb-value)
-    ;; other callbacks automatically included in attr map
-    )
-  cb-value)
+;; (defn- bind-lifecycle-callback! [node node-state cb-name cb-value]
+;;   (when (identical? cb-name "on-disposed")
+;;     (set! (.-disposed-callback node-state) cb-value)
+;;     ;; other callbacks automatically included in attr map
+;;     )
+;;   cb-value)
 
 (defn- get-ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
@@ -285,38 +340,9 @@ map in velem."
         (.removeAttributeNS element attr-ns attr-name))
       attr-value))
 
-(defn- ->str [kw-or-str]
-  (if (string? kw-or-str)
-    kw-or-str
-    (if-let [attr-ns (namespace kw-or-str)]
-      (str attr-ns "/" (name kw-or-str))
-      (name kw-or-str))))
-
-(defn- dispose-states [states]
-  (goog.object/forEach
-   states
-   (fn [state k _]
-     (when state
-       (r/dispose state)))))
-
-(defn- attr-diff* [node oas attr-map bind-attr]
-  (let [nas #js {}]
-    (doseq [[k v] attr-map]
-      (let [kstr (->str k)]
-        (if-let [existing (when oas (aget oas kstr))]
-          (do
-            (js-delete oas kstr)
-            (when-let [new-state (existing v)]
-              (aset nas kstr new-state)))
-          (aset nas kstr (bind-attr node k v)))))
-    (dispose-states oas)
-    nas))
-
-(defn- bind-styles! [node old-state style-map]
-  (attr-diff* node old-state style-map bind-style!))
-
-(defn- bind-events! [node old-state evt-map]
-  (attr-diff* node old-state evt-map bind-event!))
+(def ^:private special-attrs
+  #js {"events" (wrap-attr-map-binder bind-event!)
+       "style" (wrap-attr-map-binder bind-style!)})
 
 (defn- bind-attr! [element attr-key attr-value]
   (let [attr-ns (namespace attr-key)
@@ -333,25 +359,34 @@ map in velem."
           :default
           (.warn js/console "Invalid ns attr handler" attr-handler))
         (.warn js/console "Undefined ns attr prefix" attr-ns))
-      (cond
-        (identical? 0 (.indexOf attr-name "on-"))
-        (bind-event! element (.substring attr-name 3) attr-value)
+      (if-let [special (aget special-attrs attr-name)]
+        (special element attr-value)
+        (cond
+          (identical? 0 (.indexOf attr-name "on-"))
+          (bind-event! element (.substring attr-name 3) attr-value)
 
-        :default
-        (do-bind-attr (get-attr-setter element attr-name) attr-value)))))
+          :default
+          (do-bind-attr (get-attr-setter element attr-name) attr-value))))))
 
+;; (defn- bind-styles! [node old-state style-map]
+;;   (attr-diff* node old-state style-map bind-style!))
+
+;; (defn- bind-events! [node old-state evt-map]
+;;   (attr-diff* node old-state evt-map bind-event!))
+
+(def ^:private bind-attrs! (wrap-attr-map-binder bind-attr!))
 
 (deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
-                     ^:mutable parent ^:mutable attr-states ^:mutable events
-                     ^:mutable styles]
+                     ^:mutable parent ^:mutable attr-binder]
   IHash
   (-hash [this] (goog/getUid this))
 
   Object
   (dispose [this]
-    (dispose-states attr-states)
-    (dispose-states events)
-    (dispose-states styles)
+    (r/dispose attr-binder)
+    ;; (dispose-states attr-states)
+    ;; (dispose-states events)
+    ;; (dispose-states styles)
     (doseq [i (range (.-length children))]
       (r/dispose (aget children i))))
   (ensureNode [this]
@@ -361,18 +396,21 @@ map in velem."
               (.createElementNS js/document ns-uri tag)
               (.createElement js/document tag)))
       (set! (.-freactive-state node) this)
-      (.updateAttrs this attrs)
+      (set! attr-binder (bind-attrs! node attrs))
       (doseq [child children]
         (ui/velem-insert child this nil))))
   (onAttached [this]
     (when-let [on-attached (get attrs :node/on-attached)]
       (on-attached node)))
   (updateAttrs [this new-attrs]
-    (let [{new-events :events new-style :style :as new-attrs} new-attrs]
-      (set! events (bind-events! node events new-events))
-      (set! styles (bind-styles! node styles new-style))
-      (set! attr-states (attr-diff* node attr-states (dissoc new-attrs :events :style) bind-attr!))
-      (set! attrs new-attrs)))
+    ;; (let [{new-events :events new-style :style :as new-attrs} new-attrs]
+    ;;   (set! events (bind-events! node events new-events))
+    ;;   (set! styles (bind-styles! node styles new-style))
+    ;;   (set! attr-states (attr-diff* node attr-states (dissoc new-attrs :events :style) bind-attr!))
+    ;;   (set! attrs new-attrs))
+    ;; (set! attr-states (attr-diff* node attr-states new-addts bind-attr!))
+    (set! attr-binder (attr-binder node new-attrs))
+    (set! attrs new-attrs))
 
   ui/IVirtualElement
   (-velem-parent [this] parent)
@@ -501,7 +539,7 @@ or dates; or can be used to define containers for DOM elements themselves."
 
         children (if have-attrs (rest tail) tail)
         children* (append-children* #js [] children)]
-    (DOMElement. ns-uri tag-name attrs children* nil nil nil nil nil)))
+    (DOMElement. ns-uri tag-name attrs children* nil nil nil)))
 
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
