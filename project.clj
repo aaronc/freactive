@@ -1,4 +1,4 @@
-(defproject freactive "0.2.0-SNAPSHOT"
+(defproject freactive "0.3.0-SNAPSHOT"
   :description "High-performance, pure Clojurescript, declarative DOM library"
   :url "https://github.com/aaronc/freactive"
   :license {:name "Eclipse Public License"

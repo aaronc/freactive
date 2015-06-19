@@ -2,6 +2,10 @@
   (:require
    [freactive.core :as r]))
 
+(defprotocol ICreateElement
+  (createElement [this tag])
+  (createElementNS [this tag ns-uri]))
+
 (defprotocol IVirtualElement
   "Warning: this is currently an internal API subject to change or sudden removal.
 

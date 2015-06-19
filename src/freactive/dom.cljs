@@ -100,6 +100,23 @@ map in velem."
 (defn register-node-prefix! [prefix xml-ns-or-handler]
   (aset node-ns-lookup (name prefix) xml-ns-or-handler))
 
+(def ^:private create-element-lookup
+  #js {})
+
+(defn register-create-element! [tag-name create-api]
+  (aset create-element-lookup (name tag-name) create-api))
+
+(def ^:private default-create-element
+  (reify ui/ICreateElement
+    (createElement [this tag] (.createElement js/document tag))
+    (createElementNS [this tag ns-uri] (.createElementNS js/document tag ns-uri))))
+
+(defn dom-api
+  [node]
+  (if-let [api (.-freactive-dom-api node)]
+    (api node)
+    node))
+
 (def ^:private attr-ns-lookup
   #js
   {"node" (fn [_ _ _])
@@ -121,19 +138,19 @@ map in velem."
         ;; (println "insert" (goog/getUid dom-node)
         ;;          "dom-parent" dom-parent (goog/getUid dom-parent)
         ;;          "dom-before" dom-before (goog/getUid dom-before))
-        (.insertBefore dom-parent dom-node dom-before))
+        (.insertBefore (dom-api dom-parent) dom-node dom-before))
       (do
         ;; (println "append" (goog/getUid dom-node)
         ;;          "dom-parent" dom-parent (goog/getUid dom-parent))
-        (.appendChild dom-parent dom-node)))))
+        (.appendChild (dom-api dom-parent) dom-node)))))
 
 (defn- dom-remove [dom-node]
-  (when-let [parent (.-parentNode dom-node)]
-    (.removeChild parent dom-node)))
+  (when-let [parent (.-parentNode (dom-api dom-node))]
+    (.removeChild (dom-api parent) dom-node)))
 
 (defn- dom-simple-replace [new-node old-node]
-  (when-let [parent (.-parentNode old-node)]
-    (.replaceChild parent new-node old-node)))
+  (when-let [parent (.-parentNode (dom-api old-node))]
+    (.replaceChild (dom-api parent) new-node old-node)))
 
 (defn- dom-remove-replace [new-node old-velem]
   (let [parent (ui/velem-parent old-velem)
@@ -158,7 +175,7 @@ map in velem."
     (dom-insert vparent node vnext-sibling)
     this)
   (-velem-take [this]
-    (dom-remove node)) 
+    (dom-remove node))
   (-velem-replace [this old-velem]
     (if-let [old-node (ui/velem-native-element old-velem)]
       (dom-simple-replace node old-node)
@@ -237,8 +254,8 @@ map in velem."
 
 (defn- set-attr! [element attr-name attr-value]
   (if attr-value
-    (.setAttribute element attr-name (normalize-attr-value attr-value))
-    (.removeAttribute element attr-name)))
+    (.setAttribute (dom-api element) attr-name (normalize-attr-value attr-value))
+    (.removeAttribute (dom-api element) attr-name)))
 
 (defn- set-style! [elem prop-name prop-value]
   ;(println "set-style-prop!" elem prop-name prop-value)
@@ -326,9 +343,9 @@ map in velem."
   (fn [attr-value]
       ;(println "setting attr" element attr-name attr-value)
       (if attr-value
-        (.setAttributeNS element attr-ns attr-name
+        (.setAttributeNS (dom-api element) attr-ns attr-name
           (normalize-attr-value attr-value))
-        (.removeAttributeNS element attr-ns attr-name))
+        (.removeAttributeNS (dom-api element) attr-ns attr-name))
       attr-value))
 
 (def ^:private special-attrs
@@ -374,9 +391,10 @@ map in velem."
   (ensureNode [this]
     (when-not node
       (set! node
-            (if ns-uri
-              (.createElementNS js/document ns-uri tag)
-              (.createElement js/document tag)))
+            (let [create-element-api (or (aget create-element-lookup tag) default-create-element)]
+              (if ns-uri
+                (ui/createElementNS create-element-api ns-uri tag)
+                (ui/createElement create-element-api tag))))
       (set! (.-freactive-state node) this)
       (set! attr-binder (bind-attrs! node attrs))
       (doseq [child children]
