@@ -113,7 +113,7 @@ map in velem."
       (let [elem (if (some? elem-ns)
                    (.createElementNS js/document elem-name elem-ns)
                    (.createElement js/document elem-name))]
-        (set! (.-freactive-native-api elem) default-native-api)
+        (ui/set-native-api elem default-native-api)
         elem))
     (native-create-text-node [this text]
       (.createTextNode text))
@@ -124,12 +124,12 @@ map in velem."
     (native-remove-attr! [this elem attr-name]
       (.removeAttribute elem attr-name))
     (native-insert [this parent elem before?]
-      (set! (.-freactive-parent elem) (fn [] (ui/native-parent-node this elem)))
+      (ui/set-parent-node-fn default-native-api elem)
       (if before?
         (.insertBefore parent elem before?)
         (.appendChild parent elem)))
     (native-replace [this elem new-elem old-elem]
-      (set! (.-freactive-parent new-elem) (fn [] (ui/native-parent-node this new-elem)))
+      (ui/set-parent-node-fn default-native-api elem)
       (.replaceChild elem new-elem old-elem))
     (native-remove [this elem child-elem]
       (.removeChild elem child-elem))
@@ -147,6 +147,10 @@ map in velem."
 (defn- get-native-api
   [node]
   (or (.-freactive-native-api node) default-native-api))
+
+(defn- get-native-parent-fn
+  [node]
+  (or (.-freactive-parent node) (fn [] (ui/native-parent-node default-native-api node))))
 
 (def ^:private attr-ns-lookup
   #js
@@ -179,12 +183,12 @@ map in velem."
         #_(.appendChild (dom-api dom-parent) dom-node)))))
 
 (defn- dom-remove [dom-node]
-  (when-let [parent (ui/native-parent-node (get-native-api dom-node) dom-node) #_(.-parentNode (dom-api old-node))]
+  (when-let [parent ((get-native-parent-fn dom-node)) #_(.-parentNode (dom-api old-node))]
     (ui/native-remove (get-native-api parent) parent dom-node)
     #_(.removeChild (dom-api parent) dom-node)))
 
 (defn- dom-simple-replace [new-node old-node]
-  (when-let [parent (ui/native-parent-node (get-native-api old-node) old-node) #_(.-parentNode (dom-api old-node))]
+  (when-let [parent ((get-native-parent-fn old-node)) #_(.-parentNode (dom-api old-node))]
     (ui/native-replace (get-native-api parent) parent new-node old-node)
     #_(.replaceChild (dom-api parent) new-node old-node)))
 

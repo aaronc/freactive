@@ -18,6 +18,14 @@
   (native-parent-node [this node])
   (native-last-child [this node]))
 
+(defn set-native-api
+  [elem native-api]
+  (set! (.-freactive-native-api elem) native-api))
+
+(defn set-parent-node-fn
+  [api elem]
+  (set! (.-freactive-parent elem) (fn [] (native-parent-node api elem))))
+
 (defprotocol IVirtualElement
   "Warning: this is currently an internal API subject to change or sudden removal.
 
