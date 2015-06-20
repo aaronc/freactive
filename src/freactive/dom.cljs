@@ -111,7 +111,7 @@ map in velem."
     (native-queue [this f])
     (native-create-element [this elem-ns elem-name]
       (let [elem (if (some? elem-ns)
-                   (.createElementNS js/document elem-name elem-ns)
+                   (.createElementNS js/document elem-ns elem-name)
                    (.createElement js/document elem-name))]
         (ui/set-native-api elem default-native-api)
         elem))

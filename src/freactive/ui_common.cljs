@@ -23,8 +23,10 @@
   (set! (.-freactive-native-api elem) native-api))
 
 (defn set-parent-node-fn
-  [api elem]
-  (set! (.-freactive-parent elem) (fn [] (native-parent-node api elem))))
+  ([api elem]
+   (set-parent-node-fn api elem (fn [] (native-parent-node api elem))))
+  ([api elem parent-node-fn]
+   (set! (.-freactive-parent elem) parent-node-fn)))
 
 (defprotocol IVirtualElement
   "Warning: this is currently an internal API subject to change or sudden removal.
