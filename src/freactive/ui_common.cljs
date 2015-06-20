@@ -2,9 +2,21 @@
   (:require
    [freactive.core :as r]))
 
-(defprotocol ICreateElement
-  (createElement [this tag])
-  (createElementNS [this tag ns-uri]))
+(defprotocol INativeAPI
+  (native-queue [this f] "Queues the no-arg fn f to be run in the application thread of this UI platform")
+  (native-create-element [this elem-ns elem-name])
+  (native-create-text-node [this text])
+  (native-get-attr [this elem attr-name])
+  (native-set-attr! [this elem attr-name attr-val])
+  (native-remove-attr! [this elem attr-name])
+  (native-insert [this parent elem before?])
+  (native-replace [this elem new-elem old-elem])
+  (native-remove [this elem child-elem])
+  (native-element? [this x])
+  (native-text-node? [this x])
+  (native-set-text-node! [this node text])
+  (native-parent-node [this node])
+  (native-last-child [this node]))
 
 (defprotocol IVirtualElement
   "Warning: this is currently an internal API subject to change or sudden removal.
