@@ -113,7 +113,6 @@ map in velem."
       (let [elem (if (some? elem-ns)
                    (.createElementNS js/document elem-ns elem-name)
                    (.createElement js/document elem-name))]
-        (ui/set-native-api elem default-native-api)
         elem))
     (native-create-text-node [this text]
       (.createTextNode text))
@@ -124,12 +123,10 @@ map in velem."
     (native-remove-attr! [this elem attr-name]
       (.removeAttribute elem attr-name))
     (native-insert [this parent elem before?]
-      (ui/set-parent-node-fn default-native-api elem)
       (if before?
         (.insertBefore parent elem before?)
         (.appendChild parent elem)))
     (native-replace [this elem new-elem old-elem]
-      (ui/set-parent-node-fn default-native-api elem)
       (.replaceChild elem new-elem old-elem))
     (native-remove [this elem child-elem]
       (.removeChild elem child-elem))
@@ -148,9 +145,19 @@ map in velem."
   [node]
   (or (.-freactive-native-api node) default-native-api))
 
+(defn- set-native-api!
+  [elem native-api]
+  (set! (.-freactive-native-api elem) native-api))
+
 (defn- get-native-parent-fn
   [node]
   (or (.-freactive-parent node) (fn [] (ui/native-parent-node default-native-api node))))
+
+(defn- set-native-parent-fn!
+  ([api elem]
+   (set-native-parent-fn! api elem (fn [] (ui/native-parent-node api elem))))
+  ([api elem parent-node-fn]
+   (set! (.-freactive-parent elem) parent-node-fn)))
 
 (def ^:private attr-ns-lookup
   #js
@@ -174,11 +181,13 @@ map in velem."
         ;; (println "insert" (goog/getUid dom-node)
         ;;          "dom-parent" dom-parent (goog/getUid dom-parent)
         ;;          "dom-before" dom-before (goog/getUid dom-before))
+        (set-native-parent-fn! api dom-node)
         (ui/native-insert api dom-parent dom-node dom-before)
         #_(.insertBefore (dom-api dom-parent) dom-node dom-before))
       (do
         ;; (println "append" (goog/getUid dom-node)
         ;;          "dom-parent" dom-parent (goog/getUid dom-parent))
+        (set-native-parent-fn! api dom-node)
         (ui/native-insert api dom-parent dom-node false)
         #_(.appendChild (dom-api dom-parent) dom-node)))))
 
@@ -189,7 +198,9 @@ map in velem."
 
 (defn- dom-simple-replace [new-node old-node]
   (when-let [parent ((get-native-parent-fn old-node)) #_(.-parentNode (dom-api old-node))]
-    (ui/native-replace (get-native-api parent) parent new-node old-node)
+    (let [api (get-native-api parent)]
+      (set-native-parent-fn! api new-node)
+      (ui/native-replace api parent new-node old-node))
     #_(.replaceChild (dom-api parent) new-node old-node)))
 
 (defn- dom-remove-replace [new-node old-velem]
@@ -434,8 +445,10 @@ map in velem."
   (ensureNode [this]
     (when-not node
       (set! node
-            (let [native-api (or (aget native-api-lookup tag) default-native-api)]
-              (ui/native-create-element native-api ns-uri tag)))
+            (let [native-api (or (aget native-api-lookup tag) default-native-api)
+                  elem (ui/native-create-element native-api ns-uri tag)]
+              (set-native-api! elem native-api)
+              elem))
       (set! (.-freactive-state node) this)
       (set! attr-binder (bind-attrs! node attrs))
       (doseq [child children]
