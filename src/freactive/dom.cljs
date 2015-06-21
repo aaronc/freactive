@@ -116,12 +116,18 @@ map in velem."
         elem))
     (native-create-text-node [this text]
       (.createTextNode text))
-    (native-get-attr [this elem attr-name]
-      (.getAttribute elem attr-name))
-    (native-set-attr! [this elem attr-name attr-val]
-      (.setAttribute elem attr-name attr-val))
-    (native-remove-attr! [this elem attr-name]
-      (.removeAttribute elem attr-name))
+    (native-get-attr [this elem attr-ns attr-name]
+      (if attr-ns
+        (.getAttributeNS elem attr-ns attr-name)
+        (.getAttribute elem attr-name)))
+    (native-set-attr! [this elem attr-ns attr-name attr-val]
+      (if attr-ns
+        (.setAttributeNS elem attr-ns attr-name attr-val)
+        (.setAttribute elem attr-name attr-val)))
+    (native-remove-attr! [this elem attr-ns attr-name]
+      (if attr-ns
+        (.removeAttributeNS elem attr-ns attr-name)
+        (.removeAttribute elem attr-name)))
     (native-insert [this parent elem before?]
       (if before?
         (.insertBefore parent elem before?)
@@ -305,8 +311,8 @@ map in velem."
 
 (defn- set-attr! [element attr-name attr-value]
   (if attr-value
-    (ui/native-set-attr! (get-native-api element) element attr-name attr-value)
-    (ui/native-remove-attr! (get-native-api element) element attr-name)))
+    (ui/native-set-attr! (get-native-api element) element nil attr-name attr-value)
+    (ui/native-remove-attr! (get-native-api element) element nil attr-name)))
 
 (defn- set-style! [elem prop-name prop-value]
   ;(println "set-style-prop!" elem prop-name prop-value)
@@ -355,7 +361,7 @@ map in velem."
   (set-attr! element "data-state" state))
 
 (defn- get-data-state [element]
-  (ui/native-get-attr (get-native-api element) element "data-state")
+  (ui/native-get-attr (get-native-api element) element nil "data-state")
   #_(.getAttribute element "data-state"))
 
 (defn- get-state-attr [state attr-str]
@@ -391,14 +397,15 @@ map in velem."
     (fn [attr-value]
       (set-attr! element attr-name attr-value))))
 
-;;; TODO - do we need this?
 (defn- get-ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
     ;(println "setting attr" element attr-name attr-value)
     (if attr-value
-      (.setAttributeNS (dom-api element) attr-ns attr-name
+      (ui/native-set-attr! (get-native-api element) element attr-ns attr-name attr-value)
+      (ui/native-remove-attr! (get-native-api element) element attr-ns attr-name)
+      #_(.setAttributeNS (dom-api element) attr-ns attr-name
                        (normalize-attr-value attr-value))
-      (.removeAttributeNS (dom-api element) attr-ns attr-name))
+      #_(.removeAttributeNS (dom-api element) attr-ns attr-name))
     attr-value))
 
 (def ^:private special-attrs
