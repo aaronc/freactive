@@ -1,23 +1,23 @@
 (ns freactive.dom
   (:require
-   [freactive.core :as r]
-   [freactive.ui-common :as ui]
-   [goog.object]))
+    [freactive.core :as r]
+    [freactive.ui-common :as ui]
+    [goog.object]))
 
 ;; ## Polyfills
 
 (def request-animation-frame
   (or
-   (.-requestAnimationFrame js/window)
-   (.-webkitRequestAnimationFrame js/window)
-   (.-mozRequestAnimationFrame js/window)
-   (.-msRequestAnimationFrame js/window)
-   (.-oRequestAnimationFrame js/window)
-   (let [t0 (.getTime (js/Date.))]
-     (fn [f]
-       (js/setTimeout
-        #(f (- (.getTime (js/Date.)) t0))
-        16.66666)))))
+    (.-requestAnimationFrame js/window)
+    (.-webkitRequestAnimationFrame js/window)
+    (.-mozRequestAnimationFrame js/window)
+    (.-msRequestAnimationFrame js/window)
+    (.-oRequestAnimationFrame js/window)
+    (let [t0 (.getTime (js/Date.))]
+      (fn [f]
+        (js/setTimeout
+          #(f (- (.getTime (js/Date.)) t0))
+          16.66666)))))
 
 ;; Render Loop
 
@@ -42,7 +42,7 @@
 (defonce
   render-loop
   (request-animation-frame
-    (fn render[frame-ms]
+    (fn render [frame-ms]
       (binding [*animating* true]
         (reset! frame-time frame-ms)
         (when enable-fps-instrumentation
@@ -95,15 +95,80 @@ map in velem."
 
 (def ^:private node-ns-lookup
   #js
-  {"svg" "http://www.w3.org/2000/svg"})
+      {"svg" "http://www.w3.org/2000/svg"})
 
 (defn register-node-prefix! [prefix xml-ns-or-handler]
   (aset node-ns-lookup (name prefix) xml-ns-or-handler))
 
+(def ^:private native-api-lookup
+  #js {})
+
+(defn register-native-api! [tag api]
+  (aset native-api-lookup (name tag) api))
+
+(def ^:private default-native-api
+  (reify ui/INativeAPI
+    (native-queue [this f])
+    (native-create-element [this elem-ns elem-name]
+      (let [elem (if (some? elem-ns)
+                   (.createElementNS js/document elem-ns elem-name)
+                   (.createElement js/document elem-name))]
+        elem))
+    (native-create-text-node [this text]
+      (.createTextNode text))
+    (native-get-attr [this elem attr-ns attr-name]
+      (if attr-ns
+        (.getAttributeNS elem attr-ns attr-name)
+        (.getAttribute elem attr-name)))
+    (native-set-attr! [this elem attr-ns attr-name attr-val]
+      (if attr-ns
+        (.setAttributeNS elem attr-ns attr-name attr-val)
+        (.setAttribute elem attr-name attr-val)))
+    (native-remove-attr! [this elem attr-ns attr-name]
+      (if attr-ns
+        (.removeAttributeNS elem attr-ns attr-name)
+        (.removeAttribute elem attr-name)))
+    (native-insert [this parent elem before?]
+      (if before?
+        (.insertBefore parent elem before?)
+        (.appendChild parent elem)))
+    (native-replace [this elem new-elem old-elem]
+      (.replaceChild elem new-elem old-elem))
+    (native-remove [this elem child-elem]
+      (.removeChild elem child-elem))
+    (native-element? [this x]
+      (instance? js/Node x))
+    (native-text-node? [this x]
+      (instance? js/Text x))
+    (native-set-text-node! [this node text]
+      (set! (.-textContent node) text))
+    (native-parent-node [this node]
+      (.-parentNode node))
+    (native-last-child [this node]
+      (.-lastChild node))))
+
+(defn- get-native-api
+  [node]
+  (or (.-freactive-native-api node) default-native-api))
+
+(defn- set-native-api!
+  [elem native-api]
+  (set! (.-freactive-native-api elem) native-api))
+
+(defn- get-native-parent-fn
+  [node]
+  (or (.-freactive-parent node) (fn [] (ui/native-parent-node default-native-api node))))
+
+(defn- set-native-parent-fn!
+  ([api elem]
+   (set-native-parent-fn! api elem (fn [] (ui/native-parent-node api elem))))
+  ([api elem parent-node-fn]
+   (set! (.-freactive-parent elem) parent-node-fn)))
+
 (def ^:private attr-ns-lookup
   #js
-  {"node" (fn [_ _ _])
-   "state" (fn [_ _ _])})
+      {"node"  (fn [_ _ _])
+       "state" (fn [_ _ _])})
 
 (defn register-attr-prefix! [prefix xml-ns-or-handler]
   (aset attr-ns-lookup (name prefix) xml-ns-or-handler))
@@ -114,26 +179,35 @@ map in velem."
   (.-freactive-state x))
 
 (defn- dom-insert [parent dom-node vnext-sibling]
-  (let [dom-parent (ui/native-parent parent)]
+  (let [dom-parent (ui/native-parent parent)
+        api (get-native-api dom-parent)]
     ;; (when vnext-sibling (println "vnext" (type vnext-sibling)))
-    (if-let [dom-before (ui/next-native-sibling vnext-sibling)] 
+    (if-let [dom-before (ui/next-native-sibling vnext-sibling)]
       (do
         ;; (println "insert" (goog/getUid dom-node)
         ;;          "dom-parent" dom-parent (goog/getUid dom-parent)
         ;;          "dom-before" dom-before (goog/getUid dom-before))
-        (.insertBefore dom-parent dom-node dom-before))
+        (set-native-parent-fn! api dom-node)
+        (ui/native-insert api dom-parent dom-node dom-before)
+        #_(.insertBefore (dom-api dom-parent) dom-node dom-before))
       (do
         ;; (println "append" (goog/getUid dom-node)
         ;;          "dom-parent" dom-parent (goog/getUid dom-parent))
-        (.appendChild dom-parent dom-node)))))
+        (set-native-parent-fn! api dom-node)
+        (ui/native-insert api dom-parent dom-node false)
+        #_(.appendChild (dom-api dom-parent) dom-node)))))
 
 (defn- dom-remove [dom-node]
-  (when-let [parent (.-parentNode dom-node)]
-    (.removeChild parent dom-node)))
+  (when-let [parent ((get-native-parent-fn dom-node)) #_(.-parentNode (dom-api old-node))]
+    (ui/native-remove (get-native-api parent) parent dom-node)
+    #_(.removeChild (dom-api parent) dom-node)))
 
 (defn- dom-simple-replace [new-node old-node]
-  (when-let [parent (.-parentNode old-node)]
-    (.replaceChild parent new-node old-node)))
+  (when-let [parent ((get-native-parent-fn old-node)) #_(.-parentNode (dom-api old-node))]
+    (let [api (get-native-api parent)]
+      (set-native-parent-fn! api new-node)
+      (ui/native-replace api parent new-node old-node))
+    #_(.replaceChild (dom-api parent) new-node old-node)))
 
 (defn- dom-remove-replace [new-node old-velem]
   (let [parent (ui/velem-parent old-velem)
@@ -158,7 +232,7 @@ map in velem."
     (dom-insert vparent node vnext-sibling)
     this)
   (-velem-take [this]
-    (dom-remove node)) 
+    (dom-remove node))
   (-velem-replace [this old-velem]
     (if-let [old-node (ui/velem-native-element old-velem)]
       (dom-simple-replace node old-node)
@@ -201,18 +275,18 @@ map in velem."
     (when clean-fn (clean-fn))
     (when states
       (goog.object/forEach
-       states
-       (fn [state k _]
-         (when state
-           (when (.-clean state)
-             (.clean state)))))))
+        states
+        (fn [state k _]
+          (when state
+            (when (.-clean state)
+              (.clean state)))))))
   (dispose [this]
     (when states
       (goog.object/forEach
-       states
-       (fn [state k _]
-         (when state
-           (r/dispose state)))))))
+        states
+        (fn [state k _]
+          (when state
+            (r/dispose state)))))))
 
 (defn- wrap-attr-map-binder
   ([bind-fn]
@@ -237,8 +311,8 @@ map in velem."
 
 (defn- set-attr! [element attr-name attr-value]
   (if attr-value
-    (.setAttribute element attr-name (normalize-attr-value attr-value))
-    (.removeAttribute element attr-name)))
+    (ui/native-set-attr! (get-native-api element) element nil attr-name attr-value)
+    (ui/native-remove-attr! (get-native-api element) element nil attr-name)))
 
 (defn- set-style! [elem prop-name prop-value]
   ;(println "set-style-prop!" elem prop-name prop-value)
@@ -255,7 +329,7 @@ map in velem."
 (defn ^:dynamic ^:pluggable unlisten!
   "Removes an event handler. Can be replaced by a plugin such as goog.events."
   [element evt-name handler]
-  (.removeEventListener  element evt-name handler))
+  (.removeEventListener element evt-name handler))
 
 (deftype EventBinding [node event-name ^:mutable handler]
   IFn
@@ -287,7 +361,8 @@ map in velem."
   (set-attr! element "data-state" state))
 
 (defn- get-data-state [element]
-  (.getAttribute element "data-state"))
+  (ui/native-get-attr (get-native-api element) element nil "data-state")
+  #_(.getAttribute element "data-state"))
 
 (defn- get-state-attr [state attr-str]
   (when-let [attrs (when state (.-attrs state))]
@@ -295,22 +370,22 @@ map in velem."
 
 (defn- set-data-state!
   ([element state]
-    (let [cur-state (get-data-state element)
-          node-state (get-element-state element)
-          state (when state (name state))]
-      (when-not (identical? cur-state state)
-        (do-set-data-state! element state)
-        (when-let [enter-transition (get-state-attr node-state (str ":state/on-" state))]
-          (enter-transition element cur-state state))))))
+   (let [cur-state (get-data-state element)
+         node-state (get-element-state element)
+         state (when state (name state))]
+     (when-not (identical? cur-state state)
+       (do-set-data-state! element state)
+       (when-let [enter-transition (get-state-attr node-state (str ":state/on-" state))]
+         (enter-transition element cur-state state))))))
 
 (def ^:private attr-setters
   #js
-  {:data-state (fn [element state]
-                 (set-data-state! element state)
-                 state)
-   :class (fn [element cls]
-            (set! (.-className element) (if (nil? cls) "" cls))
-            cls)})
+      {:data-state (fn [element state]
+                     (set-data-state! element state)
+                     state)
+       :class      (fn [element cls]
+                     (set! (.-className element) (if (nil? cls) "" cls))
+                     cls)})
 
 ;; attributes to set directly
 (doseq [a #js ["id" "value"]]
@@ -324,16 +399,18 @@ map in velem."
 
 (defn- get-ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
-      ;(println "setting attr" element attr-name attr-value)
-      (if attr-value
-        (.setAttributeNS element attr-ns attr-name
-          (normalize-attr-value attr-value))
-        (.removeAttributeNS element attr-ns attr-name))
-      attr-value))
+    ;(println "setting attr" element attr-name attr-value)
+    (if attr-value
+      (ui/native-set-attr! (get-native-api element) element attr-ns attr-name attr-value)
+      (ui/native-remove-attr! (get-native-api element) element attr-ns attr-name)
+      #_(.setAttributeNS (dom-api element) attr-ns attr-name
+                       (normalize-attr-value attr-value))
+      #_(.removeAttributeNS (dom-api element) attr-ns attr-name))
+    attr-value))
 
 (def ^:private special-attrs
   #js {"events" (wrap-attr-map-binder bind-event!)
-       "style" (wrap-attr-map-binder bind-style!)})
+       "style"  (wrap-attr-map-binder bind-style!)})
 
 (defn- bind-attr! [element attr-key attr-value]
   (let [attr-ns (namespace attr-key)
@@ -361,6 +438,7 @@ map in velem."
 
 (def ^:private bind-attrs! (wrap-attr-map-binder bind-attr!))
 
+;;; TODO - pass in native API here?
 (deftype DOMElement [ns-uri tag ^:mutable attrs children ^:mutable node
                      ^:mutable parent ^:mutable attr-binder]
   IHash
@@ -374,9 +452,10 @@ map in velem."
   (ensureNode [this]
     (when-not node
       (set! node
-            (if ns-uri
-              (.createElementNS js/document ns-uri tag)
-              (.createElement js/document tag)))
+            (let [native-api (or (aget native-api-lookup tag) default-native-api)
+                  elem (ui/native-create-element native-api ns-uri tag)]
+              (set-native-api! elem native-api)
+              elem))
       (set! (.-freactive-state node) this)
       (set! attr-binder (bind-attrs! node attrs))
       (doseq [child children]
@@ -402,7 +481,7 @@ map in velem."
     (.onAttached this)
     this)
   (-velem-take [this]
-    (dom-remove node)) 
+    (dom-remove node))
   (-velem-replace [this old-velem]
     (.ensureNode this)
     (if-let [old-node (ui/velem-native-element old-velem)]
@@ -437,7 +516,7 @@ map in velem."
     (dom-insert parent node vnext-sibling)
     this)
   (-velem-take [this]
-    (dom-remove node)) 
+    (dom-remove node))
   (-velem-replace [this old-velem]
     (if-let [old-node (ui/velem-native-element old-velem)]
       (do
@@ -463,7 +542,7 @@ map in velem."
 Can be used to define custom conversions to DOM nodes or text for things such as numbers
 or dates; or can be used to define containers for DOM elements themselves."
   (-get-dom-image [x]
-    "Should return either virtual DOM (a vector or string) or an actual DOM node."))
+                  "Should return either virtual DOM (a vector or string) or an actual DOM node."))
 
 (extend-protocol IDOMImage
   nil
@@ -476,9 +555,9 @@ or dates; or can be used to define containers for DOM elements themselves."
   (-get-dom-image [x] (str x)))
 
 ;; From hiccup.compiler:
-(def ^{:doc "Regular expression that parses a CSS-style id and class from an element name."
+(def ^{:doc     "Regular expression that parses a CSS-style id and class from an element name."
        :private true}
-     re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
+re-tag #"([^\s\.#]+)(?:#([^\s\.#]+))?(?:\.([^\s#]+))?")
 
 (def ^:private re-dot (js/RegExp. "\\." "g"))
 
@@ -504,14 +583,14 @@ or dates; or can be used to define containers for DOM elements themselves."
         attrs (if have-attrs attrs? {})
         attrs (cond-> attrs
 
-                (and id (not (:id attrs)))
-                (assoc :id id)
-                
-                class
-                (update :class
-                        (fn [cls]
-                          (let [class (.replace class re-dot " ")]
-                            (if cls (str class " " cls) class)))))
+                      (and id (not (:id attrs)))
+                      (assoc :id id)
+
+                      class
+                      (update :class
+                              (fn [cls]
+                                (let [class (.replace class re-dot " ")]
+                                  (if cls (str class " " cls) class)))))
 
         children (if have-attrs (rest tail) tail)
         children* (append-children* #js [] children)]
@@ -661,7 +740,7 @@ document body."
               (recur))))
         (let [vroot (wrap-unmanaged-node root-node nil)]
           (configure-root! vroot vdom))))
-    root-node)) 
+    root-node))
 
 (defn unmount! [mount-point]
   (let [root-node
