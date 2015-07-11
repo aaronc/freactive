@@ -39,34 +39,44 @@
 
 (def ^:private ^:dynamic *animating* nil)
 
-(defonce
-  render-loop
-  (request-animation-frame
-    (fn render[frame-ms]
-      (binding [*animating* true]
-        (reset! frame-time frame-ms)
-        (when enable-fps-instrumentation
-          (if (identical? instrumentation-i 14)
-            (do
-              (reset! fps (* 1000 (/ 15 (- frame-ms last-instrumentation-time))))
-              (set! instrumentation-i 0))
-            (set! instrumentation-i (inc instrumentation-i)))
-          (when (identical? 0 instrumentation-i)
-            (set! last-instrumentation-time frame-ms)))
-        (let [queue render-queue
-              n (alength queue)]
-          (when (> n 0)
-            (set! render-queue #js [])
-            (loop [i 0]
-              (when (< i n)
-                ((aget queue i))
-                (recur (inc i)))))))
-      (request-animation-frame render))))
+(def ^:private animation-requested false)
+
+(declare render-fn)
+
+(defn- request-render []
+  (when-not animation-requested
+    (set! animation-requested true)
+    (request-animation-frame render-fn)))
+
+(defn- render-fn [frame-ms]
+  (binding [*animating* true]
+    (set! animation-requested false)
+    (reset! frame-time frame-ms)
+    (when enable-fps-instrumentation
+      (if (identical? instrumentation-i 14)
+        (do
+          (reset! fps (* 1000 (/ 15 (- frame-ms last-instrumentation-time))))
+          (set! instrumentation-i 0))
+        (set! instrumentation-i (inc instrumentation-i)))
+      (when (identical? 0 instrumentation-i)
+        (set! last-instrumentation-time frame-ms)))
+    (let [queue render-queue
+          n (alength queue)]
+      (when (> n 0)
+        (set! render-queue #js [])
+        (loop [i 0]
+          (when (< i n)
+            ((aget queue i))
+            (recur (inc i)))))))
+  (when (or enable-fps-instrumentation (> (.-watchers frame-time) 0))
+    (request-render)))
 
 (defn queue-animation [f]
   (if *animating*
     (f)
-    (.push render-queue f)))
+    (do
+      (.push render-queue f)
+      (request-render))))
 
 ;; ## Attributes, Styles & Events
 
@@ -497,25 +507,31 @@ or dates; or can be used to define containers for DOM elements themselves."
       (.push ch* (as-velem ch))))
   ch*)
 
-(defn- dom-element [ns-uri tag tail]
-  (let [[_ tag-name id class] (re-matches re-tag tag)
-        attrs? (first tail)
-        have-attrs (map? attrs?)
-        attrs (if have-attrs attrs? {})
-        attrs (cond-> attrs
+(defn element* [elem-factory]
+  (fn [ns-uri tag tail]
+    (let [[_ tag-name id class] (re-matches re-tag tag)
+          attrs? (first tail)
+          have-attrs (map? attrs?)
+          attrs (if have-attrs attrs? {})
+          attrs (cond-> attrs
 
-                (and id (not (:id attrs)))
-                (assoc :id id)
-                
-                class
-                (update :class
-                        (fn [cls]
-                          (let [class (.replace class re-dot " ")]
-                            (if cls (str class " " cls) class)))))
+                  (and id (not (:id attrs)))
+                  (assoc :id id)
+                  
+                  class
+                  (update :class
+                          (fn [cls]
+                            (let [class (.replace class re-dot " ")]
+                              (if cls (str class " " cls) class)))))
 
-        children (if have-attrs (rest tail) tail)
-        children* (append-children* #js [] children)]
-    (DOMElement. ns-uri tag-name attrs children* nil nil nil)))
+          children (if have-attrs (rest tail) tail)
+          children* (append-children* #js [] children)]
+      (elem-factory ns-uri tag-name attrs children*))))
+
+(def dom-element
+  (element*
+   (fn [ns-uri tag-name attrs children*]
+     (DOMElement. ns-uri tag-name attrs children* nil nil nil))))
 
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
@@ -625,15 +641,20 @@ the existing attribute map."
       (.appendChild (.-body js/document) root-node))))
 
 (defn- configure-root! [vroot vdom]
-  (let [root (ui/velem-insert (as-velem vdom) vroot nil)]
-    (set! (.-root vroot) root)
-    (set! (.-on-dispose vroot) (fn [] (r/dispose root)))))
+  (let [velem (as-velem vdom)]
+    (set! (.-children vroot) [velem])
+    (ui/velem-insert velem vroot nil)))
 
 (defn- do-unmount! [vroot]
-  (let [root (.-root vroot)]
-    (when-not (keyword-identical? :unmounted root)
-      (ui/velem-remove root)
-      (set! (.-root vroot) :unmounted))))
+  (assert (instance? DOMElement vroot) "Can only unmount from managed elements")
+  (doseq [child (.-children vroot)]
+    (ui/velem-remove child))
+  (set! (.-children vroot) nil)
+  ;; (let [root (.-root vroot)]
+  ;;   (when-not (keyword-identical? :unmounted root)
+  ;;     (ui/velem-remove root)
+  ;;     (set! (.-root vroot) :unmounted)))
+  )
 
 (defn mount! [mount-point vdom]
   "Makes the specified mount-point the root of a managed element tree, replacing
@@ -650,7 +671,7 @@ document body."
           (create-or-find-root-node mount-point))]
     (if-let [vroot (get-element-state root-node)]
       (do
-        (assert (.-root vroot) "Can only remount at a previous mount point")
+        ;; (assert (.-root vroot) "Can only remount at a previous mount point")
         (do-unmount! vroot)
         (configure-root! vroot vdom))
       (do
@@ -659,7 +680,14 @@ document body."
             (when last-child
               (ui/velem-remove (as-velem (get-velem-state last-child)))
               (recur))))
-        (let [vroot (wrap-unmanaged-node root-node nil)]
+        (let [vroot (DOMElement.
+                     (.-namespaceURI root-node)
+                     (.-tagName root-node)
+                     {}
+                     nil ;; TODO parent
+                     root-node
+                     nil
+                     (bind-attrs! root-node {}))]
           (configure-root! vroot vdom))))
     root-node)) 
 
@@ -672,6 +700,6 @@ document body."
           (string? mount-point)
           (find-by-id mount-point))
         vroot (get-element-state root-node)]
-    (assert (and root-node vroot (.-root vroot)) "Can't find mount point")
+    ;; (assert (and root-node vroot (.-root vroot)) "Can't find mount point")
     (do-unmount! vroot)
     root-node))
