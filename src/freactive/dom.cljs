@@ -476,6 +476,9 @@ or dates; or can be used to define containers for DOM elements themselves."
     "Should return either virtual DOM (a vector or string) or an actual DOM node."))
 
 (extend-protocol IDOMImage
+  object
+  (-get-dom-image [x] (str x))
+
   nil
   (-get-dom-image [x] "")
 
