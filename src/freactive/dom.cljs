@@ -354,7 +354,7 @@ map in velem."
           (string? attr-handler)
           (do-bind-attr (get-ns-attr-setter element attr-ns attr-name) attr-value)
 
-          (fn? attr-handler)
+          (ifn? attr-handler)
           (attr-handler element attr-name attr-value)
 
           :default
@@ -497,20 +497,21 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (declare as-velem)
 
-(defn- append-children* [ch* children]
-  (doseq [ch children]
-    (if (sequential? ch)
-      (let [head (first ch)]
-        (cond
-          (or (keyword? head) (fn? head))
-          (.push ch* (as-velem ch))
+(defn- append-children* [velem-fn]
+  (fn append-ch [ch-res children]
+    (doseq [ch children]
+      (if (sequential? ch)
+        (let [head (first ch)]
+          (cond
+            (or (keyword? head) (and (ifn? head) (not (sequential? head))))
+            (.push ch-res (velem-fn ch))
 
-          :default
-          (append-children* ch* ch)))
-      (.push ch* (as-velem ch))))
-  ch*)
+            :default
+            (append-ch ch-res ch)))
+        (.push ch-res (velem-fn ch))))
+    ch-res))
 
-(defn element* [elem-factory]
+(defn element* [elem-factory append-children-fn]
   (fn [ns-uri tag tail]
     (let [[_ tag-name id class] (re-matches re-tag tag)
           attrs? (first tail)
@@ -528,13 +529,8 @@ or dates; or can be used to define containers for DOM elements themselves."
                               (if cls (str class " " cls) class)))))
 
           children (if have-attrs (rest tail) tail)
-          children* (append-children* #js [] children)]
+          children* (append-children-fn #js [] children)]
       (elem-factory ns-uri tag-name attrs children*))))
-
-(def dom-element
-  (element*
-   (fn [ns-uri tag-name attrs children*]
-     (DOMElement. ns-uri tag-name attrs children* nil nil nil))))
 
 (defn- dom-node? [x]
   (and x (> (.-nodeType x) 0)))
@@ -552,6 +548,8 @@ or dates; or can be used to define containers for DOM elements themselves."
   (let [state (UnmanagedDOMNode. dom-node on-dispose nil)]
     (set! (.-freactive-state dom-node) state)
     state))
+
+(declare dom-element)
 
 (defn- as-velem [elem-spec]
   (cond
@@ -576,7 +574,7 @@ or dates; or can be used to define containers for DOM elements themselves."
                 (string? tag-handler)
                 (dom-element tag-handler tag-name tail)
 
-                (fn? tag-handler)
+                (ifn? tag-handler)
                 (as-velem (tag-handler tag-name tail))
 
                 :default
@@ -584,7 +582,7 @@ or dates; or can be used to define containers for DOM elements themselves."
               (.warn js/console "Undefined ns node prefix" tag-ns))
             (dom-element nil tag-name tail)))
 
-        (fn? head)
+        (and (ifn? head) (not (sequential? head)))
         (as-velem (r/rx* (fn [] (apply head (rest elem-spec)))))
 
         :default
@@ -603,6 +601,13 @@ or dates; or can be used to define containers for DOM elements themselves."
     (as-velem (r/-as-velem elem-spec as-velem))
 
     :default (as-velem (-get-dom-image elem-spec))))
+
+(def dom-element
+  (element*
+   (fn [ns-uri tag-name attrs children*]
+     (DOMElement. ns-uri tag-name attrs children* nil nil nil))
+   (append-children* as-velem)))
+
 
 ;; Public API
 
