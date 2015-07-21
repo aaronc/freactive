@@ -14,7 +14,7 @@ is the next sibling virtual element if any.")
   (-velem-take [this]
     "Removes the virtual element from the element tree without disposing it.")
 (-velem-parent [this]
-    "Returns the native parent element")
+    "Returns the virtual parent element")
   (-velem-head [this]
     "Returns a simple virtual element (or nil) representing the head of an
 element sequence. Same as -velem-simple-element for simple elements.")
