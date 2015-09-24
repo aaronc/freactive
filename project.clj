@@ -5,17 +5,18 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/data.avl "0.0.12"]
                  [garden "1.2.5"]
-                 [freactive.core "0.2.0-SNAPSHOT"]]
+                 [freactive.core "0.2.0-SNAPSHOT"]
+                 [cljsjs/react "0.14.0-rc1-0"]]
   :profiles
   {:dev
    {:plugins [[lein-cljsbuild "1.0.5"] 
               [lein-figwheel "0.3.3" :exclusions [org.cloure/clojure]]]
     :dependencies
-    [[org.clojure/clojure "1.7.0-RC1"]
-      [org.clojure/clojurescript "0.0-3269"]
-      [figwheel "0.3.3" :exclusions [org.cloure/clojure]]
-      [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-      [bardo "0.1.0" :exclusions [org.clojure/clojure]]]
+    [[org.clojure/clojure "1.7.0"]
+     [org.clojure/clojurescript "1.7.122"]
+     [figwheel "0.3.3" :exclusions [org.clojure/clojure]]
+     [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+     [bardo "0.1.0" :exclusions [org.clojure/clojure]]]
      :cljsbuild {:builds
                  [{:id           "example"
                    :source-paths ["src" "example"
@@ -27,10 +28,13 @@
                                   :pretty-print true
                                   :source-map    true}}
                   {:id           "example-advanced"
-                   :source-paths ["src" "example" "test" "checkouts/freactive.core/src/clojure"]
+                   :source-paths ["src" "example" "checkouts/freactive.core/src/clojure"]
                    :compiler     {:output-to     "resources/public/js/compiled/advanced.js"
                                   :output-dir    "resources/public/js/compiled/out-adv"
                                   :optimizations :advanced
+                                  :pretty-print true
+                                  :psuedo-names true
+                                  :verbox true
                                   :main "freactive.dom-perf"}}]}}}
   :source-paths ["src"]
   :test-paths ["test" "example"])

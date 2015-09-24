@@ -650,7 +650,7 @@ the existing attribute map."
 
 (defn- configure-root! [vroot vdom]
   (let [velem (as-velem vdom)]
-    (set! (.-children vroot) [velem])
+    (set! (.-children vroot) #js [velem])
     (ui/velem-insert velem vroot nil)))
 
 (defn- do-unmount! [vroot]
