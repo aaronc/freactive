@@ -246,6 +246,7 @@ map in velem."
     :default (.toString value)))
 
 (defn- set-attr! [element attr-name attr-value]
+  ;; (println "setting attr" element attr-name attr-value)
   (if attr-value
     (.setAttribute element attr-name (normalize-attr-value attr-value))
     (.removeAttribute element attr-name)))
@@ -287,7 +288,9 @@ map in velem."
   ((EventBinding. node (name event-name) nil) handler))
 
 (defn- do-bind-attr [setter val]
-  (r/bind-attr* val setter queue-animation))
+  (let [binding
+        (r/bind-attr* val setter queue-animation)]
+    binding))
 
 (defn- bind-style! [node style-kw style-val]
   (let [style-name (name style-kw)]
@@ -324,7 +327,9 @@ map in velem."
 
 ;; attributes to set directly
 (doseq [a #js ["id" "value"]]
-  (aset attr-setters a (fn [e v] (aset e a v))))
+  (aset attr-setters a
+        (fn [e v]
+          (aset e a v))))
 
 (defn- get-attr-setter [element attr-name]
   (if-let [setter (aget attr-setters attr-name)]
@@ -334,7 +339,6 @@ map in velem."
 
 (defn- get-ns-attr-setter [element attr-ns attr-name]
   (fn [attr-value]
-      ;(println "setting attr" element attr-name attr-value)
       (if attr-value
         (.setAttributeNS element attr-ns attr-name
           (normalize-attr-value attr-value))
@@ -551,6 +555,58 @@ or dates; or can be used to define containers for DOM elements themselves."
 
 (declare dom-element)
 
+(defn- as-velem* [{:keys [node-ns-lookup attr-ns-lookup]}]
+  (fn [elem-spec]
+    (cond
+      (string? elem-spec)
+      (DOMTextNode. elem-spec nil nil)
+
+      (dom-node? elem-spec)
+      (if-let [state (get-element-state elem-spec)]
+        state
+        (UnmanagedDOMNode. elem-spec nil nil))
+
+      (sequential? elem-spec)
+      (let [head (first elem-spec)]
+        (cond
+          (keyword? head)
+          (let [tag-ns (namespace head)
+                tag-name (name head)
+                tail (rest elem-spec)]
+            (if tag-ns
+              (if-let [tag-handler (aget node-ns-lookup tag-ns)]
+                (cond
+                  (string? tag-handler)
+                  (dom-element tag-handler tag-name tail)
+
+                  (ifn? tag-handler)
+                  (as-velem (tag-handler tag-name tail))
+
+                  :default
+                  (.warn js/console "Invalid ns node handler" tag-handler))
+                (.warn js/console "Undefined ns node prefix" tag-ns))
+              (dom-element nil tag-name tail)))
+
+          (and (ifn? head) (not (sequential? head)))
+          (as-velem (r/rx* (fn [] (apply head (rest elem-spec)))))
+
+          :default
+          (as-velem (r/seq-projection elem-spec))))
+
+      (satisfies? IDeref elem-spec)
+      (ui/reactive-element elem-spec as-velem queue-animation)
+
+      (satisfies? ui/IVirtualElement elem-spec)
+      elem-spec
+
+      (satisfies? r/IProjection elem-spec)
+      (ui/reactive-element-sequence elem-spec as-velem queue-animation)
+
+      (satisfies? r/IAsVirtualElement elem-spec)
+      (as-velem (r/-as-velem elem-spec as-velem))
+
+      :default (as-velem (-get-dom-image elem-spec)))))
+
 (defn- as-velem [elem-spec]
   (cond
     (string? elem-spec)
@@ -696,6 +752,7 @@ document body."
                      root-node
                      nil
                      (bind-attrs! root-node {}))]
+          (set! (.-freactive-state root-node) vroot)
           (configure-root! vroot vdom))))
     root-node)) 
 
