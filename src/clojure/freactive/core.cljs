@@ -51,6 +51,10 @@
   IMeta
   (-meta [_] meta)
 
+  IWithMeta
+  (-with-meta [_ new-meta]
+    (ReactiveAtom. state new-meta validator watches))
+
   IPrintWithWriter
   (-pr-writer [a writer opts]
     (-write writer "#<ReactiveAtom: ")
@@ -197,6 +201,11 @@
   IMeta
   (-meta [_] meta)
 
+  IWithMeta
+  (-with-meta [_ new-meta]
+    (ReactiveExpression. state dirty f deps new-meta watches
+                         invalidation-watches sully lazy trace-captures))
+
   IPrintWithWriter
   (-pr-writer [a writer opts]
     (-write writer "#<ReactiveComputation: ")
@@ -298,6 +307,11 @@
 
   IMeta
   (-meta [_] meta)
+
+  IWithMeta
+  (-with-meta [_ new-meta]
+    (ReactiveCursor. ref getter setter dirty state new-meta watches
+                     invalidation-watches lazy sully add-watch-fn))
 
   IPrintWithWriter
   (-pr-writer [a writer opts]
